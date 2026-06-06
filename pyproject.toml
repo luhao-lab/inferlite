@@ -9,7 +9,7 @@ dependencies = [
     # Versions pinned to a known-good major; current uv.lock is the source of truth
     "torch>=2.4,<3",
     "transformers>=5.10,<6",
-    "huggingface_hub>=0.20,<1",
+    "huggingface_hub>=1.5,<2",
     "safetensors>=0.4,<1",
     "fastapi>=0.110,<1",
     "uvicorn>=0.30,<1",
