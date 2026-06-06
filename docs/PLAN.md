@@ -47,11 +47,14 @@
 
 | 里程碑 | L1 Model | L2 Memory | L3 Engine | L4 Server | 主战场 |
 | --- | :---: | :---: | :---: | :---: | --- |
-| **M1** 单序列前向 | ⚫主 | | | | L1 代码型底 + 7 Protocol 骨架 |
+| **M1a** Qwen3 数值对齐 | ⚫主 | | | | L1 算子 + 整模型 logits allclose |
+| **M1b** 单序列前向 | ⚫ | | ⚫主 | | 最小 Engine + CLI 出字 |
 | **M2** KV Cache | ⚫ | ⚫主 | | | L2 首实现 `ContiguousKVCache` |
 | **M3** Continuous Batching | | | ⚫主 | | L3 调度器诞生 |
 | **M4** PagedAttention（PyTorch） | | ⚫主 | ⚫ | | L2 升级为 `PagedKVCache` |
-| **M5** demo 闭环 | | ⚫（prefix） | ⚫（sampler） | ⚫主 | L4 OpenAI API + benchmark |
+| **M5a** API 闭环 | | | ⚫（sampler） | ⚫主 | OpenAI API + SSE |
+| **M5b** 复用能力 | | ⚫主（prefix） | | ⚫ | Prefix cache + reasoning 字段 |
+| **M5c** 工程收口 | | | | ⚫ | Benchmark + CI + v1.0 |
 | **M6** MoE for-loop | ⚫主 | | | | L1 添加二路模型、验证 Registry |
 | **M7** Spec Decoding (n-gram) | | | ⚫主 | | L3 加 `Drafter` Plugin |
 | **M8** Triton PagedAttention | ⚫ | ⚫主 | | | L1↔L2 边界 kernel |
@@ -147,11 +150,11 @@ class Qwen3:
 
 | 阶段 | 模型扩展机制实现度 |
 | --- | --- |
-| **M1–M5** | 单文件 `inferlite/model/qwen3.py`，**不做 registry**，但 `LLMModel` Protocol + `ModelConfig` + `WEIGHT_MAP` 三个契约**必须先定**，方便后面加 |
+| **M1a–M5** | 单文件 `inferlite/model/qwen3.py`，**不做 registry**，先钉 `LLMModel` / `Sampler` / `EngineCore.step()` 三个最小契约；KV / Scheduler / Executor / Drafter 只保留占位，等 M2/M3/M7 用真实需求反推签名 |
 | **M6** | 加入 `model/registry.py` + `qwen3_moe.py`，按 `architectures` 字段分发；契约第一次被验证 |
 | **M9+** | 每个新模型 100–200 行（attention + MLP + WEIGHT_MAP），90% 框架代码完全复用 |
 
-**M1 关键纪律**：哪怕只有一个模型，也要**走 `LLMModel` 接口调用**，不要在 cli 里直接 `Qwen3()`。这是 M6 不返工的唯一前提。
+**M1 关键纪律**：哪怕只有一个模型，也要**走 `LLMModel` 接口调用**，不要在 cli 里直接 `Qwen3()`。但除 `LLMModel` 外的协议不要过早追求“签名稳定”，避免 M2/M3 返工。
 
 
 <!-- anchor:tech-stack -->
@@ -161,9 +164,10 @@ class Qwen3:
 | --- | --- | --- |
 | 仓库 | `luhao2013/inferlite` | 已创建，MIT，公开 |
 | 语言 | Python 3.11 | 教学优先 |
-| DL 框架 | PyTorch 2.4+ | SDPA、Triton 入口成熟 |
-| 模型 | **Qwen3-0.6B**（主，M1–M5） / **Qwen3.5-0.8B**（M13 多模态起点） | Qwen3-0.6B 同权重支持 thinking/non-thinking；Qwen3.5-0.8B native multimodal，复用 Qwen3 架构 + vision encoder |
+| DL 框架 | PyTorch 2.4+（当前 lock：2.12.0） | SDPA、Triton 入口成熟；数值对齐以 lockfile 为准 |
+| 模型 | **Qwen3-0.6B**（主，M1–M5） / M13 VLM 模型待定 | Qwen3-0.6B 同权重支持 thinking/non-thinking；VLM 候选到 M13 前再按可下载性、显存和架构复杂度确认 |
 | Tokenizer | `transformers` 直接复用 | 不造 BPE 轮子 |
+| 数值基准 | `transformers==5.10.2`（当前 lock） | L0/L1 allclose 只承诺对齐该版本，避免 HF 内部实现升级导致测试漂移 |
 | Attention | `F.scaled_dot_product_attention` → 自写 PagedAttention（后期 Triton） | 渐进 |
 | 服务层 | FastAPI | SSE 流式省事 |
 | 硬件 | Mac MPS（M1–M7 主开发） + GPU（M5 benchmark / M8 Triton 必需，按需租用云 GPU） | 见 §2.5 硬件矩阵 |
@@ -302,17 +306,32 @@ pytest tests                         # 全量
 每个里程碑给出：**完成定义** / **关键概念** / **必读资料** / **配套文章**。
 不给时间，按你节奏推进；每完成一个，仓库打 tag `v0.<N>`。
 
-### M1 — 单序列前向：模型能出字
-- **L 层覆盖**：L1主 + 7 Protocol 骨架首套（L2/L3/L4 都只放最小实现）
+### M1a — Qwen3 数值对齐：先把 L1 打穿
+- **L 层覆盖**：L1 Model 主战场
 
 - **完成定义**：
-  1. `python -m inferlite.cli "讲个笑话"` 在 Mac MPS 上能输出（哪怕 2 tok/s），无 KV cache
-  2. **7 个 Protocol 文件已创建**（`LLMModel` / `KVCache` / `Scheduler` / `Sampler` / `ModelExecutor` / `Drafter` 空骨架 + `EngineCore.step()` 三段式）
-  3. CLI 通过 `LLMModel` 接口调用，不直接 `Qwen3()`
-- **验证标准**：`tests/unit/test_rope.py` `test_rmsnorm.py` `test_swiglu.py` `test_attention.py` 等 8 个 L0 单元测试全绿 + `tests/module/test_qwen3_logits.py`（L1 vs `transformers`）+ `tests/e2e/test_greedy.py`（L2 贪心 32 token 完全一致）全绿
+  1. `RMSNorm / SwiGLU / RoPE / Attention / WeightMap / Qwen3Model` 手写完成
+  2. `tests/unit/` 8 个 L0 单元测试全绿
+  3. `tests/module/test_qwen3_logits.py` 与当前 lock 的 `transformers==5.10.2` logits `allclose(atol=1e-3, rtol=1e-3)`
+- **显式不做**：CLI、Engine、KV cache、Scheduler、Server、文章定稿
+- **硬件**：Mac MPS 主开发；必要时 CPU 跑小 shape debug
+- **关键概念**：HF safetensors 加载、GQA、RoPE、QK-norm、RMSNorm、SwiGLU、tie embedding
+- **必读**：
+  - `transformers` 当前 lock 版本的 `models/qwen3/modeling_qwen3.py`
+  - Sebastian Raschka《Qwen3 from scratch》notebook
+  - Qwen3 技术报告 arXiv:2505.09388 §3 Architecture
+- **本质题**：为什么“形状对”不等于“数值对”？
+
+### M1b — 单序列前向：Engine + CLI 能出字
+- **L 层覆盖**：L1 主 + L3 最小 Engine 骨架
+
+- **完成定义**：
+  1. `python -m inferlite.cli "讲个笑话" --max-new-tokens 32` 在 Mac MPS 上能输出连续文本，无 KV cache
+  2. CLI 通过 `LLMModel` 接口调用，不直接 `Qwen3()`
+  3. `Sampler` 与 `EngineCore.step()` 最小契约落地；`KVCache / Scheduler / Executor / Drafter` 仅占位，不承诺签名稳定
+- **验证标准**：`tests/e2e/test_greedy.py` 前 16 个 token 与 HF `generate(do_sample=False)` 完全一致 + `tests/invariant/test_step_three_phase.py` 覆盖三段式
 - **硬件**：Mac MPS 主开发
-- **L 层覆盖**：L1
-- **关键概念**：HF safetensors 加载、GQA、RoPE（旋转 vs 加法的内积保持性）、RMSNorm、SwiGLU、贪心 / top-p 解码循环
+- **关键概念**：贪心解码循环、三段式 step、接口隔离、为什么 M1 不做 KV cache
 - **必读**：
   - Attention Is All You Need
   - Llama 2 paper §2（架构基线）
@@ -362,23 +381,37 @@ pytest tests                         # 全量
 - **本质题**：PagedAttention 和 OS paging 唯一不同的一点是什么？
 - **配套文章**：《把显存当虚拟内存用 —— PagedAttention 的设计精髓》
 
-### M5 — 完整 demo：采样 + 前缀缓存 + OpenAI API + Reasoning + Benchmark
-- **L 层覆盖**：L4主（OpenAI 兼容 API） + L2（PrefixCache） + L3（sampler）
+### M5a — 服务化 demo：采样 + OpenAI API + SSE
+- **L 层覆盖**：L4主（OpenAI 兼容 API） + L3（sampler）
 
 - **完成定义**：
   1. `pip install -e .` + `inferlite serve qwen3-0.6b` 起服务
   2. `curl http://localhost:8000/v1/chat/completions` 兼容 OpenAI（含 SSE）
-  3. thinking 模式下 `reasoning_content` 字段分流
-  4. 多轮对话第二轮 TTFT 比第一轮 ↓ 5×（prefix cache 命中）
-  5. Benchmark 表：inferlite vs transformers.generate vs vLLM 三栏 throughput / TTFT / ITL（见 §2.5.3 标准模板）
-- **验证标准**：
-  - `test_prefix_invariant.py`（同前缀两请求 block_id 一致）
-  - `test_openai_api.py`（curl 兼容性 + SSE 流式格式）
-  - `bench/run_all.sh` 一键产出对照表，归档到 `bench/results/`
-  - **最小 CI 上线**：`.github/workflows/ci.yml`，推送自动跑 CPU-only 的 L2+L3、依赖 `tiny-random-llama` fake 模型、README 加 绿勾 badge
-- **硬件**：开发 Mac，benchmark 必须 GPU；CI 跑在 GitHub 免费 Ubuntu runner
-- **L 层覆盖**：L2 + L3 + L4
-- **关键概念**：RadixTree-Lite + block hash、logits processor 链（temp/top-k/top-p/repetition）、OpenAI 流式协议、reasoning 字段约定
+  3. 支持 greedy / temperature / top-k / top-p / repetition penalty
+- **验证标准**：`test_openai_api.py` 覆盖 curl 兼容性 + SSE 流式格式；sampler 单测覆盖 seed 可复现
+- **硬件**：Mac MPS 主开发
+- **关键概念**：logits processor 链、OpenAI 流式协议、请求参数到 sampler 的映射
+
+### M5b — 复用能力：前缀缓存 + Reasoning 字段分流
+- **L 层覆盖**：L2（PrefixCache） + L4（协议字段）
+
+- **完成定义**：
+  1. 多轮对话第二轮 TTFT 比第一轮 ↓ 5×（prefix cache 命中）
+  2. thinking 模式下 `reasoning_content` 字段分流
+  3. 前缀 block hash / refcount / eviction 策略可解释
+- **验证标准**：`test_prefix_invariant.py` 覆盖同前缀两请求 block_id 一致；reasoning SSE 格式有 e2e 测试
+- **硬件**：Mac 可验功能；性能收益最好上 GPU 复测
+- **关键概念**：RadixTree-Lite + block hash、prefix cache 命中率、reasoning 字段约定
+
+### M5c — Benchmark + CI：核心 v1 收口
+- **L 层覆盖**：工程化收口（测试 / 评测 / 发布）
+
+- **完成定义**：
+  1. Benchmark 表：inferlite vs transformers.generate vs vLLM 三栏 throughput / TTFT / ITL（见 §2.5.3 标准模板）
+  2. `bench/run_all.sh` 一键产出对照表，归档到 `bench/results/`
+  3. 最小 CI 上线：`.github/workflows/ci.yml`，推送自动跑 CPU-only 的 L2+L3，依赖 tiny fake 模型，README 加绿勾 badge
+- **硬件**：benchmark 必须 GPU；CI 跑在 GitHub 免费 Ubuntu runner
+- **关键概念**：TTFT / ITL / throughput、warmup、seed 固定、硬件与精度一致性
 - **必读**：
   - SGLang paper（RadixAttention）
   - The Curious Case of Neural Text Degeneration（top-p 起源）
@@ -440,8 +473,8 @@ pytest tests                         # 全量
 
 ### M13 — VLM 教学版（图→文）
 - **L 层覆盖**：L1主（vision encoder + `inputs_embeds`） + L4（multipart 请求）
-- **完成定义**：接入 **Qwen3.5-0.8B**（native multimodal）或 Qwen3-VL，单图 + 文本对话能跑通
-- **为什么选 Qwen3.5-0.8B**：复用 M1–M12 的 Qwen3 架构肨，只加 vision encoder + `inputs_embeds` 注入路径，改动量最小
+- **完成定义**：接入一个小型 VLM（候选 Qwen-VL / Llava / native multimodal 小模型，M13 前再定），单图 + 文本对话能跑通
+- **选型原则**：优先选权重易下载、Mac/GPU 显存压力小、语言侧尽量复用 M1–M12 架构的模型；不要现在绑定具体未验证模型名
 - **关键概念**：Vision encoder（ViT/SigLIP）独立前向、image token embedding 注入（走 `inputs_embeds`）、变长 image token 数处理
 - **裁剪**：不做 image prefix cache、不做 encoder/LLM 异步、单 batch 单图（留 M14）
 - **配套文章**：《推理框架怎么吃下一张图 —— VLM 接入解剖》
@@ -502,7 +535,7 @@ pytest tests                         # 全量
 | 6 | Quantized | GPTQ/AWQ/FP8 | 中 | M15+ |
 | 7 | MLA attention | DeepSeek-V2/V3 | 中 | M15+ |
 | 8 | Hybrid SSM | Jamba, Mamba2 | 大 | M15+ |
-| 9 | Multimodal (VLM 图→文) | **Qwen3.5-0.8B**, Qwen3-VL, Llava | 中（加 vision encoder + `inputs_embeds`） | M13 / M14 |
+| 9 | Multimodal (VLM 图→文) | Qwen-VL / Llava / native multimodal 小模型（M13 前再定） | 中（加 vision encoder + `inputs_embeds`） | M13 / M14 |
 | 10 | Audio 输入 | Whisper, Qwen-Audio | 中 | M15+ |
 | 11 | Omni 全双工 | Qwen2.5-Omni, GPT-4o 类 | 大（流式 in/out + 打断） | 暂不规划 |
 | 12 | Diffusion LLM | LLaDA, Mercury | 极大 | 暂不规划 |

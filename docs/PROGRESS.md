@@ -13,11 +13,14 @@
 
 | M | 状态 | Tag | 完成日期 | 文章 | 备注 |
 | --- | --- | --- | --- | --- | --- |
-| M1 单序列前向 | ⬜ | — | — | — | 7 Protocol 骨架 + Qwen3 单文件 + L0/L1/L2 测试 |
+| M1a Qwen3 数值对齐 | ⬜ | — | — | — | L0 单测 + L1 logits allclose，先打穿 L1 |
+| M1b 单序列前向 | ⬜ | — | — | — | 最小 Engine + CLI 出字，Protocol 只钉必要契约 |
 | M2 KV Cache | ⬜ | — | — | — | `ContiguousKVCache` |
 | M3 Continuous Batching | ⬜ | — | — | — | `FCFSScheduler` + 三队列 |
 | M4 PagedAttention (PyTorch) | ⬜ | — | — | — | `PagedKVCache`，伪版 |
-| M5 完整 demo + Benchmark + CI | ⬜ | — | — | — | OpenAI API + prefix cache + 三栏对照 + GitHub Actions |
+| M5a API + SSE | ⬜ | — | — | — | OpenAI API + sampler 参数 |
+| M5b Prefix + Reasoning | ⬜ | — | — | — | prefix cache + `reasoning_content` 分流 |
+| M5c Benchmark + CI | ⬜ | — | — | — | 三栏对照 + GitHub Actions + v1.0 |
 
 ## 扩充里程碑（M6+）
 
@@ -41,5 +44,5 @@
 
 ### 2026-06-06
 - 仓库 `luhao2013/inferlite` 创建（MIT，公开）
-- 完整 PLAN 落地（含 4 层抽象 / 7 Protocol / L0–L3 四层验证 / Benchmark 三件套 / 14 个里程碑）
-- 准备开 M1
+- 完整 PLAN 落地（含 4 层抽象 / L0–L3 四层验证 / Benchmark 三件套 / 14 个里程碑）
+- M1 收窄为 M1a（数值对齐）+ M1b（Engine/CLI 出字），避免首阶段 DoD 过载

@@ -14,11 +14,14 @@
 
 | 阶段 | 里程碑 | 目标 |
 | --- | --- | --- |
-| **核心（demo 跑起来）** | M1 | 单序列前向：模型能出字 |
+| **核心（demo 跑起来）** | M1a | Qwen3 数值对齐：算子 + logits allclose |
+| | M1b | 单序列前向：Engine + CLI 能出字 |
 | | M2 | KV Cache：从 O(n²) 到 O(n) |
 | | M3 | Continuous Batching：调度器的诞生 |
 | | M4 | PagedAttention（PyTorch 伪版） |
-| | M5 | 采样 + 前缀缓存 + OpenAI API + Reasoning + Benchmark |
+| | M5a | 采样 + OpenAI API + SSE |
+| | M5b | 前缀缓存 + Reasoning 字段分流 |
+| | M5c | Benchmark + CI + v1.0 |
 | **扩充（无截止）** | M6 | MoE 教学版（for-loop） |
 | | M7 | Speculative Decoding（n-gram） |
 | | M8 | Triton PagedAttention kernel |
@@ -41,17 +44,19 @@ make setup
 
 ## 技术栈
 
-- Python 3.11 + PyTorch 2.4+
+- Python 3.11 + PyTorch 2.4+（当前 lock：PyTorch 2.12.0）
 - 主模型：**Qwen3-0.6B**（M1–M5 起步）
-- 第二模型：**Qwen3.5-0.8B**（M13 多模态起点，native multimodal）
+- 第二模型：M13 前再定，候选 **Qwen-VL / Llava / native multimodal 小模型**
 - Tokenizer 复用 `transformers.AutoTokenizer`
+- 数值对齐基准：当前 `uv.lock` 的 `transformers==5.10.2`
 - Server：FastAPI + SSE
 - 硬件：Mac MPS 主开发（M1–M7），GPU 在 M5 benchmark / M8 Triton 必需
 
 ## 状态
 
 - [x] M0 仓库与计划落地
-- [ ] M1 单序列前向
+- [ ] M1a Qwen3 数值对齐
+- [ ] M1b 单序列前向
 
 ## License
 
