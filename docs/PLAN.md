@@ -7,18 +7,15 @@
 <!-- anchor:positioning -->
 ## 0. 定位与不变量
 
-- **唯一仓库**：`github.com/luhao2013/inferlite`（公开 / MIT），无 v2，所有功能在同一仓库迭代
+- **仓库**：`luhao2013/inferlite`（公开 / MIT）
 - **代码全手敲**：Agent 不写 `inferlite/*.py`，只做：研究、计划、资料检索、原理讲解、Review、文章草稿
-- **里程碑闭环**：每个 M 完成 = ① 代码 push ② 文章发知乎 ③ `docs/opensource/inferlite/M<N>/` 归档
+- **里程碑闭环**：每个 M 完成 = ① 代码 push ② 文章发知乎 ③ PROGRESS 更新
 - **学习 > 性能**：优先可读性；性能优化作为后续里程碑慢慢加
 - **对照参照**：
-  - <kfile name="documentation_zh.md" path="docs/opensource/minivllm/documentation_zh.md">MinivLLM 文档</kfile>（你已精读，作模块映射底图）
+  - `MinivLLM` — 最小教学版，模块映射底图
   - `nano-vllm`（GeeeekExplorer）— 千行版结构最干净
   - `vLLM v1`（`vllm/v1/`）— 工程级对照，**只读不抄**
   - `SGLang` runtime — RadixAttention / 调度策略对照
-- **代码组织约定**（落地到 `~/learning` 工作区）：
-  - 代码主体：`~/learning/inferlite/`（独立 git clone）
-  - 学习笔记 / 文章草稿：`~/learning/docs/opensource/inferlite/`（遵循 <kfile name="AGENTS.md" path="AGENTS.md">AGENTS.md</kfile>，**不在代码目录里写总结**）
 
 <!-- anchor:architecture -->
 ## 1. 框架的 4 层抽象（贯穿所有里程碑）
@@ -141,7 +138,7 @@ class Qwen3:
 | 仓库 | `luhao2013/inferlite` | 已创建，MIT，公开 |
 | 语言 | Python 3.11 | 教学优先 |
 | DL 框架 | PyTorch 2.4+ | SDPA、Triton 入口成熟 |
-| 模型 | **Qwen3-0.6B**（主）/ Llama-3.2-1B（备） | 2025/4 发布；thinking / non-thinking 同权重；社区参考多（Raschka《Qwen3 from scratch》） |
+| 模型 | **Qwen3-0.6B**（主，M1–M5） / **Qwen3.5-0.8B**（M13 多模态起点） / Llama-3.2-1B（备） | Qwen3-0.6B 同权重支持 thinking/non-thinking；Qwen3.5-0.8B native multimodal，复用 Qwen3 架构 + vision encoder |
 | Tokenizer | `transformers` 直接复用 | 不造 BPE 轮子 |
 | Attention | `F.scaled_dot_product_attention` → 自写 PagedAttention（后期 Triton） | 渐进 |
 | 服务层 | FastAPI | SSE 流式省事 |
@@ -364,7 +361,7 @@ pytest tests                         # 全量
 <!-- anchor:milestones-extension -->
 ## 4. 扩充里程碑 M6+（同仓库长期迭代，无截止）
 
-> M5 之后没有 v2，所有新能力都作为新 M 并入主仓库。优先级排序如下（可调整）：
+> M5 之后所有新能力都作为新 M 并入主仓库。优先级排序如下（可调整）：
 
 ### M6 — MoE 教学版（for-loop）
 - **完成定义**：跑通 Qwen1.5-MoE-A2.7B 或 Qwen3-30B-A3B
@@ -406,7 +403,8 @@ pytest tests                         # 全量
 - **关键概念**：prefill 切片、和 decode mix-batching 的优先级
 
 ### M13 — VLM 教学版（图→文）
-- **完成定义**：接入 Qwen3-VL 或 Llava-1.6，单图 + 文本对话能跑通
+- **完成定义**：接入 **Qwen3.5-0.8B**（native multimodal）或 Qwen3-VL，单图 + 文本对话能跑通
+- **为什么选 Qwen3.5-0.8B**：复用 M1–M12 的 Qwen3 架构肨，只加 vision encoder + `inputs_embeds` 注入路径，改动量最小
 - **关键概念**：Vision encoder（ViT/SigLIP）独立前向、image token embedding 注入（走 `inputs_embeds`）、变长 image token 数处理
 - **裁剪**：不做 image prefix cache、不做 encoder/LLM 异步、单 batch 单图（留 M14）
 - **配套文章**：《推理框架怎么吃下一张图 —— VLM 接入解剖》
@@ -466,7 +464,7 @@ pytest tests                         # 全量
 | 6 | Quantized | GPTQ/AWQ/FP8 | 中 | M15+ |
 | 7 | MLA attention | DeepSeek-V2/V3 | 中 | M15+ |
 | 8 | Hybrid SSM | Jamba, Mamba2 | 大 | M15+ |
-| 9 | Multimodal (VLM 图→文) | Qwen3-VL, Llava | 中（加 vision encoder + `inputs_embeds`） | M13 / M14 |
+| 9 | Multimodal (VLM 图→文) | **Qwen3.5-0.8B**, Qwen3-VL, Llava | 中（加 vision encoder + `inputs_embeds`） | M13 / M14 |
 | 10 | Audio 输入 | Whisper, Qwen-Audio | 中 | M15+ |
 | 11 | Omni 全双工 | Qwen2.5-Omni, GPT-4o 类 | 大（流式 in/out + 打断） | 暂不规划 |
 | 12 | Diffusion LLM | LLaDA, Mercury | 极大 | 暂不规划 |
@@ -486,7 +484,7 @@ pytest tests                         # 全量
 | 文章初稿（基于你的代码 + 笔记 + 卡片） | Agent 起草，你定稿 |
 | 知乎发布（`to_zhihu_md.py` / `check_zhihu_format.py`） | 你 |
 
-**硬约束**：Agent 不主动 `write_to_file` 或 `replace_in_file` 修改 `~/learning/inferlite/` 下任何 `*.py`，除非你显式说"帮我把这段写一下"。
+**硬约束**：Agent 不主动修改 `inferlite/*.py`，除非你显式说"帮我把这段写一下"。
 
 ### 6.2 单个里程碑的闭环
 
@@ -505,9 +503,9 @@ Agent Review：结构、命名、注释、是否偏离主线
    ↓
 Agent 扩成完整原理篇（卡片化、对照源码、引用论文）
    ↓
-渲染 HTML（tools/render_doc.py）+ 转知乎（to_zhihu_md.py）
+渲染 + 转知乎
    ↓
-你发布 → 归档到 docs/opensource/inferlite/M<N>/
+你发布 → PROGRESS.md 更新
 ```
 
 ### 6.3 文章结构模板（每篇 M 文章固定章节）
@@ -535,10 +533,7 @@ Agent 扩成完整原理篇（卡片化、对照源码、引用论文）
 <!-- anchor:next-action -->
 ## 8. 立刻可做的下一步
 
-1. **本地 clone** `inferlite`：`cd ~/learning && git clone git@github.com:luhao2013/inferlite.git`
-2. **建项目骨架**：`pyproject.toml` + `inferlite/{model,cache,scheduler,sampler,executor,server}/__init__.py` + 7 个 Protocol 空文件 + `tests/{unit,module,e2e,invariant}/` + `README.md` + `.gitignore`
-3. **同步本计划到仓库**：在 `inferlite/` 仓库根放 `docs/PLAN.md` + `docs/PROGRESS.md`，README 引用之
-4. **建本地文档索引页**：`~/learning/docs/opensource/inferlite/README.md`（引用 PLAN，记录每个 M 的文章草稿）
-5. **开 M1**：Agent 给 M1 brief（完成定义 + 关键概念清单 + 必读 + 文件骨架建议），你手敲 `model/qwen3.py` 起步
+1. **建项目骨架**：`pyproject.toml` + `inferlite/{model,cache,scheduler,sampler,executor,server}/__init__.py` + 7 个 Protocol 空文件 + `tests/{unit,module,e2e,invariant}/`
+2. **开 M1**：Agent 给 M1 brief（完成定义 + 关键概念清单 + 必读 + 文件骨架建议），你手敲 `model/qwen3.py` 起步
 
 > 工作流约定：每开一个新 M，你说一声"开 M<N>"；Agent 不主动推进。

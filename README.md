@@ -6,9 +6,8 @@
 
 ## 项目定位
 
-- **唯一仓库**：无 v2，所有功能在同一仓库迭代
 - **代码全手敲**：作者本人手写每一行 `inferlite/*.py`，Agent 仅辅助研究 / 计划 / Review / 文章
-- **里程碑闭环**：每个 M 完成 = ① 代码 push ② 知乎文章发布 ③ 学习笔记归档
+- **里程碑闭环**：每个 M 完成 = ① 代码 push ② 知乎文章发布 ③ PROGRESS.md 更新
 - **学习 > 性能**：优先可读性；性能优化作为后续里程碑慢慢加
 
 ## 路线图速览
@@ -33,7 +32,9 @@
 ## 技术栈
 
 - Python 3.11 + PyTorch 2.4+
-- 主模型：Qwen3-0.6B（备：Llama-3.2-1B）
+- 主模型：**Qwen3-0.6B**（M1–M5 起步）
+- 第二模型：**Qwen3.5-0.8B**（M13 多模态起点，native multimodal）
+- 备用：Llama-3.2-1B
 - Tokenizer 复用 `transformers.AutoTokenizer`
 - Server：FastAPI + SSE
 - 硬件：Mac MPS 主开发（M1–M7），GPU 在 M5 benchmark / M8 Triton 必需
