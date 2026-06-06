@@ -27,7 +27,25 @@
 | | M13 / M14 | VLM 教学版 / VLM 工程化 |
 | | M15+ | 量化 / MLA / TP-PP / Hybrid SSM / Audio 输入 … |
 
-完整计划见 [docs/PLAN.md](docs/PLAN.md)，实时进度见 [docs/PROGRESS.md](docs/PROGRESS.md)。
+完整计划见 [docs/PLAN.md](docs/PLAN.md)，实时进度见 [docs/PROGRESS.md](docs/PROGRESS.md)，M1 详细 brief 见 [docs/M1.md](docs/M1.md)。
+
+## 环境
+
+使用 [`uv`](https://github.com/astral-sh/uv)（推荐，速度比 pip 快 10–100 倍）：
+
+```bash
+# 安装 uv（一次性）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 同步依赖（会自动创建 .venv 并安装 Python 3.11）
+uv sync
+
+# 跑 CLI / 测试
+uv run python -m inferlite.cli "你好"
+uv run pytest tests/unit/
+```
+
+也可用 pip：`python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"`
 
 ## 技术栈
 
