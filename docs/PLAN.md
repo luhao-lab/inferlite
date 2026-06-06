@@ -142,7 +142,7 @@ class Qwen3:
 | Tokenizer | `transformers` 直接复用 | 不造 BPE 轮子 |
 | Attention | `F.scaled_dot_product_attention` → 自写 PagedAttention（后期 Triton） | 渐进 |
 | 服务层 | FastAPI | SSE 流式省事 |
-| 硬件 | Mac MPS（M1–M7 主开发） + GPU（M5 benchmark / M8 Triton 必需，借 KML / AutoDL） | 见 §2.5 硬件矩阵 |
+| 硬件 | Mac MPS（M1–M7 主开发） + GPU（M5 benchmark / M8 Triton 必需，按需租用云 GPU） | 见 §2.5 硬件矩阵 |
 
 <!-- anchor:hardware-validation -->
 ## 2.5 硬件矩阵 + 验证 + 评测约定（贯穿所有里程碑）
@@ -159,7 +159,7 @@ class Qwen3:
 | **M8 Triton kernel** | **不支持 MPS** | 不支持 | **必需 NVIDIA GPU** |
 | M9+ (grouped GEMM / EAGLE / 量化 / TP/PP / VLM) | 大概率不支持 | — | 必需 |
 
-**硬件路径**：Mac 主开发到 M7；M5 benchmark 与 M8 起按需借 GPU（公司 KML / Colab Pro / AutoDL），不建议自购卡。
+**硬件路径**：Mac 主开发到 M7；M5 benchmark 与 M8 起按需租用云 GPU（Colab Pro / AutoDL / RunPod / Lambda 等），不建议自购卡。
 
 ### 2.5.2 四层正确性验证策略
 
@@ -527,7 +527,7 @@ Agent 扩成完整原理篇（卡片化、对照源码、引用论文）
 | **Agent 越界写代码** | Agent 主动改 `inferlite/*.py` | 你随时打断，要求改成"给思路 + 伪代码" |
 | **过早优化** | 在 M4 死磕 Triton 性能 | 严守"M4 只 PyTorch 伪版，性能留 M8"原则 |
 | **范围蔓延** | 想顺手加量化 / VLM | 一律新开 M，不并入 M1–M5 |
-| **没 GPU 跑大模型** | M6 之后需要更大显存 | 用公司 KML / AutoDL 临时借卡 |
+| **没 GPU 跑大模型** | M6 之后需要更大显存 | 按需租用云 GPU（Colab Pro / AutoDL / RunPod 等） |
 | **文章烂尾** | 代码跑通了但没发文 | 文章发布作为里程碑硬性闭环，未发文不能开下一个 M |
 
 <!-- anchor:next-action -->
