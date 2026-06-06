@@ -1,7 +1,10 @@
-.PHONY: setup sync test lint fmt clean
+.PHONY: setup sync test lint fmt clean preflight
 
 setup:        ## one-shot install uv + sync deps + sanity check
 	bash scripts/setup.sh
+
+preflight:    ## verify Qwen3-0.6B can be downloaded and run end-to-end
+	uv run python scripts/preflight.py
 
 sync:         ## sync dependencies from uv.lock
 	uv sync

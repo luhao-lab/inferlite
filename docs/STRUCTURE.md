@@ -21,7 +21,8 @@ inferlite/
 │   ├── SETUP.md         # 环境与日常命令详解（uv/make 是什么）
 │   └── STRUCTURE.md     # 本文件
 └── scripts/
-    └── setup.sh         # 一键安装脚本（被 make setup 调用）
+    ├── setup.sh         # 一键安装脚本（被 make setup 调用）
+    └── preflight.py     # 跑前体检：Qwen3-0.6B 能否下载+推理（make preflight）
 ```
 
 ---
@@ -54,6 +55,7 @@ inferlite/
 | 文件 | 作用 |
 | --- | --- |
 | `setup.sh` | 一键安装脚本，被 `make setup` 调用。检测 uv → 缺则装 → `uv sync` → 健康检查 |
+| `preflight.py` | 跑前体检脚本，被 `make preflight` 调用。下载 Qwen3-0.6B → 在 MPS/CUDA/CPU 上贪心解码 → 检查输出非空。开 M1 前必跑一次 |
 
 ---
 
