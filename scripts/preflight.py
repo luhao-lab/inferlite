@@ -34,7 +34,17 @@ def main() -> int:
     parser.add_argument("--model", default="Qwen/Qwen3-0.6B")
     parser.add_argument("--prompt", default="你好")
     parser.add_argument("--max-new-tokens", type=int, default=20)
+    parser.add_argument(
+        "--hf-endpoint",
+        default="https://hf-mirror.com",
+        help="HF endpoint; default uses hf-mirror.com (CN-friendly). "
+             "Pass --hf-endpoint=https://huggingface.co to use the official one.",
+    )
     args = parser.parse_args()
+
+    import os
+    os.environ.setdefault("HF_ENDPOINT", args.hf_endpoint)
+    print(f"[0/4] HF_ENDPOINT = {os.environ['HF_ENDPOINT']}")
 
     print("[1/4] importing torch + transformers ...")
     try:
