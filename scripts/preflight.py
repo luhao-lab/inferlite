@@ -55,6 +55,20 @@ def ensure_local_model(model_id: str, source: str) -> str:
         return model_id
 
     if source == "modelscope":
+        # Clean up stale lock files left over from killed downloads.
+        # ModelScope's filelock blocks new processes for hours when an old
+        # process is gone but its lockfile remains.
+        import os
+        from pathlib import Path
+        lock_dir = Path.home() / ".cache" / "modelscope" / "hub" / ".lock"
+        if lock_dir.exists():
+            # Best-effort: ignore errors if the lock is genuinely held by another live process.
+            for f in lock_dir.iterdir():
+                try:
+                    f.unlink()
+                except OSError:
+                    pass
+
         from modelscope import snapshot_download
         # Default cache: ~/.cache/modelscope/hub/<owner>/<name>
         path = snapshot_download(model_id)
