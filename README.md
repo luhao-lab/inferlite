@@ -31,21 +31,21 @@
 
 ## 环境
 
-使用 [`uv`](https://github.com/astral-sh/uv)（推荐，速度比 pip 快 10–100 倍）：
+一键安装（自动装 uv + Python 3.11 + 所有依赖 + 健康检查）：
 
 ```bash
-# 安装 uv（一次性）
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# 同步依赖（会自动创建 .venv 并安装 Python 3.11）
-uv sync
-
-# 跑 CLI / 测试
-uv run python -m inferlite.cli "你好"
-uv run pytest tests/unit/
+make setup
 ```
 
-也可用 pip：`python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"`
+之后日常使用：
+
+```bash
+make test         # 跑测试
+make lint         # ruff 检查
+uv run python -m inferlite.cli "你好"
+```
+
+> 也可手动：`brew install uv && uv sync`（无 brew 时用 `curl -LsSf https://astral.sh/uv/install.sh | sh`）。
 
 ## 技术栈
 
