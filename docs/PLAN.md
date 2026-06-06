@@ -41,6 +41,30 @@
 
 > 一句话心智模型：**用一个调度器（L3），把多个请求复用同一份模型权重（L1）和同一块显存（L2），通过统一协议（L4）对外服务。**
 
+#### 里程碑 × 4 层抽象映射表
+
+每个里程碑明确徽章一到两层主战场，避免"一个 M 什么都动":
+
+| 里程碑 | L1 Model | L2 Memory | L3 Engine | L4 Server | 主战场 |
+| --- | :---: | :---: | :---: | :---: | --- |
+| **M1** 单序列前向 | ⚫主 | | | | L1 代码型底 + 7 Protocol 骨架 |
+| **M2** KV Cache | ⚫ | ⚫主 | | | L2 首实现 `ContiguousKVCache` |
+| **M3** Continuous Batching | | | ⚫主 | | L3 调度器诞生 |
+| **M4** PagedAttention（PyTorch） | | ⚫主 | ⚫ | | L2 升级为 `PagedKVCache` |
+| **M5** demo 闭环 | | ⚫（prefix） | ⚫（sampler） | ⚫主 | L4 OpenAI API + benchmark |
+| **M6** MoE for-loop | ⚫主 | | | | L1 添加二路模型、验证 Registry |
+| **M7** Spec Decoding (n-gram) | | | ⚫主 | | L3 加 `Drafter` Plugin |
+| **M8** Triton PagedAttention | ⚫ | ⚫主 | | | L1↔L2 边界 kernel |
+| **M9** MoE grouped GEMM | ⚫主 | | | | L1 优化 |
+| **M10** EAGLE-1 spec | ⚫ | | ⚫主 | | L3 插件升级 |
+| **M11** Long context (YaRN) | ⚫主 | ⚫ | | | L1 RoPE 重映射 + L2 长度 |
+| **M12** Chunked Prefill | | | ⚫主 | | L3 调度策略 |
+| **M13** VLM 教学版 | ⚫主 | | | ⚫ | L1 + L4 multipart 请求 |
+| **M14** VLM 工程化 | ⚫ | ⚫主 | ⚫ | | L2 image hash prefix cache |
+| **M15+** | 取决于选题 | | | | 量化/MLA ⚫ L1 · TP/PP ⚫ L3 · Disagg P/D ⚫ L4 |
+
+> 读法：**主**表示主战场（该 M 可调用、可讲验、可写文章的核心层），不带标记的⚫表示"有轻微修改但不是重点"。同一讲里程碑只让 1–2 层点亮，其他层保持不变量，你才能在文章里准确表达"这个 M 在学什么"。
+
 <!-- anchor:model-extension -->
 ### 1.1 模型扩展机制（如何支持多模型）
 
@@ -138,7 +162,7 @@ class Qwen3:
 | 仓库 | `luhao2013/inferlite` | 已创建，MIT，公开 |
 | 语言 | Python 3.11 | 教学优先 |
 | DL 框架 | PyTorch 2.4+ | SDPA、Triton 入口成熟 |
-| 模型 | **Qwen3-0.6B**（主，M1–M5） / **Qwen3.5-0.8B**（M13 多模态起点） / Llama-3.2-1B（备） | Qwen3-0.6B 同权重支持 thinking/non-thinking；Qwen3.5-0.8B native multimodal，复用 Qwen3 架构 + vision encoder |
+| 模型 | **Qwen3-0.6B**（主，M1–M5） / **Qwen3.5-0.8B**（M13 多模态起点） | Qwen3-0.6B 同权重支持 thinking/non-thinking；Qwen3.5-0.8B native multimodal，复用 Qwen3 架构 + vision encoder |
 | Tokenizer | `transformers` 直接复用 | 不造 BPE 轮子 |
 | Attention | `F.scaled_dot_product_attention` → 自写 PagedAttention（后期 Triton） | 渐进 |
 | 服务层 | FastAPI | SSE 流式省事 |
@@ -279,6 +303,7 @@ pytest tests                         # 全量
 不给时间，按你节奏推进；每完成一个，仓库打 tag `v0.<N>`。
 
 ### M1 — 单序列前向：模型能出字
+- **L 层覆盖**：L1主 + 7 Protocol 骨架首套（L2/L3/L4 都只放最小实现）
 
 - **完成定义**：
   1. `python -m inferlite.cli "讲个笑话"` 在 Mac MPS 上能输出（哪怕 2 tok/s），无 KV cache
@@ -296,6 +321,7 @@ pytest tests                         # 全量
 - **配套文章**：《从零手写 Qwen3 —— 解剖一个现代 decoder》
 
 ### M2 — KV Cache：从 O(n²) 到 O(n)
+- **L 层覆盖**：L2主（`ContiguousKVCache`） + L1（接口接 KV）
 
 - **完成定义**：单序列吞吐相对 M1 提升 ≥ 5×，prefill/decode 两阶段清晰；落地 `KVCache` Protocol 的第一个实现 `ContiguousKVCache`
 - **验证标准**：`tests/module/test_kv_cache_logits.py`（带 cache vs 不带 cache logits `allclose`）+ `tests/invariant/test_kv_invariant.py`（cache 长度守恒）
@@ -307,6 +333,7 @@ pytest tests                         # 全量
 - **配套文章**：《为什么只 cache K 和 V —— KV 缓存的本质》
 
 ### M3 — Continuous Batching：调度器的诞生
+- **L 层覆盖**：L3主（`FCFSScheduler` + 三队列）
 
 - **完成定义**：8 并发请求聚合吞吐 ≥ 串行 ×4，每 step 重新组 batch，无 head-of-line blocking
 - **验证标准**：`test_scheduler_invariant.py`（三队列守恒、EOS 立即出队）+ `test_batch_e2e.py`（8 并发结果与单条串行完全一致）
@@ -321,6 +348,7 @@ pytest tests                         # 全量
 - **配套文章**：《Orca 那篇论文做了什么 —— LLM 调度器的诞生》
 
 ### M4 — PagedAttention（PyTorch 伪版）：显存当虚拟内存
+- **L 层覆盖**：L2主（`PagedKVCache` block table） + L3（scheduler 意识到 block）
 
 - **完成定义**：长 prompt + 多并发显存利用率 ≥ 80%（GPU 上测），按 block 取 KV，支持 Copy-on-Write fork
 - **验证标准**：`test_paged_logits.py`（分页前后 logits `allclose`）+ `test_block_invariant.py`（refcount 守恒、CoW 正确性）
@@ -335,6 +363,7 @@ pytest tests                         # 全量
 - **配套文章**：《把显存当虚拟内存用 —— PagedAttention 的设计精髓》
 
 ### M5 — 完整 demo：采样 + 前缀缓存 + OpenAI API + Reasoning + Benchmark
+- **L 层覆盖**：L4主（OpenAI 兼容 API） + L2（PrefixCache） + L3（sampler）
 
 - **完成定义**：
   1. `pip install -e .` + `inferlite serve qwen3-0.6b` 起服务
@@ -364,6 +393,7 @@ pytest tests                         # 全量
 > M5 之后所有新能力都作为新 M 并入主仓库。优先级排序如下（可调整）：
 
 ### M6 — MoE 教学版（for-loop）
+- **L 层覆盖**：L1主（二路模型架构） + Registry 首实现
 - **完成定义**：跑通 Qwen1.5-MoE-A2.7B 或 Qwen3-30B-A3B
 - **验证**：L1 logits 对齐 `transformers` MoE 实现
 - **硬件**：A2.7B 需 GPU（或 Mac 32GB+）
@@ -372,6 +402,7 @@ pytest tests                         # 全量
 - **配套文章**：《MoE 推理：从 router 到 dispatch》
 
 ### M7 — Speculative Decoding（n-gram lookup）
+- **L 层覆盖**：L3主（`Drafter` Plugin + step() B 点 hook）
 - **完成定义**：长 prompt 续写场景 ≥ 1.5× 加速
 - **验证**：L3 不变式 —— 任何接受率下最终输出 == 不开 spec 的输出
 - **硬件**：Mac 即可
@@ -380,6 +411,7 @@ pytest tests                         # 全量
 - **配套文章**：《零训练 spec decoding：n-gram lookup 也能涨吞吐》
 
 ### M8 — Triton PagedAttention kernel
+- **L 层覆盖**：L1↔L2 边界（kernel 级，不动上层）
 - **完成定义**：替换 M4 的 PyTorch 伪版，性能逼近 vLLM 官方 kernel 的 50%
 - **验证**：L1 与 PyTorch 伪版 logits 完全一致；L3 与 vLLM kernel 抽样对照
 - **硬件**：**必须 NVIDIA GPU**（Triton 不支持 MPS）
@@ -387,22 +419,27 @@ pytest tests                         # 全量
 - **配套文章**：《手写第一个 Triton kernel —— PagedAttention 内部》
 
 ### M9 — MoE 升级（grouped GEMM）
+- **L 层覆盖**：L1主
 - **完成定义**：M6 升级版，30B-A3B 吞吐 ≥ 5 tok/s
 - **关键概念**：token permutation、grouped GEMM、负载均衡观测
 
 ### M10 — Speculative Decoding 升级（EAGLE-1 简化版）
+- **L 层覆盖**：L1（draft head） + L3主（verify/rollback）
 - **完成定义**：训一个 draft head，加速 ≥ 3×
 - **关键概念**：draft head 训练、tree verify、接受路径回滚
 
 ### M11 — Long context（YaRN / NTK RoPE 缩放）
+- **L 层覆盖**：L1主（RoPE 重映射） + L2（KV 长度上限）
 - **完成定义**：Qwen3-0.6B 上下文从 32K 推到 128K
 - **关键概念**：RoPE 频率重映射、外推 vs 内插
 
 ### M12 — Chunked Prefill
+- **L 层覆盖**：L3主（`ChunkedPrefillScheduler`）
 - **完成定义**：超长 prompt（≥ 32K）分块预填，避免 prefill 阶段 OOM 或长尾阻塞
 - **关键概念**：prefill 切片、和 decode mix-batching 的优先级
 
 ### M13 — VLM 教学版（图→文）
+- **L 层覆盖**：L1主（vision encoder + `inputs_embeds`） + L4（multipart 请求）
 - **完成定义**：接入 **Qwen3.5-0.8B**（native multimodal）或 Qwen3-VL，单图 + 文本对话能跑通
 - **为什么选 Qwen3.5-0.8B**：复用 M1–M12 的 Qwen3 架构肨，只加 vision encoder + `inputs_embeds` 注入路径，改动量最小
 - **关键概念**：Vision encoder（ViT/SigLIP）独立前向、image token embedding 注入（走 `inputs_embeds`）、变长 image token 数处理
@@ -410,6 +447,7 @@ pytest tests                         # 全量
 - **配套文章**：《推理框架怎么吃下一张图 —— VLM 接入解剖》
 
 ### M14 — VLM 工程化
+- **L 层覆盖**：L2主（image hash prefix cache） + L3（encoder/LLM 异步）
 - **完成定义**：多分辨率 + image content hash prefix cache + encoder/LLM 异步流水线
 - **关键概念**：图片内容哈希、EncoderCache、多模态 + 文本 batch 混排
 
@@ -456,7 +494,7 @@ pytest tests                         # 全量
 
 | # | 类型 | 代表 | 改动量 | 归属 |
 | --- | --- | --- | --- | --- |
-| 1 | Dense | Qwen3-0.6B, Llama3 | 基线 | M1–M5 |
+| 1 | Dense | Qwen3-0.6B | 基线 | M1–M5 |
 | 2 | Reasoning | Qwen3-thinking, DeepSeek-R1 | 极小 | M5 |
 | 3 | MoE | Qwen3-30B-A3B, Mixtral | 中 | M6 / M9 |
 | 4 | Speculative decoding | n-gram, EAGLE, Medusa | 中 | M7 / M10 |

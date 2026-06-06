@@ -34,7 +34,6 @@
 - Python 3.11 + PyTorch 2.4+
 - 主模型：**Qwen3-0.6B**（M1–M5 起步）
 - 第二模型：**Qwen3.5-0.8B**（M13 多模态起点，native multimodal）
-- 备用：Llama-3.2-1B
 - Tokenizer 复用 `transformers.AutoTokenizer`
 - Server：FastAPI + SSE
 - 硬件：Mac MPS 主开发（M1–M7），GPU 在 M5 benchmark / M8 Triton 必需
