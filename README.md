@@ -27,7 +27,7 @@
 | | M13 / M14 | VLM 教学版 / VLM 工程化 |
 | | M15+ | 量化 / MLA / TP-PP / Hybrid SSM / Audio 输入 … |
 
-完整计划见 [docs/PLAN.md](docs/PLAN.md)，实时进度见 [docs/PROGRESS.md](docs/PROGRESS.md)，M1 详细 brief 见 [docs/M1.md](docs/M1.md)。
+完整计划见 [docs/PLAN.md](docs/PLAN.md)，实时进度见 [docs/PROGRESS.md](docs/PROGRESS.md)，M1 详细 brief 见 [docs/M1.md](docs/M1.md)，仓库目录说明见 [docs/STRUCTURE.md](docs/STRUCTURE.md)。
 
 ## 环境
 
