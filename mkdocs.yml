@@ -1,0 +1,115 @@
+site_name: inferlite
+site_description: 从零手撕的 LLM 推理引擎学习项目
+site_url: https://luhao2013.github.io/inferlite/
+repo_url: https://github.com/luhao2013/inferlite
+repo_name: luhao2013/inferlite
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换暗色
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 切换亮色
+  icon:
+    repo: fontawesome/brands/github
+  font:
+    text: Roboto
+    code: JetBrains Mono
+
+nav:
+  - 首页: README.md
+  - 1. 规划:
+      - 路线图 (PLAN): 1-plan/PLAN.md
+      - 进度 (PROGRESS): 1-plan/PROGRESS.md
+      - M1 作战地图: 1-plan/M1.md
+  - 2. 任务卡:
+      - 索引: 2-tasks/README.md
+      - 模板: 2-tasks/_TEMPLATE.md
+      - T0' ModelConfig: 2-tasks/M1-T0p-ModelConfig.md
+      - T1 RMSNorm: 2-tasks/M1-T1-RMSNorm.md
+      - T2 SwiGLU: 2-tasks/M1-T2-SwiGLU.md
+  - 3. 知识库:
+      - Knowledge (论文/库/概念/工具): 3-kb/knowledge.md
+      - Lessons (踩坑教训): 3-kb/lessons.md
+      - Decisions (架构决策 ADR): 3-kb/decisions.md
+      - References (参考资料): 3-kb/REFERENCES.md
+  - 4. 环境与结构: 4-setup.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid_custom
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.arithmatex:
+      generic: true
+
+plugins:
+  - search:
+      lang:
+        - zh
+        - en
+  - mermaid2:
+      version: 11.4.0
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/luhao2013/inferlite
+  generator: false
+
+copyright: Copyright &copy; 2026 luhao &mdash; MIT License

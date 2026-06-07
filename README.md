@@ -33,7 +33,7 @@
 | | M13 / M14 | VLM 教学版 / VLM 工程化 |
 | | M15+ | 量化 / MLA / TP-PP / Hybrid SSM / Audio 输入 … |
 
-完整计划见 [docs/PLAN.md](docs/PLAN.md)，实时进度见 [docs/PROGRESS.md](docs/PROGRESS.md)，M1 详细 brief 见 [docs/M1.md](docs/M1.md)，仓库目录与环境说明见 [docs/setup.md](docs/setup.md)。
+完整计划见 [docs/1-plan/PLAN.md](docs/1-plan/PLAN.md)，实时进度见 [docs/1-plan/PROGRESS.md](docs/1-plan/PROGRESS.md)，M1 详细 brief 见 [docs/1-plan/M1.md](docs/1-plan/M1.md)，仓库目录与环境说明见 [docs/4-setup.md](docs/4-setup.md)。
 
 ## 环境
 
@@ -43,9 +43,9 @@
 make setup
 ```
 
-详细说明（含 uv / make 是什么、常用命令、踩坑预警）见 [docs/setup.md](docs/setup.md)。
+详细说明（含 uv / make 是什么、常用命令、踩坑预警）见 [docs/4-setup.md](docs/4-setup.md)。
 
-知识点 / 教训 / 决策记录见：[knowledge.md](docs/knowledge.md) · [lessons.md](docs/lessons.md) · [decisions.md](docs/decisions.md)。
+知识点 / 教训 / 决策记录见：[knowledge.md](docs/3-kb/knowledge.md) · [lessons.md](docs/3-kb/lessons.md) · [decisions.md](docs/3-kb/decisions.md)。
 
 ## 技术栈
 

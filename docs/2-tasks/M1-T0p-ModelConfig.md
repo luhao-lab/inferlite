@@ -23,7 +23,7 @@ import json
 
 @dataclass(frozen=True)
 class ModelConfig:
-    # 11 个字段（来自 docs/M1.md §2.2）
+    # 11 个字段（来自 docs/1-plan/M1.md §2.2）
     hidden_size: int            # H
     num_hidden_layers: int      # N
     num_attention_heads: int
@@ -60,7 +60,7 @@ class ModelConfig:
 - [ ] 测试 4/4 绿
 - [ ] commit `feat(config): ModelConfig dataclass (T0' done)`
 - [ ] 回填 `RMSNorm(config.hidden_size, eps=config.rms_norm_eps)` 调用点（暂无，等 T6 一并改）
-- [ ] PROGRESS.md / docs/tasks/README.md 更新
+- [ ] PROGRESS.md / docs/2-tasks/README.md 更新
 
 ## 坑（按概率排序）
 1. **HF config.json 有几十个字段**，不要全收 —— 按白名单只取 11 个；其余字段未来 M 用到再加
@@ -69,10 +69,10 @@ class ModelConfig:
 4. **`dataclass(frozen=True)` 配合 `__post_init__` 校验时**，赋值要用 `object.__setattr__(self, 'x', v)`
 
 ## 启动 checklist
-- [ ] `docs/M1.md` §2.2 11 字段表已读
+- [ ] `docs/1-plan/M1.md` §2.2 11 字段表已读
 - [ ] ModelScope 缓存里能找到 `config.json`（`~/.cache/modelscope/hub/models/Qwen/Qwen3-0___6B/config.json`）
 - [ ] dataclass 基础语法（frozen / __post_init__ / classmethod）确认
 
 ## 链接
-- 字段来源: `docs/M1.md` §2.2
+- 字段来源: `docs/1-plan/M1.md` §2.2
 - ground truth: 该 JSON 本身（不需 transformers 对照）

@@ -45,7 +45,7 @@ uv run python -m inferlite.cli "你好"
 uv run pytest tests/unit/test_rmsnorm.py -v
 ```
 
-工具链详细介绍（uv / make / ruff / pre-commit 是什么）见 `docs/knowledge.md` → Tools。
+工具链详细介绍（uv / make / ruff / pre-commit 是什么）见 `docs/3-kb/knowledge.md` → Tools。
 
 ---
 
@@ -102,13 +102,13 @@ inferlite/
 | `uv.lock` | 依赖版本锁定 | `uv add/sync/lock` 自动 |
 | `Makefile` | 任务别名 | 加新任务 |
 | `CLAUDE.md` | AI 协作约定 | 工作流变化 |
-| `docs/PLAN.md` | 14 个 M 总览，**单一来源** | 路线图调整 |
-| `docs/PROGRESS.md` | 实时状态 | 每张卡 ✅ 时 |
+| `docs/1-plan/PLAN.md` | 14 个 M 总览，**单一来源** | 路线图调整 |
+| `docs/1-plan/PROGRESS.md` | 实时状态 | 每张卡 ✅ 时 |
 | `docs/M<N>.md` | 单 M 作战地图 | 开新 M 时新建 |
-| `docs/tasks/M<N>-T<X>.md` | 任务卡 | 开新卡 / 卡完成 |
-| `docs/knowledge.md` | 知识点（单文件多 H2） | 调研时追加章节 |
-| `docs/lessons.md` | 教训 | 任务卡 ✅ 时追加 |
-| `docs/decisions.md` | ADR | 重大决策 |
+| `docs/2-tasks/M<N>-T<X>.md` | 任务卡 | 开新卡 / 卡完成 |
+| `docs/3-kb/knowledge.md` | 知识点（单文件多 H2） | 调研时追加章节 |
+| `docs/3-kb/lessons.md` | 教训 | 任务卡 ✅ 时追加 |
+| `docs/3-kb/decisions.md` | ADR | 重大决策 |
 
 ---
 
@@ -120,7 +120,7 @@ inferlite/
 
 ### 4.2 国内网络下载 Qwen3-0.6B
 
-`huggingface.co` 在国内不可达。详见 `docs/lessons.md` L2。
+`huggingface.co` 在国内不可达。详见 `docs/3-kb/lessons.md` L2。
 
 **结论**：默认走 ModelScope（`make preflight` 已配好）。
 
@@ -132,7 +132,7 @@ inferlite/
 - 用 `uv run pytest` 而非裸 `pytest`
 - 避免与 conda 环境冲突
 
-更多坑见 `docs/lessons.md`。
+更多坑见 `docs/3-kb/lessons.md`。
 
 ---
 
@@ -140,4 +140,23 @@ inferlite/
 
 往仓库根加新顶层文件/目录时：
 1. 更新本文件 §3 "仓库结构" + "文件作用速查"
-2. 如涉及新工具/库，在 `docs/knowledge.md` → Tools 加章节
+2. 如涉及新工具/库，在 `docs/3-kb/knowledge.md` → Tools 加章节
+
+---
+
+## 6. 文档站（MkDocs Material）
+
+本地浏览 / 全文搜索 / mermaid 渲染：
+
+```bash
+make docs-serve        # http://localhost:8000
+make docs-build        # 输出到 site/（已 .gitignore）
+make docs-deploy       # gh-pages（需先开仓库 Settings → Pages → gh-pages branch）
+```
+
+技术栈：
+- `mkdocs-material` 主题（侧栏 nav / 顶部搜索 / 暗色模式）
+- `mkdocs-mermaid2-plugin` 自动渲染 mermaid 流程图
+- 配置：`mkdocs.yml`
+
+新增文档时无需改 `mkdocs.yml`（已配置自动收录），除非要调整 nav 顺序或分组。

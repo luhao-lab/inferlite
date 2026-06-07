@@ -44,7 +44,7 @@ class RMSNorm(nn.Module):
 - [x] 测试 12/12 绿
 - [x] commit `feat(model): RMSNorm + 12 unit tests passing (T1 done)`
 - [x] PROGRESS.md 已更新
-- [x] docs/tasks/README.md 状态 ✅
+- [x] docs/2-tasks/README.md 状态 ✅
 
 ## 实战教训
 1. eps 属性名 → 跟社区一致用 `.eps`，不要自创 `.variance_eps`

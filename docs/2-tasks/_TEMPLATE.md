@@ -39,7 +39,7 @@ class ClassName(nn.Module):
 - [ ] 测试 N/N 全绿
 - [ ] commit `feat(...): ... (TX done)`
 - [ ] PROGRESS.md 更新
-- [ ] docs/tasks/README.md 状态改 ✅
+- [ ] docs/2-tasks/README.md 状态改 ✅
 
 ## 坑（按概率排序）
 1. ...

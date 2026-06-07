@@ -52,12 +52,12 @@ class SwiGLUMLP(nn.Module):
 | 5 | shape invariant (1D/2D/3D) | — | exact |
 | 6 | 恰好 3 个 nn.Linear submodule | — | exact |
 
-测试样板见 `docs/M1.md` §6.2。
+测试样板见 `docs/1-plan/M1.md` §6.2。
 
 ## DoD
 - [ ] 测试 6/6 绿
 - [ ] commit `feat(model): SwiGLUMLP aligned with Qwen3MLP (T2 done)`
-- [ ] PROGRESS.md / docs/tasks/README.md 更新
+- [ ] PROGRESS.md / docs/2-tasks/README.md 更新
 
 ## 坑（按概率排序）
 1. `nn.Linear(..., bias=True)` 是默认 → 必须显式 `bias=False`
@@ -68,9 +68,9 @@ class SwiGLUMLP(nn.Module):
 
 ## 启动 checklist
 - [ ] T1 RMSNorm 测试仍 12/12 绿（防回归）
-- [ ] `docs/M1.md` §6.2 SwiGLU 章节已读
+- [ ] `docs/1-plan/M1.md` §6.2 SwiGLU 章节已读
 - [ ] transformers.models.qwen3.modeling_qwen3.Qwen3MLP 源码已扫一眼
 
 ## 链接
-- 详细模板: `docs/M1.md` §6.2
+- 详细模板: `docs/1-plan/M1.md` §6.2
 - ground truth: `transformers.models.qwen3.modeling_qwen3.Qwen3MLP`

@@ -20,16 +20,16 @@ inferlite = 作者手撕 + AI 辅助 plan/review/doc 的学习项目。T1 RMSNor
 
 #### 文档层（spec-kit 风格）
 - `docs/M{n}.md` 作战地图（架构 / 总览 / 任务卡总表）
-- `docs/tasks/M{n}-T*.md` 任务卡（一卡一文件，PR 粒度）
-- `docs/PLAN.md` 14 个 M 路线图
-- `docs/PROGRESS.md` 状态跟踪
-- `docs/REFERENCES.md` 参考资料分层
-- `docs/setup.md` 环境与命令
+- `docs/2-tasks/M{n}-T*.md` 任务卡（一卡一文件，PR 粒度）
+- `docs/1-plan/PLAN.md` 14 个 M 路线图
+- `docs/1-plan/PROGRESS.md` 状态跟踪
+- `docs/3-kb/REFERENCES.md` 参考资料分层
+- `docs/4-setup.md` 环境与命令
 
 #### 知识库层（单文件多 H2，平面化）
-- `docs/knowledge.md` 知识点（papers / libs / concepts / tools 四章）
-- `docs/lessons.md` 教训（按时间追加 L1, L2, ...）
-- `docs/decisions.md` ADR（本文件）
+- `docs/3-kb/knowledge.md` 知识点（papers / libs / concepts / tools 四章）
+- `docs/3-kb/lessons.md` 教训（按时间追加 L1, L2, ...）
+- `docs/3-kb/decisions.md` ADR（本文件）
 
 #### AI 协作层
 - `CLAUDE.md` 项目级 AI 常驻记忆
@@ -59,7 +59,7 @@ inferlite = 作者手撕 + AI 辅助 plan/review/doc 的学习项目。T1 RMSNor
 - github/spec-kit
 - Anthropic Claude Code Best Practices
 - Addy Osmani《My LLM Coding Workflow Going Into 2026》
-- docs/REFERENCES.md §AI 协作方法论
+- docs/3-kb/REFERENCES.md §AI 协作方法论
 
 ---
 
@@ -104,3 +104,42 @@ inferlite = 作者手撕 + AI 辅助 plan/review/doc 的学习项目。T1 RMSNor
 - **新增 ADR**：在文件末尾 `## ADR-NNN: <title>`，编号递增（顺序，不复用废弃号）
 - **修订 ADR**：原 ADR 加 `**Status**: Superseded by ADR-NNN`，不删原文
 - **格式固定**：状态 / 背景 / 决策 / 后果 + "参考"
+
+---
+
+## ADR-003: 分组目录 + 文档可视化（MkDocs Material）
+
+**状态**：Accepted (2026-06-07)
+
+### 背景
+ADR-002 R1 重构后 docs/ 平铺 8 个文件，看不出"哪是规划 / 哪是执行 / 哪是知识"。
+且纯目录树看不出文件之间的引用关系，需要可视化入口。
+
+### 决策
+1. **按"何时读"分 3 组 + 1 独立**：
+   - `1-plan/` 规划层（PLAN/PROGRESS/M\<n\>）
+   - `2-tasks/` 执行层（任务卡）
+   - `3-kb/` 知识层（knowledge/lessons/decisions/REFERENCES）
+   - `4-setup.md` 顶层独立，新人入口
+   - 数字前缀天然按阅读顺序排序
+
+2. **`docs/README.md` 作为总入口**：含 mermaid 文档地图，点击节点跳转，GitHub 原生渲染
+
+3. **MkDocs Material 文档站**：
+   - `make docs-serve` 本地 http://localhost:8000
+   - 左侧 sidebar 按 1/2/3 分组 / 顶部全文搜索 / 暗色模式 / mermaid 自动渲染
+   - GitHub Actions `.github/workflows/docs.yml` 自动 deploy 到 gh-pages
+   - 仓库 Settings → Pages 启用 gh-pages branch
+
+### 后果
+- **文件数不变**（13），但视觉上 3 个文件夹一目了然
+- 总入口 README.md + 文档站，新人 30s 看懂结构
+- 跨文档关系图谱化，不再"脑补"
+- 代价：14 个 dev 依赖（mkdocs + material + mermaid2 + pymdown-extensions），但只在 `--group dev`，运行时无负担
+
+### 风险
+- mkdocs-material 8.0+ 后将闭源（见 build warning），但当前 9.x 仍可长期用
+- mermaid 复杂图在 GitHub 上可能渲染慢；保持 ≤20 节点
+
+### 参考
+- ADR-002（被本 ADR 延伸：在平面化基础上加分组 + 可视化）

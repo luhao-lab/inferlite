@@ -19,6 +19,7 @@ repos:
       - id: trailing-whitespace        # 行尾空格删掉
       - id: end-of-file-fixer          # 文件末尾必须有 \n
       - id: check-yaml                 # yaml 语法检查
+        args: ["--unsafe"]              # 允许 mkdocs.yml 中的 !!python/name 等自定义 tag
       - id: check-toml                 # toml 语法检查
       - id: check-merge-conflict       # 防止误 commit "<<<<<<< HEAD"
       - id: check-added-large-files

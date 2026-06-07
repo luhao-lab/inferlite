@@ -23,6 +23,10 @@ dev = [
     "ruff>=0.6,<1",
     "mypy>=1.10,<2",
     "pre-commit>=4,<5",
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.6",
+    "mkdocs-mermaid2-plugin>=1.2.3",
+    "pymdown-extensions>=10.21.3",
 ]
 
 [build-system]

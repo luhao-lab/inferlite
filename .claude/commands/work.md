@@ -9,7 +9,7 @@ argument-hint: "<task-id>  例: T0' 或 M1-T0p-ModelConfig"
 
 ## Step 1: 定位任务卡
 
-1. 在 `docs/tasks/` 找 `M<n>-<id>-*.md` 文件
+1. 在 `docs/2-tasks/` 找 `M<n>-<id>-*.md` 文件
 2. 若找不到：列出 `docs/M<current>.md` §6 任务清单，请用户确认 id 与文件名
 3. 找到后用 `read_file` 读完整任务卡
 
@@ -17,7 +17,7 @@ argument-hint: "<task-id>  例: T0' 或 M1-T0p-ModelConfig"
 
 按任务卡"前置 / 依赖"段，列出需要的 knowledge 卡：
 - **必查清单**：相关 paper / 库 API / 概念 / 工具
-- 对照 `docs/knowledge.md` 各 H2 是否已有对应章节
+- 对照 `docs/3-kb/knowledge.md` 各 H2 是否已有对应章节
 
 **如有缺口** → 输出：
 ```
@@ -29,7 +29,7 @@ argument-hint: "<task-id>  例: T0' 或 M1-T0p-ModelConfig"
 
 用户同意后：
 - web_search + fetch_web 调研
-- 把新章节追加到 `docs/knowledge.md` 对应 H2
+- 把新章节追加到 `docs/3-kb/knowledge.md` 对应 H2
 - 关键 knowledge 同步 `update_memory`（category=`project_introduction`，keywords 含 `inferlite`）
 
 **无缺口** → 直接进 Step 3。

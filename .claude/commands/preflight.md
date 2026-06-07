@@ -43,7 +43,7 @@ git log --oneline -3
 [✅] 测试: 12 passed
 [⏸️] preflight: 未跑（加 --full 触发）
 [✅] CI: 最近一次 success on main
-[⚠️] git: 有 2 个未提交改动 (M docs/M1.md, ?? new.md)
+[⚠️] git: 有 2 个未提交改动 (M docs/1-plan/M1.md, ?? new.md)
 
 可以开工: 是 / 否
 建议下一步: ...

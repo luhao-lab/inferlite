@@ -45,3 +45,4 @@ bench/results/*.json
 # Env
 .env
 .env.local
+site/
