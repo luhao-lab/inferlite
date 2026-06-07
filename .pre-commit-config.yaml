@@ -1,0 +1,33 @@
+# pre-commit hooks: 本地 commit 前自动跑 lint / 格式化 / 类型检查
+#
+# 配合 .github/workflows/tests.yml:
+#   - 本地（这里）: 秒级检查，防止 commit 进格式垃圾
+#   - 云端（CI）   : 全量 pytest，跨平台兜底
+#
+# 安装:
+#   uv sync                       # 已经把 pre-commit 装进 dev 依赖（见 pyproject.toml）
+#   uv run pre-commit install     # 注册到 .git/hooks/pre-commit
+# 此后每次 git commit 会自动跑下方所有 hooks，红了就拒绝 commit。
+#
+# 临时跳过（不推荐）: git commit --no-verify
+# 手动全跑一遍:        uv run pre-commit run --all-files
+repos:
+  # 内置基础卫生
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace        # 行尾空格删掉
+      - id: end-of-file-fixer          # 文件末尾必须有 \n
+      - id: check-yaml                 # yaml 语法检查
+      - id: check-toml                 # toml 语法检查
+      - id: check-merge-conflict       # 防止误 commit "<<<<<<< HEAD"
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]         # 防止误 commit 权重文件（>1MB 直接拒）
+
+  # ruff: 既做 lint 又做 format，比 black+isort+flake8 加起来还快
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff                       # lint（E/F/I/B/UP）
+        args: ["--fix"]                # 能自动修的直接修
+      - id: ruff-format                # 格式化（替代 black）

@@ -1,0 +1,42 @@
+name: tests
+
+# 触发时机:
+#   - push 到任意分支
+#   - 任何 PR 提交/更新（确保 merge 前一定跑过）
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: pytest (${{ matrix.os }} / py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # 一台机器挂掉不影响其它矩阵继续跑
+      fail-fast: false
+      matrix:
+        # 双平台兜底:
+        #   ubuntu-latest  纯 CPU，捕捉 "只在 MPS 上能跑" 的隐藏假设
+        #   macos-latest   Apple Silicon，与本地开发环境对齐（M1 阶段主跑环境）
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 装 uv（跨平台一行）
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true             # 缓存 uv 自身和下载的 wheels，加速二次跑
+
+      - name: Set up Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+
+      # 锁定文件驱动的同步：不允许偷偷漏依赖
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # 跑测试时跳过标了 slow 的（CI 上线后期我们再加 nightly 跑 slow）
+      - name: Run pytest
+        run: uv run pytest -v -m "not slow"

@@ -50,6 +50,7 @@ def ensure_local_model(model_id: str, source: str) -> str:
     """
     if source == "local":
         import os
+
         if not os.path.isdir(model_id):
             raise SystemExit(f"--source local but path is not a directory: {model_id}")
         return model_id
@@ -60,6 +61,7 @@ def ensure_local_model(model_id: str, source: str) -> str:
         # process is gone but its lockfile remains.
         import os
         from pathlib import Path
+
         lock_dir = Path.home() / ".cache" / "modelscope" / "hub" / ".lock"
         if lock_dir.exists():
             # Best-effort: ignore errors if the lock is genuinely held by another live process.
@@ -70,12 +72,14 @@ def ensure_local_model(model_id: str, source: str) -> str:
                     pass
 
         from modelscope import snapshot_download
+
         # Default cache: ~/.cache/modelscope/hub/<owner>/<name>
         path = snapshot_download(model_id)
         return path
 
     if source == "hf":
         from huggingface_hub import snapshot_download as hf_snapshot
+
         return hf_snapshot(repo_id=model_id)
 
     raise SystemExit(f"unknown --source: {source}")
@@ -83,8 +87,11 @@ def ensure_local_model(model_id: str, source: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", default="Qwen/Qwen3-0.6B",
-                        help="model id on the chosen source, or local path when --source=local")
+    parser.add_argument(
+        "--model",
+        default="Qwen/Qwen3-0.6B",
+        help="model id on the chosen source, or local path when --source=local",
+    )
     parser.add_argument("--prompt", default="你好")
     parser.add_argument("--max-new-tokens", type=int, default=20)
     parser.add_argument(
