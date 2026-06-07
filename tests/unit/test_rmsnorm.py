@@ -143,5 +143,5 @@ def test_rmsnorm_eps_default_1e_6():
     """
     layer = RMSNorm(8)
     # 注：这里读的属性名要与你的实现对应；
-    # 当前实现里属性叫 self.variance_eps（不是 self.eps），所以读 .variance_eps
-    assert layer.variance_eps == 1e-6
+    # 当前实现里属性叫 self.eps（与 transformers / LLaMA / Mistral 社区约定一致）
+    assert layer.eps == 1e-6
