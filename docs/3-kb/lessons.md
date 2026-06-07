@@ -5,6 +5,16 @@
 
 ---
 
+## 📊 索引
+
+| ID | 来源 | 一句话 | 适用范围 |
+| --- | --- | --- | --- |
+| **L1** | T1 RMSNorm | RMSNorm 必须 upcast fp32 算方差 | 所有 Norm 类算子 |
+| **L2** | M0 环境搭建 | 国内拉模型用 ModelScope 替代 HF mirror | 任何拉权重的脚本 |
+| **L3** | M0 知识库重构 | 地基 vs 算法是两个频道，不要混着切 | 协作节奏 / AI 协作 |
+
+---
+
 ## L1: RMSNorm 必须 upcast fp32 算方差
 
 **来源**：T1 RMSNorm（2026-06-07，commit `259def0`/`bd487d1`）
