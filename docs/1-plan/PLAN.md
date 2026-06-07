@@ -17,6 +17,28 @@
   - `vLLM v1`（`vllm/v1/`）— 工程级对照，**只读不抄**
   - `SGLang` runtime — RadixAttention / 调度策略对照
 
+### 0.1 协作原则（基于 M0 + T1 经验沉淀，2026-06-07）
+
+> 这五条是 R2 体检后从前期实操中抽取的高频失败模式，写在 PLAN 顶部用于约束后续每个 M。
+
+1. **地基与算法是两个频道**（→ Lessons L3）
+   同一会话 / 同一 commit 内，只 push **基础设施改动**（CI / Makefile / docs）或**算法实现**（layers / engine）之一，不要混。混在一起会让 review 失焦、回滚成本高。
+
+2. **任务卡 7 字段写完再开工**
+   `前置 / 产出 / 算法核心 / L0 测试 / DoD / 易踩坑 / 估时` 全部填好（即使只填一句"待补"也比空着强）。开工后任何"哦还有一个事"先回填到对应字段，不直接动代码。
+
+3. **每张完成的任务卡 → 至少回填 1 处知识/教训**
+   - 完成总结段是最低门槛
+   - 如果踩坑了 → `lessons.md` 加 L 编号
+   - 如果用到了新论文/库/概念 → `knowledge.md` 对应章节加卡片
+   - 如果产生方法论决策 → `decisions.md` 加 ADR
+
+4. **`make doctor` 是 commit 的零成本守卫**
+   PLAN/PROGRESS/任务卡 改动后 push 前手动跑一次。doctor 没绿不 push。
+
+5. **`[P]` 标记并行机会，但单线推进默认**
+   M1 §4 的 `[P] ✓` 表示**可以**并行，不表示**必须**并行。学习导向项目里，单线深读比并行铺面更高效；只在等模型下载等 IO 阻塞时考虑切到并行卡。
+
 <!-- anchor:architecture -->
 ## 1. 框架的 4 层抽象（贯穿所有里程碑）
 
@@ -47,8 +69,8 @@
 
 | 里程碑 | L1 Model | L2 Memory | L3 Engine | L4 Server | 主战场 |
 | --- | :---: | :---: | :---: | :---: | --- |
-| **M1a** Qwen3 数值对齐 | ⚫主 | | | | L1 算子 + 整模型 logits allclose |
-| **M1b** 单序列前向 | ⚫ | | ⚫主 | | 最小 Engine + CLI 出字 |
+| **M1·P1** Qwen3 数值对齐 | ⚫主 | | | | L1 算子 + 整模型 logits allclose |
+| **M1·P2** 单序列前向 | ⚫ | | ⚫主 | | 最小 Engine + CLI 出字 |
 | **M2** KV Cache | ⚫ | ⚫主 | | | L2 首实现 `ContiguousKVCache` |
 | **M3** Continuous Batching | | | ⚫主 | | L3 调度器诞生 |
 | **M4** PagedAttention（PyTorch） | | ⚫主 | ⚫ | | L2 升级为 `PagedKVCache` |
@@ -150,7 +172,7 @@ class Qwen3:
 
 | 阶段 | 模型扩展机制实现度 |
 | --- | --- |
-| **M1a–M5** | 单文件 `inferlite/model/qwen3.py`，**不做 registry**，先钉 `LLMModel` / `Sampler` / `EngineCore.step()` 三个最小契约；KV / Scheduler / Executor / Drafter 只保留占位，等 M2/M3/M7 用真实需求反推签名 |
+| **M1·P1–M5** | 单文件 `inferlite/model/qwen3.py`，**不做 registry**，先钉 `LLMModel` / `Sampler` / `EngineCore.step()` 三个最小契约；KV / Scheduler / Executor / Drafter 只保留占位，等 M2/M3/M7 用真实需求反推签名 |
 | **M6** | 加入 `model/registry.py` + `qwen3_moe.py`，按 `architectures` 字段分发；契约第一次被验证 |
 | **M9+** | 每个新模型 100–200 行（attention + MLP + WEIGHT_MAP），90% 框架代码完全复用 |
 
@@ -306,7 +328,7 @@ pytest tests                         # 全量
 每个里程碑给出：**完成定义** / **关键概念** / **必读资料** / **配套文章**。
 不给时间，按你节奏推进；每完成一个，仓库打 tag `v0.<N>`。
 
-### M1a — Qwen3 数值对齐：先把 L1 打穿
+### M1 Phase 1 — Qwen3 数值对齐：先把 L1 打穿
 - **L 层覆盖**：L1 Model 主战场
 
 - **完成定义**：
@@ -322,7 +344,7 @@ pytest tests                         # 全量
   - Qwen3 技术报告 arXiv:2505.09388 §3 Architecture
 - **本质题**：为什么“形状对”不等于“数值对”？
 
-### M1b — 单序列前向：Engine + CLI 能出字
+### M1·P2 — 单序列前向：Engine + CLI 能出字
 - **L 层覆盖**：L1 主 + L3 最小 Engine 骨架
 
 - **完成定义**：
@@ -381,9 +403,18 @@ pytest tests                         # 全量
 - **本质题**：PagedAttention 和 OS paging 唯一不同的一点是什么？
 - **配套文章**：《把显存当虚拟内存用 —— PagedAttention 的设计精髓》
 
-### M5a — 服务化 demo：采样 + OpenAI API + SSE
-- **L 层覆盖**：L4主（OpenAI 兼容 API） + L3（sampler）
+### M5 — 服务化收口（API + Prefix Cache + Benchmark）
 
+> M5 拆分为三个 Phase 顺序推进，但作为一个 milestone 统一管理（与 M1 同思路）：
+> - **Phase 1（API + SSE）**：把 EngineCore 包成可调用服务
+> - **Phase 2（Prefix + Reasoning）**：复用能力，TTFT 优化
+> - **Phase 3（Benchmark + CI）**：v1 收官 + 对照表
+
+- **L 层覆盖**：L2 + L3 + L4 全部覆盖
+- **里程碑标志**：仓库打 `v1.0` tag，代码量 ≈ 2000 行
+- **配套文章**：《2000 行实现一个 vLLM —— inferlite v1 总览》（**核心宣传文**）
+
+#### Phase 1 — 服务化 demo：采样 + OpenAI API + SSE
 - **完成定义**：
   1. `pip install -e .` + `inferlite serve qwen3-0.6b` 起服务
   2. `curl http://localhost:8000/v1/chat/completions` 兼容 OpenAI（含 SSE）
@@ -392,9 +423,7 @@ pytest tests                         # 全量
 - **硬件**：Mac MPS 主开发
 - **关键概念**：logits processor 链、OpenAI 流式协议、请求参数到 sampler 的映射
 
-### M5b — 复用能力：前缀缓存 + Reasoning 字段分流
-- **L 层覆盖**：L2（PrefixCache） + L4（协议字段）
-
+#### Phase 2 — 复用能力：前缀缓存 + Reasoning 字段分流
 - **完成定义**：
   1. 多轮对话第二轮 TTFT 比第一轮 ↓ 5×（prefix cache 命中）
   2. thinking 模式下 `reasoning_content` 字段分流
@@ -403,9 +432,7 @@ pytest tests                         # 全量
 - **硬件**：Mac 可验功能；性能收益最好上 GPU 复测
 - **关键概念**：RadixTree-Lite + block hash、prefix cache 命中率、reasoning 字段约定
 
-### M5c — Benchmark + CI：核心 v1 收口
-- **L 层覆盖**：工程化收口（测试 / 评测 / 发布）
-
+#### Phase 3 — Benchmark + CI：核心 v1 收口
 - **完成定义**：
   1. Benchmark 表：inferlite vs transformers.generate vs vLLM 三栏 throughput / TTFT / ITL（见 §2.5.3 标准模板）
   2. `bench/run_all.sh` 一键产出对照表，归档到 `bench/results/`
@@ -417,8 +444,6 @@ pytest tests                         # 全量
   - The Curious Case of Neural Text Degeneration（top-p 起源）
   - OpenAI Chat Completions API spec
 - **本质题**：prefix cache 命中率在生产里被什么决定？
-- **配套文章**：《2000 行实现一个 vLLM —— inferlite v1 总览》（**核心宣传文**）
-- **里程碑标志**：仓库打 `v1.0` tag，代码量 ≈ 2000 行
 
 <!-- anchor:milestones-extension -->
 ## 4. 扩充里程碑 M6+（同仓库长期迭代，无截止）
@@ -461,15 +486,16 @@ pytest tests                         # 全量
 - **完成定义**：训一个 draft head，加速 ≥ 3×
 - **关键概念**：draft head 训练、tree verify、接受路径回滚
 
-### M11 — Long context（YaRN / NTK RoPE 缩放）
-- **L 层覆盖**：L1主（RoPE 重映射） + L2（KV 长度上限）
-- **完成定义**：Qwen3-0.6B 上下文从 32K 推到 128K
-- **关键概念**：RoPE 频率重映射、外推 vs 内插
-
-### M12 — Chunked Prefill
+### M11 — Chunked Prefill
 - **L 层覆盖**：L3主（`ChunkedPrefillScheduler`）
 - **完成定义**：超长 prompt（≥ 32K）分块预填，避免 prefill 阶段 OOM 或长尾阻塞
 - **关键概念**：prefill 切片、和 decode mix-batching 的优先级
+- **顺序理由**：长上下文先要"喂得进"再谈"算得对"，调度层是前置依赖
+
+### M12 — Long context（YaRN / NTK RoPE 缩放）
+- **L 层覆盖**：L1主（RoPE 重映射） + L2（KV 长度上限）
+- **完成定义**：Qwen3-0.6B 上下文从 32K 推到 128K
+- **关键概念**：RoPE 频率重映射、外推 vs 内插
 
 ### M13 — VLM 教学版（图→文）
 - **L 层覆盖**：L1主（vision encoder + `inputs_embeds`） + L4（multipart 请求）

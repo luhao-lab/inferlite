@@ -1,8 +1,8 @@
-# M1-T0' ModelConfig
+# M1-T0 ModelConfig
 
 ## 元信息
-- **任务 ID**: T0'
-- **里程碑**: M1a
+- **任务 ID**: T0
+- **里程碑**: M1·P1
 - **状态**: ⬜ pending
 - **前置**: T0（包骨架，已 ✅）
 - **估时**: 20 min
@@ -58,7 +58,7 @@ class ModelConfig:
 
 ## DoD
 - [ ] 测试 4/4 绿
-- [ ] commit `feat(config): ModelConfig dataclass (T0' done)`
+- [ ] commit `feat(config): ModelConfig dataclass (T0 done)`
 - [ ] 回填 `RMSNorm(config.hidden_size, eps=config.rms_norm_eps)` 调用点（暂无，等 T6 一并改）
 - [ ] PROGRESS.md / docs/2-tasks/README.md 更新
 

@@ -4,7 +4,7 @@
 
 ## 元信息
 - **任务 ID**: TX
-- **里程碑**: M1a / M1b
+- **里程碑**: M1·P1 / M1·P2
 - **状态**: ⬜ pending / 🟡 in-progress / ✅ done
 - **前置**: TY, TZ
 - **估时**: Nh

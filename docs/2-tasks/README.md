@@ -4,12 +4,12 @@
 > 进度状态汇总见 `docs/1-plan/M1.md` §4 任务卡总表；本目录是任务卡详细内容。
 > 新建任务卡：`cp _TEMPLATE.md M1-TX-name.md` 或运行 `/work TX` 自动建。
 
-## M1a 数值对齐
+## M1 Phase 1（数值对齐）
 
 | ID | 文件 | 状态 |
 | --- | --- | --- |
 | T0 | （历史，已并入 M0） | ✅ |
-| T0' | [M1-T0p-ModelConfig.md](./M1-T0p-ModelConfig.md) | ⬜ |
+| T0 | [M1-T0-ModelConfig.md](./M1-T0-ModelConfig.md) | ⬜ |
 | T1 | [M1-T1-RMSNorm.md](./M1-T1-RMSNorm.md) | ✅ |
 | T2 | [M1-T2-SwiGLU.md](./M1-T2-SwiGLU.md) | ⬜ |
 | T3 | — 开工时再创建 | ⬜ |
@@ -19,7 +19,7 @@
 | T7 | — 开工时再创建 | ⬜ |
 | T8 | — 开工时再创建 | ⬜ |
 
-## M1b 出字闭环
+## M1 Phase 2（出字）闭环
 
 | ID | 文件 | 状态 |
 | --- | --- | --- |

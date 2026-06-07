@@ -27,7 +27,7 @@
 - **GitHub**: https://github.com/rasbt/LLMs-from-scratch
 - **特别看**: `ch05_main_chapter_code/qwen3.ipynb`
 - **风格**: 教学最清晰，每个公式 → 代码逐句对照，Jupyter 可逐 cell 跑
-- **对 inferlite 的价值**: **M1a 数值对齐的最佳教学材料**。RMSNorm / RoPE / GQA 每个都有"公式 → 代码 → 测试"三栏对照
+- **对 inferlite 的价值**: **M1 Phase 1（数值对齐）的最佳教学材料**。RMSNorm / RoPE / GQA 每个都有"公式 → 代码 → 测试"三栏对照
 - **怎么读**: 写一个模块前，把 Qwen3 notebook 对应 cell 跑一遍，确认 ground truth
 
 ### 3. huggingface/transformers（仅 Qwen3 部分）
@@ -53,7 +53,7 @@
 - **对 inferlite 的价值**: **架构师视角的"成品答案"**。三段式 EngineCore、PagedAttention、Continuous Batching 工业实现
 - **危险**: 直接读会被淹死
 - **怎么读**: M1/M2 阶段只挑 3 个文件读
-  - `vllm/v1/engine/core.py::step()` — 看三段式不变量（M1b 借鉴）
+  - `vllm/v1/engine/core.py::step()` — 看三段式不变量（M1·P2 借鉴）
   - `vllm/model_executor/models/registry.py` — 看 Registry 写法（M6 MoE 时用）
   - `vllm/v1/core/sched/scheduler.py` FCFS 部分 — 看 M3 Continuous Batching
 - **暂不看**: TP/PP/spec decoding/CUDA kernel（M9+ 才回来）
@@ -139,13 +139,13 @@
 ## 🎯 inferlite 阶段-资料对照
 
 ```
-M1a 阶段（数值对齐）:
+M1·P1 阶段（数值对齐）:
   ✅ 必看: rasbt/LLMs-from-scratch Qwen3 notebook（写模块前精读对应 cell）
   ✅ 必看: transformers/modeling_qwen3.py（写模块前搜对应类）
   ✅ 论文: Qwen3 报告 §3 / RoFormer §3.4.2 / GQA §2
   ⏸ 暂不看: nano-vllm engine/, vllm
 
-M1b 阶段（出字闭环）:
+M1·P2 阶段（出字闭环）:
   ✅ 看: nano-vllm engine/（理解 step() 三段式）
   ✅ 看: vllm/v1/engine/core.py step()（50 行，看不变量）
 

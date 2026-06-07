@@ -73,7 +73,7 @@ flowchart LR
 - ✅ **M0** 仓库 + 计划 + 知识库脚手架
 - 🟡 **M1** Qwen3 数值对齐 + 单序列前向
   - ✅ T1 RMSNorm（12/12 单测）
-  - 🟡 T0' ModelConfig
+  - 🟡 T0 ModelConfig
   - ⬜ T2 SwiGLU · T3 RoPE · T4 Attention · T5 Block · T6 LM Head
 - ⬜ M2 KV Cache · M3 Continuous Batching · M4 PagedAttention · M5 API+SSE
 - ⬜ M6+ MoE / Spec Decoding / Triton / VLM …

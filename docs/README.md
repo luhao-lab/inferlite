@@ -35,7 +35,7 @@ hide:
 
 <a class="card" href="./1-plan/PLAN.md"><span class="icon">:octicons-milestone-16:</span><span class="title">1-plan/</span><span class="desc">14 个里程碑路线图、当前作战地图 M1、整体进度跟踪。</span><span class="meta">PLAN · PROGRESS · M&lt;n&gt;</span></a>
 
-<a class="card" href="./2-tasks/README.md"><span class="icon">:octicons-checklist-16:</span><span class="title">2-tasks/</span><span class="desc">任务卡七字段（前置 / 边界 / 验收 / 风险 / 完成总结），一卡一文件。</span><span class="meta">M1-T0p · M1-T1 ✓ · M1-T2</span></a>
+<a class="card" href="./2-tasks/README.md"><span class="icon">:octicons-checklist-16:</span><span class="title">2-tasks/</span><span class="desc">任务卡七字段（前置 / 边界 / 验收 / 风险 / 完成总结），一卡一文件。</span><span class="meta">M1-T0 · M1-T1 ✓ · M1-T2</span></a>
 
 <a class="card" href="./3-kb/knowledge.md"><span class="icon">:octicons-book-16:</span><span class="title">3-kb/</span><span class="desc">知识库：论文 / 库 / 概念 / 工具 卡片化总结，踩坑教训 + ADR 决策记录。</span><span class="meta">knowledge · lessons · decisions</span></a>
 
@@ -54,7 +54,7 @@ flowchart TD
     README -->|查知识| KB[3-kb/knowledge.md<br/>Papers/Libs/Concepts/Tools]:::kb
 
     PROGRESS --> M1[1-plan/M1.md<br/>当前作战地图]:::plan
-    M1 --> T0P[2-tasks/M1-T0p<br/>ModelConfig]:::tasks
+    M1 --> T0P[2-tasks/M1-T0<br/>ModelConfig]:::tasks
     M1 --> T1[2-tasks/M1-T1<br/>RMSNorm ✓]:::tasks
     M1 --> T2[2-tasks/M1-T2<br/>SwiGLU]:::tasks
 
@@ -76,7 +76,7 @@ flowchart TD
     click PLAN "./1-plan/PLAN.md"
     click PROGRESS "./1-plan/PROGRESS.md"
     click M1 "./1-plan/M1.md"
-    click T0P "./2-tasks/M1-T0p-ModelConfig.md"
+    click T0P "./2-tasks/M1-T0-ModelConfig.md"
     click T1 "./2-tasks/M1-T1-RMSNorm.md"
     click T2 "./2-tasks/M1-T2-SwiGLU.md"
     click KB "./3-kb/knowledge.md"

@@ -2,9 +2,9 @@
 
 ## 元信息
 - **任务 ID**: T2
-- **里程碑**: M1a
+- **里程碑**: M1·P1
 - **状态**: ⬜ pending
-- **前置**: T0'（或直接用 hidden_size/intermediate_size 硬参，T6 时回填）
+- **前置**: T0（或直接用 hidden_size/intermediate_size 硬参，T6 时回填）
 - **估时**: 1h
 
 ## 目标

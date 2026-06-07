@@ -1,4 +1,4 @@
-.PHONY: setup sync test lint fmt clean preflight docs-serve docs-build docs-deploy
+.PHONY: setup sync test lint fmt clean preflight docs-serve docs-build docs-deploy doctor
 
 setup:        ## one-shot install uv + sync deps + sanity check
 	bash scripts/setup.sh
@@ -32,6 +32,9 @@ docs-build:   ## build static docs to site/
 	uv run mkdocs build
 docs-deploy:  ## deploy docs to GitHub Pages (gh-pages branch)
 	uv run mkdocs gh-deploy --force
+
+doctor:       ## cross-doc consistency check (tasks ↔ M1.md ↔ PROGRESS ↔ README)
+	bash scripts/doctor.sh
 
 help:         ## show this help
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | awk -F':.*?##' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'

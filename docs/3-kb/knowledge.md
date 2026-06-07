@@ -31,11 +31,11 @@
 - **ADR-002** 知识库与代码同仓（R1 重构）
 - **ADR-003** 分组目录 + MkDocs Material 可视化
 
-**任务卡进度**（[详见 PROGRESS](../1-plan/PROGRESS.md)）：M1-T1 RMSNorm ✅ · T0' ModelConfig 🟡 · T2-T6 ⬜
+**任务卡进度**（[详见 PROGRESS](../1-plan/PROGRESS.md)）：M1-T1 RMSNorm ✅ · T0 ModelConfig 🟡 · T2-T6 ⬜
 
 **已知缺口**（开工时回填）：
 
-- ⚠️ `Concepts#数值对齐策略` — fp32 baseline / bf16 实战 / 三层验证三件套（M1 横跨 T1-T6 的元概念，T0' 完成时回填）
+- ⚠️ `Concepts#数值对齐策略` — fp32 baseline / bf16 实战 / 三层验证三件套（M1 横跨 T1-T6 的元概念，T0 完成时回填）
 - ⚠️ `Concepts#KV Cache 结构` — 等 M2 任务卡触发
 - ⚠️ `Concepts#Continuous Batching 调度` — 等 M3 任务卡触发
 
@@ -309,7 +309,7 @@ with torch.inference_mode():
 
 ### Factory pattern (经典工厂)
 
-（待补 —— T0' ModelConfig.from_json() 涉及时展开）
+（待补 —— T0 ModelConfig.from_json() 涉及时展开）
 
 ---
 
