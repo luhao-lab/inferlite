@@ -133,9 +133,8 @@ def main() -> int:
     model = AutoModelForCausalLM.from_pretrained(
         local_path,
         dtype=torch.float32,
-        device_map=device,
         local_files_only=True,
-    )
+    ).to(device)
     model.eval()
     n_params_m = sum(p.numel() for p in model.parameters()) / 1e6
     print(f"      loaded in    {time.time() - t0:.1f}s; params = {n_params_m:.1f}M")
