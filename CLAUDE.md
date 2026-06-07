@@ -19,10 +19,25 @@
 - **绝对不要**：AI 直接生成 `inferlite/model/`、`inferlite/engine/` 等核心实现
 
 ## 任务推进协议
-1. 用户说"开 TX 任务卡" → 展开 `docs/M1.md` §6.X 详细模板
+1. 用户说"开 TX 任务卡"或 `/next-task` → 展开 `docs/tasks/M1-TX-*.md`
 2. 用户写代码 + 跑测试 → 贴结果
-3. AI review → 提改进 → commit
-4. 更新 `docs/PROGRESS.md` 状态列
+3. AI review（`/review-card TX`）→ 提改进 → commit
+4. 更新 `docs/PROGRESS.md` + `docs/tasks/README.md` 状态列
+5. **`/archive-task TX` 双轨沉淀教训**（文件 + Memory）
+
+## 知识库（双轨）
+- 文件: `~/learning/docs/projects/inferlite/{lessons,decisions,milestones,benchmarks}/`
+- Memory: CodeFlicker repos dimension，关键字 `inferlite`
+- 新会话进入项目时先 `search_memory("inferlite")`，再读 `docs/projects/inferlite/README.md` 索引
+- 详见 ADR-001（`~/learning/docs/projects/inferlite/decisions/001-spec-driven-workflow.md`）
+
+## Slash 命令
+- `/next-task` — 开下一张任务卡
+- `/review-card TX` — review 已完成的 TX
+- `/preflight-check` — 开工前环境健康检查
+- `/archive-task TX` — 任务卡完成后双轨沉淀
+- `/archive-milestone Mn` — 里程碑完成归档
+- `/plan-next-milestone Mn+1` — 基于知识库规划下一里程碑
 
 ## 测试纪律
 - 每个手写模块必须有 L0 单测 vs `transformers.models.qwen3.modeling_qwen3.*` allclose
