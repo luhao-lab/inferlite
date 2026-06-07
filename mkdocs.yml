@@ -11,7 +11,6 @@ site_dir: site
 theme:
   name: material
   language: zh
-  custom_dir: docs/overrides
   features:
     - navigation.tabs
     - navigation.tabs.sticky
