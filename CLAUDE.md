@@ -19,25 +19,36 @@
 - **绝对不要**：AI 直接生成 `inferlite/model/`、`inferlite/engine/` 等核心实现
 
 ## 任务推进协议
-1. 用户说"开 TX 任务卡"或 `/next-task` → 展开 `docs/tasks/M1-TX-*.md`
-2. 用户写代码 + 跑测试 → 贴结果
-3. AI review（`/review-card TX`）→ 提改进 → commit
-4. 更新 `docs/PROGRESS.md` + `docs/tasks/README.md` 状态列
-5. **`/archive-task TX` 双轨沉淀教训**（文件 + Memory）
+1. 开新 M 前：`/research-before-plan Mn` → 产出 brief + 补 knowledge 卡
+2. 规划: `/plan-next-milestone Mn` → docs/Mn.md + docs/tasks/
+3. 开任务卡: `/next-task`（自动先 `/check-prerequisites`）→ 展开 `docs/tasks/Mn-TX-*.md`
+4. 用户写代码 + 跑测试 → 贴结果
+5. AI review（`/review-card TX`）→ 提改进 → commit
+6. `/archive-task TX` 三轨沉淀：lessons + knowledge 补漏 + mainline 草稿
+7. M 内全部 ✅ → `/archive-mainline Mn` 整理主线 → `/archive-milestone Mn` 写 summary + tag
 
-## 知识库（双轨）
-- 文件: `~/learning/docs/projects/inferlite/{lessons,decisions,milestones,benchmarks}/`
+## 知识库（双轨制 + 四类产物）
+- 文件: `~/learning/docs/projects/inferlite/`
+  - `mainline/` 主线（项目脉络+代码流，M 完成时归档）
+  - `knowledge/` 知识点（papers/libs/concepts/tools，规划时调研产出）
+  - `lessons/` 教训（任务卡完成时）
+  - `decisions/` ADR
+  - `research/` 调研简报（规划中间品）
+  - `milestones/` M 总结
 - Memory: CodeFlicker repos dimension，关键字 `inferlite`
 - 新会话进入项目时先 `search_memory("inferlite")`，再读 `docs/projects/inferlite/README.md` 索引
 - 详见 ADR-001（`~/learning/docs/projects/inferlite/decisions/001-spec-driven-workflow.md`）
 
 ## Slash 命令
+- `/research-before-plan <scope>` — 规划前调研
+- `/plan-next-milestone Mn` — 基于知识库规划新 M
+- `/check-prerequisites Tx` — 任务卡开工前知识检查
 - `/next-task` — 开下一张任务卡
 - `/review-card TX` — review 已完成的 TX
 - `/preflight-check` — 开工前环境健康检查
-- `/archive-task TX` — 任务卡完成后双轨沉淀
-- `/archive-milestone Mn` — 里程碑完成归档
-- `/plan-next-milestone Mn+1` — 基于知识库规划下一里程碑
+- `/archive-task TX` — 任务卡完成后三轨沉淀
+- `/archive-mainline Mn` — 里程碑完成后整理主线
+- `/archive-milestone Mn` — 里程碑完成后写 summary
 
 ## 测试纪律
 - 每个手写模块必须有 L0 单测 vs `transformers.models.qwen3.modeling_qwen3.*` allclose

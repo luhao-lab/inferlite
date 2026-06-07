@@ -19,6 +19,7 @@ argument-hint: <milestone-id>，例如 M1 / M1a / M2
 - 所有任务卡状态都是 ✅？（若否，拒绝归档）
 - DoD 全部满足？（参考 `inferlite/docs/$ARGUMENTS.md` §1）
 - CI 最新 run 绿？
+- `mainline/$ARGUMENTS-*.md` 已经 `/archive-mainline` 整理完毕？（若否，先跑 `/archive-mainline $ARGUMENTS`）
 
 任一不满足 → 输出未完成项，停止归档。
 
