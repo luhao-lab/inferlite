@@ -4,7 +4,7 @@
 - **任务 ID**: T0
 - **里程碑**: M1·P1
 - **状态**: ⬜ pending
-- **前置**: T0（包骨架，已 ✅）
+- **前置**: M0（包骨架，已 ✅）
 - **估时**: 20 min
 
 ## 目标
@@ -54,7 +54,8 @@ class ModelConfig:
 | 1 | `qwen3_0_6b()` 11 字段全对 | H=1024, N=28, vocab=151936, ... |
 | 2 | `from_json(modelscope cache 路径)` 与 hard-coded 一致 | exact eq |
 | 3 | `frozen=True` 不允许字段修改 | 触发 FrozenInstanceError |
-| 4 | `head_dim == hidden_size / num_attention_heads` 自动校验 | __post_init__ assert |
+| 4 | 各字段 dtype 与范围 不越界 | hidden_size>0, vocab_size>0, eps in (0,1), 等 |
+| 5 | `num_attention_heads % num_key_value_heads == 0` (GQA 合法) | __post_init__ assert |
 
 ## DoD
 - [ ] 测试 4/4 绿
@@ -64,9 +65,11 @@ class ModelConfig:
 
 ## 坑（按概率排序）
 1. **HF config.json 有几十个字段**，不要全收 —— 按白名单只取 11 个；其余字段未来 M 用到再加
-2. **`head_dim` 在某些模型 config.json 不存在** —— 用 `hidden_size // num_attention_heads` 兜底
-3. **`tie_word_embeddings` 在 Qwen3-0.6B 为 true，>0.6B 为 false** —— 不要硬编码 True
-4. **`dataclass(frozen=True)` 配合 `__post_init__` 校验时**，赋值要用 `object.__setattr__(self, 'x', v)`
+2. **`head_dim != hidden_size / num_attention_heads`**（严重坑！）—— Qwen3-0.6B `head_dim=128` 但 `1024/16=64`，**不要写这个 invariant**；GQA/MQA 里 head_dim 是独立参数
+3. **`head_dim` 在某些模型 config.json 不存在** —— 用 `hidden_size // num_attention_heads` 兜底，但**优先**从 JSON 读
+4. **`tie_word_embeddings` 在 Qwen3-0.6B 为 true，>0.6B 为 false** —— 不要硬编码 True
+5. **`dataclass(frozen=True)` 配合 `__post_init__` 校验时**，赋值要用 `object.__setattr__(self, 'x', v)`
+6. **`rope_theta` JSON 里是 int (`1000000`)** —— dataclass 字段用 `float`，反序列化时 cast，避免后续 RoPE 计算 dtype 错位
 
 ## 启动 checklist
 - [ ] `docs/1-plan/M1.md` §2.2 11 字段表已读
