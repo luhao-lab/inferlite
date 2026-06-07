@@ -71,7 +71,135 @@ RMSNorm:    `x / sqrt(mean(x²) + ε) · γ`（1 stat + 1 param）
 
 ### Qwen3 Tech Report
 
-（待补 —— T2/T3 涉及 SwiGLU/RoPE 时再展开）
+> 论文：[Qwen3 Technical Report (2025-05)](https://arxiv.org/abs/2505.09388)
+> 我们做的是 **Qwen3-0.6B (dense, base)**，所以下面只摘和这个尺寸相关的事实。
+
+#### 1. 架构家谱：Llama-style + GQA + Q/K-norm 微调
+
+Qwen3 整体仍是 Llama 同构体（pre-norm + RMSNorm + RoPE + SwiGLU + GQA），相比 Llama-3 关键差别：
+
+| 维度 | Llama-3 | **Qwen3-0.6B** | 备注 |
+| --- | --- | --- | --- |
+| Norm | RMSNorm | **RMSNorm** | 一致 |
+| 位置编码 | RoPE (θ=500K) | **RoPE (θ=1M)** | Qwen3 训练上下文 32K → θ 加大 |
+| 注意力 | GQA | **GQA + Q/K LayerNorm** | Qwen3 在 Q/K 投影后再 norm 一道，稳数值 |
+| FFN | SwiGLU | **SwiGLU** | 一致 |
+| MoE | 无（dense） | 无（0.6B 是 dense） | 只有 30B/235B 是 MoE |
+| Tie embed | 无 | **有（0.6B 特例）** | ≥1.7B 不 tie |
+| Attention bias | False | **False** | Llama 一脉相承 |
+
+**M1·P1 数值对齐时**：Q/K-norm 这条会让我们的 `GQAAttention` 比纯 Llama 多两个 RMSNorm（`q_norm` / `k_norm`），不要漏掉。
+
+#### 2. Forward dataflow（推理 path，单序列）
+
+```
+input_ids  [B, T]                     ← B=batch, T=seq_len
+   │
+   ▼ embed_tokens (V × H)
+hidden_states  [B, T, H=1024]
+   │
+   ▼ × 28 层 DecoderLayer：
+   │     residual = h
+   │     h = input_layernorm(h)              # RMSNorm, [B,T,H]
+   │     h = self_attn(h, position_ids)      # GQA + RoPE + Q/K-norm
+   │     h = h + residual
+   │     residual = h
+   │     h = post_attention_layernorm(h)     # RMSNorm
+   │     h = mlp(h)                          # SwiGLU: down(silu(gate(h)) * up(h))
+   │     h = h + residual
+   │
+   ▼ norm (final RMSNorm)
+hidden_states  [B, T, H]
+   │
+   ▼ lm_head (= embed_tokens.weight^T，因 tie_word_embeddings=True)
+logits  [B, T, V=151936]
+   │
+   ▼ argmax / sampler
+next_token_id
+```
+
+#### 3. Self-Attention 内部（GQA + Q/K-norm + RoPE）
+
+```
+h  [B, T, H=1024]
+ ├──► q_proj (H × n_q·d) → Q  [B, T, n_q=16, d=128]   ← d != H/n_q 见下
+ ├──► k_proj (H × n_kv·d) → K  [B, T, n_kv=8,  d=128]
+ └──► v_proj (H × n_kv·d) → V  [B, T, n_kv=8,  d=128]
+
+Q = q_norm(Q)        # ⚠️ Qwen3 特色：投影后还要 RMSNorm 一次
+K = k_norm(K)
+
+(Q, K) = apply_rope(Q, K, position_ids, base=1e6)
+
+K_full = repeat_kv(K, group=n_q/n_kv=2)   # [B, T, 16, 128]
+V_full = repeat_kv(V, group=2)
+
+attn = softmax(Q @ K_full^T / √d, dim=-1) @ V_full   # [B, T, 16, 128]
+out  = o_proj(attn.flatten(-2))                       # [B, T, H]
+```
+
+**关键形状事实**：
+- `head_dim=128`，但 `H/n_q = 1024/16 = 64` —— **head_dim 是独立超参**（Qwen3 选 128 是为了 RoPE 频谱够大 + 数值稳；不是手滑）
+- `q_proj` 输出维度 = `n_q × d = 2048`，**不是** `H = 1024`；`k_proj/v_proj` 输出 = `n_kv × d = 1024`
+- GQA 比 = `n_q : n_kv = 2 : 1`，每 2 个 Q 头共用 1 组 KV → KV cache 直接砍半
+
+#### 4. ModelConfig 11 字段 × 含义/值/为什么（**T0 直接对照表**）
+
+| # | 字段 | 类型 | Qwen3-0.6B 值 | 含义 / 为什么是这个值 |
+| --- | --- | --- | --- | --- |
+| 1 | `hidden_size` | int | **1024** | residual stream 维度 H；所有 layer 输入输出都是 [B,T,H] |
+| 2 | `num_hidden_layers` | int | **28** | 堆 28 个 DecoderLayer；T6 写 `Qwen3Model` 时 `nn.ModuleList(...)` |
+| 3 | `num_attention_heads` | int | **16** | Query 头数 n_q；softmax 在每个头独立做 |
+| 4 | `num_key_value_heads` | int | **8** | KV 头数 n_kv；GQA 把 n_q 个 Q 分成 n_kv 组共用 KV |
+| 5 | `head_dim` | int | **128** | 每个 head 的维度 d；**独立参数**，≠ H/n_q (=64) |
+| 6 | `intermediate_size` | int | **3072** | SwiGLU 中间层 I；MLP = down(silu(gate(h)) * up(h))，gate/up 都是 H→I |
+| 7 | `vocab_size` | int | **151936** | tokenizer 词表大小；embed/lm_head 行数 |
+| 8 | `max_position_embeddings` | int | **40960** | 训练时见过的最大 ctx；M11 YaRN 之前不要超 |
+| 9 | `rope_theta` | float | **1e6** | RoPE 基频 base；Qwen3 加大到 1M（Llama-3=500K，Llama-2=10K）→ 长 ctx 外推友好 |
+| 10 | `rms_norm_eps` | float | **1e-6** | RMSNorm ε；Qwen 系列统一 1e-6（≠ Llama-1 的 1e-5） |
+| 11 | `tie_word_embeddings` | bool | **True** | 0.6B 特有：lm_head.weight 复用 embed_tokens.weight；省 V·H ≈ 156M 参数 |
+
+**为啥就这 11 个？** 写完 T0-T8 用到的恰好就是这 11 个；Qwen3 完整 config 还有 `sliding_window` / `attention_bias` / `rope_scaling` / `attention_dropout` 等十几个字段，**不在 M1 路径上**所以 T0 不收（M11 YaRN 时回头加 `rope_scaling`；M2 prefix cache 复杂场景时再考虑 `sliding_window`）。
+
+#### 5. 0.6B 参数量校验（写 T7 `load_from_hf` 时核对）
+
+```
+embed:           V × H              = 151936 × 1024 ≈ 156M
+each layer:
+  q_proj:        H × (n_q·d)        = 1024 × 2048   = 2.1M
+  k_proj:        H × (n_kv·d)       = 1024 × 1024   = 1.0M
+  v_proj:        H × (n_kv·d)       = 1024 × 1024   = 1.0M
+  o_proj:        (n_q·d) × H        = 2048 × 1024   = 2.1M
+  gate_proj:     H × I              = 1024 × 3072   = 3.1M
+  up_proj:       H × I              = 1024 × 3072   = 3.1M
+  down_proj:     I × H              = 3072 × 1024   = 3.1M
+  q_norm/k_norm + 2 RMSNorm:                         ≈ 4·d (negligible)
+  → 每层 ≈ 15.5M × 28 层 ≈ 434M
+final norm:                                          negligible
+lm_head:        tied with embed (0)
+total ≈ 156M + 434M ≈ 590M  ✅
+```
+
+报告里 "Qwen3-0.6B" 实际 ~600M 参数（取整命名），对得上。
+
+#### 6. 必读源码（写代码时打开对照）
+
+- `transformers/models/qwen3/modeling_qwen3.py`
+  - `Qwen3RMSNorm` — T1（已对齐）
+  - `Qwen3MLP` — T2 SwiGLU
+  - `Qwen3RotaryEmbedding` + `apply_rotary_pos_emb` — T3
+  - `Qwen3Attention` — T4（注意 `q_norm` / `k_norm`）
+  - `Qwen3DecoderLayer` — T5
+  - `Qwen3Model.forward` — T6 整体 dataflow
+- `transformers/models/qwen3/configuration_qwen3.py::Qwen3Config` — **T0 11 字段名字的真实来源**
+
+#### 7. 外部参考
+
+- 论文：<https://arxiv.org/abs/2505.09388>
+- 模型卡：<https://huggingface.co/Qwen/Qwen3-0.6B>
+- HF 源码：<https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3/modeling_qwen3.py>
+- ModelScope 镜像：<https://www.modelscope.cn/models/Qwen/Qwen3-0.6B>
+
 
 ### SwiGLU (Shazeer 2020)
 
