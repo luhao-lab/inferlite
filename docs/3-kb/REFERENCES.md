@@ -142,8 +142,9 @@
 M1·P1 阶段（数值对齐）:
   ✅ 必看: rasbt/LLMs-from-scratch Qwen3 notebook（写模块前精读对应 cell）
   ✅ 必看: transformers/modeling_qwen3.py（写模块前搜对应类）
+  ✅ T7 必看: vllm/model_executor/models/qwen3.py::load_weights（只看权重加载，不泛读 engine）
   ✅ 论文: Qwen3 报告 §3 / RoFormer §3.4.2 / GQA §2
-  ⏸ 暂不看: nano-vllm engine/, vllm
+  ⏸ 暂不看: nano-vllm engine/, vllm scheduler/paged-attention
 
 M1·P2 阶段（出字闭环）:
   ✅ 看: nano-vllm engine/（理解 step() 三段式）

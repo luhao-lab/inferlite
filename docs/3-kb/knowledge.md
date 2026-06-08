@@ -10,12 +10,12 @@
 
 > 自动维护：每次新增/删除卡片时同步更新本段。最后更新：2026-06-09。
 
-**总览**：4 类共 **22 张** knowledge 卡片 + 4 条 lessons + 3 个 ADR。
+**总览**：4 类共 **23 张** knowledge 卡片 + 4 条 lessons + 3 个 ADR。
 
 | 章节 | 卡片数 | 列表（点击跳转） |
 | --- | --- | --- |
 | **Papers** | 5 | [RMSNorm](#rmsnorm-zhang-sennrich-neurips-2019) · [Qwen3 Tech Report](#qwen3-tech-report) · [SwiGLU](#swiglu-shazeer-2020) · [RoPE](#rope-su-et-al-2021) · [GQA](#gqa-ainslie-et-al-2023) |
-| **Libraries** | 5 | [transformers Qwen3 模块](#transformers-qwen3-ground-truth) · [transformers 5 核心对象](#transformers-hf) · [pytest](#pytest-api) · [modelscope](#modelscope-snapshot_download) · [huggingface_hub 1.x](#huggingface_hub-1x) |
+| **Libraries** | 6 | [transformers Qwen3 模块](#transformers-qwen3-ground-truth) · [vLLM Qwen3 weight loading](#vllm-qwen3-weight-loading) · [transformers 5 核心对象](#transformers-hf) · [pytest](#pytest-api) · [modelscope](#modelscope-snapshot_download) · [huggingface_hub 1.x](#huggingface_hub-1x) |
 | **Concepts** | 7 | [upcast fp32](#upcast-to-fp32) · [数值对齐策略](#numeric-alignment-strategy) · [tie_word_embeddings](#tie_word_embeddings) · [形状速查](#shape-cheatsheet) · [推理上下文](#inference-context) · [Python dataclass](#python-dataclass) · [Factory pattern](#factory-pattern) |
 | **Tools** | 5 | [uv](#uvpython) · [make](#make) · [ruff](#rufflint-format) · [pre-commit](#pre-commitcommit) · [pytest-mark / CI](#pytest-mark-ci-matrix) |
 
@@ -265,6 +265,112 @@ def test_vs_ref():
 **外部参考**：
 - 源码：https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3/modeling_qwen3.py
 - 官方文档：https://huggingface.co/docs/transformers/main/en/model_doc/qwen3
+
+### vLLM — Qwen3 weight loading { #vllm-qwen3-weight-loading }
+
+**一句话**：T7 `WeightMap + load_from_hf` 不应该只看 transformers；vLLM 的 Qwen3 模型是“推理框架如何兼容 HF 权重”的更好参考。
+
+#### 1. 参考文件
+
+固定到当前 `main` commit（2026-06-09 查询）：
+
+- vLLM Qwen3 模型源码：
+  <https://github.com/vllm-project/vllm/blob/3f627ebef757e5d575fc33c64250adbc2f2973b4/vllm/model_executor/models/qwen3.py>
+- raw：
+  <https://raw.githubusercontent.com/vllm-project/vllm/3f627ebef757e5d575fc33c64250adbc2f2973b4/vllm/model_executor/models/qwen3.py>
+
+核心入口：
+
+```python
+class Qwen3ForCausalLM(nn.Module, ...):
+    packed_modules_mapping = {
+        "qkv_proj": ["q_proj", "k_proj", "v_proj"],
+        "gate_up_proj": ["gate_proj", "up_proj"],
+    }
+
+    embedding_modules = {
+        "embed_tokens": "input_embeddings",
+        "lm_head": "output_embeddings",
+    }
+
+    def load_weights(self, weights):
+        loader = AutoWeightsLoader(
+            self,
+            skip_prefixes=(["lm_head."] if self.config.tie_word_embeddings else None),
+        )
+        return loader.load_weights(weights)
+```
+
+#### 2. vLLM 做了什么
+
+| vLLM 设计点 | 含义 | inferlite M1 取舍 |
+| --- | --- | --- |
+| `Qwen3ForCausalLM.load_weights(weights)` | 模型类自己暴露权重加载入口 | T7 可写 `load_from_hf(model, model_dir)`，先函数化，别急着塞进 class |
+| `AutoWeightsLoader` | 根据 module/parameter 名自动匹配外部权重 | M1 写显式 `WeightMap`，可读性优先 |
+| `skip_prefixes=["lm_head."]` when tied | `tie_word_embeddings=True` 时跳过独立 `lm_head.weight` | T7 必须处理：Qwen3-0.6B 不要求独立 lm_head |
+| `packed_modules_mapping` | 工业版把 q/k/v 和 gate/up 合并成 packed projection | M1 不合并，保留 `q_proj/k_proj/v_proj` 和 `gate_proj/up_proj`，T7 只理解它为什么存在 |
+| `embedding_modules` | 标注 input/output embedding 的语义映射 | T7 可用来理解 `embed_tokens` 与 `lm_head` 的关系 |
+| `QKVParallelLinear` / `RowParallelLinear` | tensor parallel + fused linear | M1 禁用，不引入 TP/quant/kernel |
+
+#### 3. T7 应该借鉴的最小思想
+
+不是照搬 vLLM，而是借鉴三条：
+
+1. **权重加载是模型边界的一部分**
+   - checkpoint key 属于外部格式
+   - inferlite module key 属于内部格式
+   - T7 要显式写清这两者如何映射
+
+2. **tied embedding 是加载策略，不只是 forward 策略**
+   - 如果 `tie_word_embeddings=True`，`lm_head.weight` 可以跳过
+   - forward 时用 `F.linear(hidden, embed_tokens.weight)` 或把 `lm_head` 指到 `embed_tokens`
+
+3. **工业框架为了性能会 pack 权重，但教学版先不 pack**
+   - vLLM `qkv_proj` 对应 HF `q_proj/k_proj/v_proj`
+   - vLLM `gate_up_proj` 对应 HF `gate_proj/up_proj`
+   - inferlite M1 保持拆开，T8 logits 对齐更直观
+
+#### 4. T7 推荐实现轮廓
+
+```python
+def iter_safetensors(model_dir: Path) -> Iterator[tuple[str, torch.Tensor]]:
+    # 读 model.safetensors 或 index.json 指向的 shards
+    ...
+
+WEIGHT_MAP = {
+    "model.embed_tokens.weight": "embed_tokens.weight",
+    "model.layers.{i}.self_attn.q_proj.weight": "layers.{i}.attn.q_proj.weight",
+    "model.layers.{i}.self_attn.k_proj.weight": "layers.{i}.attn.k_proj.weight",
+    "model.layers.{i}.self_attn.v_proj.weight": "layers.{i}.attn.v_proj.weight",
+    "model.layers.{i}.self_attn.o_proj.weight": "layers.{i}.attn.o_proj.weight",
+    "model.layers.{i}.self_attn.q_norm.weight": "layers.{i}.attn.q_norm.weight",
+    "model.layers.{i}.self_attn.k_norm.weight": "layers.{i}.attn.k_norm.weight",
+    "model.layers.{i}.mlp.gate_proj.weight": "layers.{i}.mlp.gate_proj.weight",
+    "model.layers.{i}.mlp.up_proj.weight": "layers.{i}.mlp.up_proj.weight",
+    "model.layers.{i}.mlp.down_proj.weight": "layers.{i}.mlp.down_proj.weight",
+    "model.layers.{i}.input_layernorm.weight": "layers.{i}.input_layernorm.weight",
+    "model.layers.{i}.post_attention_layernorm.weight": "layers.{i}.post_attention_layernorm.weight",
+    "model.norm.weight": "norm.weight",
+}
+```
+
+M1 先做：
+
+- 显式映射
+- 打印 missing/unexpected key
+- `tie_word_embeddings=True` 时跳过 `lm_head.weight`
+- 不做 tensor parallel / quant / qkv packing / gate-up packing
+
+#### 5. 双参考体系
+
+| 任务段 | 正确性参考 | 系统/加载参考 |
+| --- | --- | --- |
+| T2-T6 模型 forward | transformers `modeling_qwen3.py` | vLLM 只看结构差异 |
+| T7 权重加载 | HF `state_dict` key | **vLLM `load_weights()`** |
+| T8 logits 对齐 | transformers full model logits | vLLM 不作为数值 reference |
+| T9-T11 出字闭环 | transformers generation 行为 | nano-vllm / vLLM engine |
+
+**本项目应用**：T7 `WeightMap + load_from_hf`。
 
 ### transformers — 五个核心对象（HF 推理最小闭环）
 
