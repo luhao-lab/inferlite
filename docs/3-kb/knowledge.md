@@ -32,7 +32,7 @@
 - **ADR-002** 知识库与代码同仓（R1 重构）
 - **ADR-003** 分组目录 + MkDocs Material 可视化
 
-**任务卡进度**（[详见 PROGRESS](../1-plan/PROGRESS.md)）：M1-T0 ModelConfig ✅ · M1-T1 RMSNorm ✅ · T2-T6 ⬜
+**任务卡进度**（[详见 PROGRESS](../1-plan/PROGRESS.md)）：M1-T0 ModelConfig ✅ · M1-T1 RMSNorm ✅ · M1-T2 SwiGLUMLP ✅ · T3-T6 ⬜
 
 **已知缺口**（开工时回填）：
 
@@ -203,7 +203,88 @@ total ≈ 156M + 434M ≈ 590M  ✅
 
 ### SwiGLU (Shazeer 2020)
 
-（待补 —— 开 T2 时由 `/plan T2` 自动生成）
+> 论文：Noam Shazeer, *GLU Variants Improve Transformer*, arXiv:2002.05202.
+
+**一句话**：SwiGLU 把 Transformer FFN 的“单路激活”换成“双路线性投影相乘”：一条 gate 路过 Swish/SiLU，一条 up 路保留线性信号，再逐元素相乘后 down 回 hidden size。
+
+#### 1. 从 FFN 到 SwiGLU
+
+经典无 bias FFN：
+
+```text
+FFN_ReLU(x) = ReLU(x W1) W2
+```
+
+GLU 族：
+
+```text
+GLU(x)    = sigmoid(x W) ⊙ (x V)
+GEGLU(x)  = GELU(x W)    ⊙ (x V)
+SwiGLU(x) = Swish(x W)   ⊙ (x V)
+```
+
+Transformer FFN 版 SwiGLU：
+
+```text
+FFN_SwiGLU(x) = (Swish(x W_gate) ⊙ (x W_up)) W_down
+```
+
+PyTorch / Qwen3 写法：
+
+```python
+y = down_proj(F.silu(gate_proj(x)) * up_proj(x))
+```
+
+#### 2. 为什么是 3 个矩阵
+
+| 路径 | 形状 | 作用 |
+| --- | --- | --- |
+| `gate_proj` | H → I | 产生门控信号，过 `silu` |
+| `up_proj` | H → I | 产生被门控的内容信号 |
+| `down_proj` | I → H | 回到 residual stream 维度 |
+
+相比普通 FFN 的 2 个矩阵，SwiGLU 多一条 gate 路。论文为了参数量/计算量对齐，会把中间维度降到原 FFN 的约 2/3；Qwen3-0.6B 已经在 config 里给出最终取值 `intermediate_size=3072`，实现时直接用 config，不再自行按比例推导。
+
+#### 3. Qwen3-0.6B 对应参数
+
+```text
+H = hidden_size = 1024
+I = intermediate_size = 3072
+bias = False
+hidden_act = "silu"
+```
+
+对应权重形状：
+
+```text
+gate_proj.weight: [I, H] = [3072, 1024]
+up_proj.weight:   [I, H] = [3072, 1024]
+down_proj.weight: [H, I] = [1024, 3072]
+```
+
+#### 4. transformers ground truth
+
+`transformers.models.qwen3.modeling_qwen3.Qwen3MLP` 核心逻辑：
+
+```python
+self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+self.act_fn = ACT2FN[config.hidden_act]
+
+def forward(self, x):
+    return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+```
+
+#### 5. T2 易错点
+
+1. `nn.Linear` 默认 `bias=True`，必须显式 `bias=False`。
+2. 只对 gate 路激活：`F.silu(gate) * up`，不是 `F.silu(gate * up)`。
+3. `gate_proj` 与 `up_proj` 数学上形式近似，但权重加载 key 不同，不能交换命名。
+4. T2 不需要 upcast；主要是 Linear + element-wise + SiLU，先按 transformers dtype 行为对齐。
+5. L0 测试必须同步权重：`mine.load_state_dict(ref.state_dict())` 后再比输出。
+
+**本项目应用**：M1-T2 `inferlite/model/layers.py::SwiGLUMLP`。
 
 ### RoPE (Su et al. 2021)
 

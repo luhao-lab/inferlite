@@ -12,6 +12,7 @@ M1 阶段手撕的"叶子模块"：纯计算、无状态、无外部依赖。
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class RMSNorm(nn.Module):
@@ -72,3 +73,52 @@ class RMSNorm(nn.Module):
         # 顺序很关键：先乘 weight（fp32 × fp32，精度最好），再 .to(input_dtype)
         # 反过来"先 cast weight 再乘" 会损失精度
         return (self.weight * x).to(input_dtype)
+
+
+class SwiGLUMLP(nn.Module):
+    """Qwen3 的 SwiGLU MLP 子层。
+
+    结构：
+        x ── gate_proj ── SiLU ─┐
+                                ├─ element-wise multiply ─ down_proj ─ y
+        x ── up_proj   ─────────┘
+
+    公式：
+        y = down_proj(silu(gate_proj(x)) * up_proj(x))
+
+    Args:
+        hidden_size: residual stream 维度 H，Qwen3-0.6B 为 1024。
+        intermediate_size: MLP 中间维度 I，Qwen3-0.6B 为 3072。
+
+    Shape:
+        Input:  [..., hidden_size]       常见 [B, T, H]
+        Output: [..., hidden_size]       MLP 不改变 residual stream 维度
+    """
+
+    def __init__(self, hidden_size: int, intermediate_size: int) -> None:
+        super().__init__()
+        # gate 路：产生“软门控”信号，后续只对这一路做 SiLU。
+        # 形状：[..., H] -> [..., I]
+        # Qwen3 的 MLP Linear 都是 bias=False，必须显式写出来，不能用 nn.Linear 默认值。
+        self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
+        # up 路：产生被 gate 调制的“内容”信号。
+        # 形状同 gate 路：[..., H] -> [..., I]
+        # 注意不要和 gate_proj 交换命名；T7 加载 HF 权重时 key 会严格区分 gate/up。
+        self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
+        # down 路：把 SwiGLU 中间维度 I 压回 residual stream 维度 H。
+        # 形状：[..., I] -> [..., H]
+        self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Step 1: 两条独立线性投影。
+        # gate/up 都是 [..., I]，但语义不同：gate 控制开关，up 提供内容。
+        gate = self.gate_proj(x)
+        up = self.up_proj(x)
+
+        # Step 2: 只对 gate 路做 SiLU，再逐元素乘 up 路。
+        # 正确：silu(gate) * up
+        # 错误：silu(gate * up) —— 这会改变 SwiGLU 的定义，无法对齐 transformers.Qwen3MLP。
+        hidden = F.silu(gate) * up
+
+        # Step 3: 回到 hidden_size，供 residual add 使用。
+        return self.down_proj(hidden)

@@ -15,7 +15,7 @@
 
 | M | 状态 | Tag | 完成日期 | 文章 | 备注 |
 | --- | --- | --- | --- | --- | --- |
-| **M1** Qwen3 单序列推理 | 🟡 | — | — | — | P1 数值对齐（T0/T1 ✅, T2-T8 ⬜）+ P2 出字（T9-T11 ⬜） |
+| **M1** Qwen3 单序列推理 | 🟡 | — | — | — | P1 数值对齐（T0/T1/T2 ✅, T3-T8 ⬜）+ P2 出字（T9-T11 ⬜） |
 | **M2** KV Cache | ⬜ | — | — | — | `ContiguousKVCache` |
 | **M3** Continuous Batching | ⬜ | — | — | — | `FCFSScheduler` + 三队列 |
 | **M4** PagedAttention (PyTorch) | ⬜ | — | — | — | `PagedKVCache`，伪版 |
@@ -47,6 +47,11 @@
   - `tests/unit/test_config.py`：factory / JSON round-trip / head_dim fallback / frozen / GQA validation 共 5 测试
   - 验证：`uv run pytest tests/unit/test_config.py -q` 5/5 绿；`make test` 17/17 绿；`make doctor` 9/9 绿
   - 复盘：补 Qwen3-0.6B 架构精读、Python dataclass / Factory pattern 知识卡；新增 L4 head_dim 独立超参教训
+- **T2 SwiGLUMLP 完成**
+  - `inferlite/model/layers.py::SwiGLUMLP`：`gate_proj / up_proj / down_proj` 三个 `bias=False` Linear
+  - forward 与 `transformers.Qwen3MLP` 对齐：`down_proj(F.silu(gate_proj(x)) * up_proj(x))`
+  - `tests/unit/test_mlp.py`：dtype 对齐 / bias / shape invariant / 3 Linear / 0.6B 权重形状，共 10 个 case
+  - 验证：`uv run pytest tests/unit/test_mlp.py -q` 10/10 绿
 
 ## 日志
 

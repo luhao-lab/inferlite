@@ -3,7 +3,7 @@
 ## 元信息
 - **任务 ID**: T2
 - **里程碑**: M1·P1
-- **状态**: ⬜ pending
+- **状态**: ✅ done
 - **前置**: T0（或直接用 hidden_size/intermediate_size 硬参，T6 时回填）
 - **估时**: 1h
 
@@ -15,6 +15,9 @@
 - `tests/unit/test_mlp.py`
 
 ## 背景
+
+SwiGLU 来自 Shazeer 2020《GLU Variants Improve Transformer》。一句话：普通 FFN 是一路 `activation(up(x))`，SwiGLU 是两路投影相乘：`silu(gate(x)) * up(x)`，再 `down` 回 hidden size。
+
 经典 MLP: `y = W2 · relu(W1 · x)`（2 个权重 + ReLU）
 SwiGLU: `y = W_down · (silu(W_gate · x) ⊙ W_up · x)`（3 个权重 + 门控）
 
@@ -55,9 +58,9 @@ class SwiGLUMLP(nn.Module):
 测试样板见 `docs/1-plan/M1.md` §6.2。
 
 ## DoD
-- [ ] 测试 6/6 绿
-- [ ] commit `feat(model): SwiGLUMLP aligned with Qwen3MLP (T2 done)`
-- [ ] PROGRESS.md / docs/2-tasks/README.md 更新
+- [x] 测试 10/10 绿：`uv run pytest tests/unit/test_mlp.py -q`
+- [x] commit `feat(model): add SwiGLUMLP aligned with Qwen3MLP`
+- [x] PROGRESS.md / docs/2-tasks/README.md 更新
 
 ## 坑（按概率排序）
 1. `nn.Linear(..., bias=True)` 是默认 → 必须显式 `bias=False`
@@ -71,6 +74,20 @@ class SwiGLUMLP(nn.Module):
 - [ ] `docs/1-plan/M1.md` §6.2 SwiGLU 章节已读
 - [ ] transformers.models.qwen3.modeling_qwen3.Qwen3MLP 源码已扫一眼
 
+## 完成总结（2026-06-09）
+
+- 实现 `inferlite/model/layers.py::SwiGLUMLP`：`gate_proj / up_proj / down_proj` 三个 `bias=False` Linear。
+- forward 公式与 transformers 对齐：`down_proj(F.silu(gate_proj(x)) * up_proj(x))`。
+- 新增 `tests/unit/test_mlp.py`：
+  - fp32/fp16/bf16 vs `transformers.Qwen3MLP` 数值对齐
+  - bias 全为 None
+  - shape invariant 覆盖 1D/2D/3D/4D
+  - 恰好 3 个 `nn.Linear`
+  - Qwen3-0.6B 权重形状检查
+- 验证：`uv run pytest tests/unit/test_mlp.py -q` → 10 passed。
+
 ## 链接
+- 知识卡: `docs/3-kb/knowledge.md` → `Papers#SwiGLU`
 - 详细模板: `docs/1-plan/M1.md` §6.2
 - ground truth: `transformers.models.qwen3.modeling_qwen3.Qwen3MLP`
+- 论文: https://arxiv.org/abs/2002.05202
