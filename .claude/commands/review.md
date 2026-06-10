@@ -19,6 +19,7 @@ argument-hint: <task-id>，例如 T2
 
 ## 3. 文档同步
 - `docs/1-plan/PROGRESS.md` 是否更新状态列
+- `README.md` 当前进度是否同步（首页可见进度不要漏）
 - `docs/1-plan/M1.md` §4 总表是否更新 ✅
 - commit message 是否符合 `CLAUDE.md` 规范
 

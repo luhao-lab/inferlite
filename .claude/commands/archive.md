@@ -57,6 +57,7 @@ argument-hint: "task <id>  或  milestone M<n>"
 
 ### A.5 更新状态文件
 - `docs/1-plan/PROGRESS.md` 勾选本任务
+- `README.md` 当前进度同步（若本任务改变首页可见进度）
 - `docs/M<n>.md` §6 任务清单状态 ✅
 - `docs/2-tasks/README.md` 表格状态
 
