@@ -12,7 +12,7 @@
 | T0 | [M1-T0-ModelConfig.md](./M1-T0-ModelConfig.md) | ✅ |
 | T1 | [M1-T1-RMSNorm.md](./M1-T1-RMSNorm.md) | ✅ |
 | T2 | [M1-T2-SwiGLU.md](./M1-T2-SwiGLU.md) | ✅ |
-| T3 | — 开工时再创建 | ⬜ |
+| T3 | [M1-T3-RoPE.md](./M1-T3-RoPE.md) | 🟡 |
 | T4 | — 开工时再创建 | ⬜ |
 | T5 | — 开工时再创建 | ⬜ |
 | T6 | — 开工时再创建 | ⬜ |

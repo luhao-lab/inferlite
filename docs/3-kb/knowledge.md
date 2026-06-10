@@ -288,7 +288,57 @@ def forward(self, x):
 
 ### RoPE (Su et al. 2021)
 
-（待补 —— 开 T3 时生成）
+> 论文：Jianlin Su et al., *RoFormer: Enhanced Transformer with Rotary Position Embedding*, arXiv:2104.09864.
+
+**一句话**：RoPE 不把位置向量加到 hidden state 上，而是在 attention 里对 `q/k` 做按位置变化的二维旋转；这样点积天然只依赖相对位置差。
+
+#### 1. T3 实现边界
+
+本项目 M1-T3 只实现 Qwen3 默认 RoPE：
+
+```text
+head_dim = 128
+rope_theta = 1_000_000
+rope_type = "default"
+```
+
+不实现 dynamic/yarn/longrope 等扩展。
+
+#### 2. 核心公式
+
+```text
+inv_freq[i] = 1 / rope_theta ** (i / head_dim), i = 0, 2, 4, ...
+freqs = position_ids × inv_freq
+emb = concat(freqs, freqs)
+cos = cos(emb)
+sin = sin(emb)
+```
+
+旋转：
+
+```python
+q_rot = q * cos + rotate_half(q) * sin
+k_rot = k * cos + rotate_half(k) * sin
+```
+
+其中 Qwen3 的 `rotate_half` 是前半/后半切分：
+
+```python
+x1 = x[..., : x.shape[-1] // 2]
+x2 = x[..., x.shape[-1] // 2 :]
+return torch.cat((-x2, x1), dim=-1)
+```
+
+#### 3. T3 易错点
+
+1. `head_dim=128` 是独立超参，不是 `hidden_size / num_attention_heads`。
+2. Qwen3/transformers 的 `rotate_half` 不是 even/odd 交错切分。
+3. RoPE 只旋转 `q/k`，不旋转 `v`。
+4. 对 `[B, heads, T, head_dim]` 的 q/k，`cos/sin` 从 `[B, T, head_dim]` 需要 `unsqueeze(1)`。
+5. 生成 `cos/sin` 时用 fp32 算三角函数，最后 cast 回输入 dtype。
+
+**本项目应用**：M1-T3 `inferlite/model/layers.py::RotaryEmbedding`、`rotate_half`、`apply_rotary_pos_emb`。
+
 
 ### GQA (Ainslie et al. 2023)
 
@@ -344,7 +394,7 @@ def test_vs_ref():
 - tie_word_embeddings=True, attention_bias=False
 
 **外部参考**：
-- 源码：https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3/modeling_qwen3.py
+- 固定源码：https://github.com/huggingface/transformers/blob/0dad7b822255a0ae261ec45ae937371e859ffd1a/src/transformers/models/qwen3/modeling_qwen3.py
 - 官方文档：https://huggingface.co/docs/transformers/main/en/model_doc/qwen3
 
 ### vLLM — Qwen3 weight loading { #vllm-qwen3-weight-loading }
@@ -452,6 +502,20 @@ M1 先做：
 | T9-T11 出字闭环 | transformers generation 行为 | nano-vllm / vLLM engine |
 
 **本项目应用**：T7 `WeightMap + load_from_hf`。
+
+### Reference code 分层纪律
+
+| 参考项目 | 当前定位 | inferlite 使用阶段 | 读取边界 |
+| --- | --- | --- | --- |
+| `huggingface/transformers` | 数学真值 / L1 ground truth | T1-T8 | 只看 `modeling_qwen3.py` 对应类，测试以它为准 |
+| `vllm-project/vllm` | 推理工程 / 权重加载 / engine 组织 | T4/T7/T9-T11/M2+ | 只看 `qwen3.py::Qwen3Attention/load_weights` 和 engine/scheduler 指定入口 |
+| `QwenLM/Qwen3` | 官方使用说明 | 全阶段按需 | 查 tokenizer/chat template/thinking/deployment，不当算子源码 |
+| `ggml-org/llama.cpp` | 本地推理 / GGUF / 量化 / Metal | M5+ | M1 不读，避免 C++/GGML graph 干扰 PyTorch 对齐 |
+| `sgl-project/sglang` | serving runtime / prefix cache / speculative decoding | M5+ | 出字闭环后再看 runtime，不参与 T1-T8 数值对齐 |
+| `huggingface/text-generation-inference` | 生产 serving/router/batching | M5+ | 看服务架构，不看 Qwen3 算子 |
+| `NVIDIA/TensorRT-LLM` | GPU 高性能后端 / fused op | M8+ | 只在 kernel/benchmark 阶段看 |
+
+一句话：**Transformers 定义“算得对不对”，vLLM 定义“推理系统怎么组织”，QwenLM 定义“官方怎么用”，其他项目延后到 serving/后端阶段。**
 
 ### transformers — 五个核心对象（HF 推理最小闭环）
 

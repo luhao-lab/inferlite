@@ -33,6 +33,7 @@
 ### 3. huggingface/transformers（仅 Qwen3 部分）
 
 - **GitHub**: https://github.com/huggingface/transformers
+- **固定参考**: https://github.com/huggingface/transformers/blob/0dad7b822255a0ae261ec45ae937371e859ffd1a/src/transformers/models/qwen3/modeling_qwen3.py
 - **文件**: `src/transformers/models/qwen3/modeling_qwen3.py`（~600 行）
 - **对 inferlite 的价值**: **L1 数值对齐的唯一 ground truth**
 - **怎么读**: 不读全文，写每个模块时打开搜对应类
@@ -41,6 +42,7 @@
   - `Qwen3RotaryEmbedding` + `apply_rotary_pos_emb` → 写 T3 RoPE
   - `Qwen3Attention` → 写 T4 GQA
   - `Qwen3DecoderLayer`、`Qwen3Model` → 写 T5/T6
+- **定位**: 数学真值，不负责推理系统架构。
 
 ---
 
@@ -49,14 +51,17 @@
 ### 4. vllm-project/vllm
 
 - **GitHub**: https://github.com/vllm-project/vllm
+- **Qwen3 文件**: https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/models/qwen3.py
 - **体量**: 生产级 ~10 万行 Python+CUDA
-- **对 inferlite 的价值**: **架构师视角的"成品答案"**。三段式 EngineCore、PagedAttention、Continuous Batching 工业实现
+- **对 inferlite 的价值**: **架构师视角的"成品答案"**。三段式 EngineCore、PagedAttention、Continuous Batching、Qwen3 权重加载的工业实现
 - **危险**: 直接读会被淹死
-- **怎么读**: M1/M2 阶段只挑 3 个文件读
+- **怎么读**: M1/M2 阶段只挑 4 个入口读
+  - `vllm/model_executor/models/qwen3.py::Qwen3Attention` — 看 QK-norm、RoPE、GQA 在推理框架里的组织（T4 辅助参考）
+  - `vllm/model_executor/models/qwen3.py::Qwen3ForCausalLM.load_weights` — 看 tied embedding / packed mapping（T7 必看）
   - `vllm/v1/engine/core.py::step()` — 看三段式不变量（M1·P2 借鉴）
-  - `vllm/model_executor/models/registry.py` — 看 Registry 写法（M6 MoE 时用）
   - `vllm/v1/core/sched/scheduler.py` FCFS 部分 — 看 M3 Continuous Batching
 - **暂不看**: TP/PP/spec decoding/CUDA kernel（M9+ 才回来）
+- **定位**: 推理工程参考，不作为数值 reference。
 
 ### 5. microsoft/MinivLLM（本地已 clone）
 
@@ -97,20 +102,49 @@
 - **价值**: FlashAttention v1/v2/v3 论文 + 实现
 - **学习**: 看 README + Tri Dao 的 4 篇博客足够
 
-### 10. NVIDIA/TensorRT-LLM
+### 10. QwenLM/Qwen3
+
+- **GitHub**: https://github.com/QwenLM/Qwen3
+- **阶段**: 全阶段按需查
+- **价值**: 官方使用说明、deployment 推荐、thinking/no-thinking、chat template 与 tokenizer 行为说明
+- **定位**: 官方产品/使用参考；不是 M1 数值对齐源码主参考。
+
+### 11. ggml-org/llama.cpp
+
+- **GitHub**: https://github.com/ggml-org/llama.cpp
+- **阶段**: M5+ 本地推理/量化/Metal/CPU 路线
+- **价值**: GGUF 权重格式、量化、本地 CPU/Metal 推理、非 Python 后端组织方式
+- **定位**: 后端与量化参考；M1 不深读，避免 C++/GGML graph 干扰 PyTorch 数值对齐。
+
+### 12. sgl-project/sglang
+
+- **GitHub**: https://github.com/sgl-project/sglang
+- **阶段**: M5+ serving / prefix cache / runtime
+- **价值**: 高吞吐 serving、prefix cache、speculative decoding、reasoning parser 的系统参考
+- **定位**: 后续 serving/runtime 参考；M1 不读。
+
+### 13. huggingface/text-generation-inference
+
+- **GitHub**: https://github.com/huggingface/text-generation-inference
+- **阶段**: M5+ serving
+- **价值**: HF 生产级 router/server/batching 设计
+- **定位**: serving 架构参考；不作为 Qwen3 算子 ground truth。
+
+### 14. NVIDIA/TensorRT-LLM
 
 - **GitHub**: https://github.com/NVIDIA/TensorRT-LLM
-- **阶段**: 架构参考，不读源码
-- **价值**: 生产级 C++ 推理栈，PluginRegistry 设计
+- **阶段**: M8+ kernel / 高性能 GPU 推理
+- **价值**: NVIDIA GPU 高性能实现、fused op、engine build、plugin 思路
+- **定位**: 高性能后端参考；M1 不读源码。
 
-### 11. mlc-ai/mlc-llm
+### 15. mlc-ai/mlc-llm
 
 - **GitHub**: https://github.com/mlc-ai/mlc-llm
 - **阶段**: 架构对照
 - **价值**: TVM + Apache Relax "编译派"代表，与 PyTorch eager 派对照
 - **学习**: 看 README 即可
 
-### 12. SafeAILab/EAGLE
+### 16. SafeAILab/EAGLE
 
 - **GitHub**: https://github.com/SafeAILab/EAGLE
 - **阶段**: M10 EAGLE 投机解码
@@ -141,10 +175,12 @@
 ```
 M1·P1 阶段（数值对齐）:
   ✅ 必看: rasbt/LLMs-from-scratch Qwen3 notebook（写模块前精读对应 cell）
-  ✅ 必看: transformers/modeling_qwen3.py（写模块前搜对应类）
+  ✅ 必看: transformers/modeling_qwen3.py（数学真值；写模块前搜对应类）
+  ✅ T4 辅助: vllm/model_executor/models/qwen3.py::Qwen3Attention（只看工程组织差异）
   ✅ T7 必看: vllm/model_executor/models/qwen3.py::load_weights（只看权重加载，不泛读 engine）
+  ✅ 官方说明: QwenLM/Qwen3（只查 tokenizer/chat template/thinking/deployment 说明）
   ✅ 论文: Qwen3 报告 §3 / RoFormer §3.4.2 / GQA §2
-  ⏸ 暂不看: nano-vllm engine/, vllm scheduler/paged-attention
+  ⏸ 暂不看: llama.cpp / SGLang / TGI / TensorRT-LLM / vllm scheduler/paged-attention
 
 M1·P2 阶段（出字闭环）:
   ✅ 看: nano-vllm engine/（理解 step() 三段式）
@@ -168,6 +204,9 @@ M5+ 阶段:
   ✅ Lilian Weng 综述
   ✅ EAGLE 论文（M10）
   ✅ flashinfer（M8 kernel）
+  ✅ llama.cpp（GGUF/量化/本地 Metal/CPU）
+  ✅ SGLang / TGI（serving / prefix cache / router / batching）
+  ✅ TensorRT-LLM（NVIDIA 高性能后端）
 ```
 
 ---
