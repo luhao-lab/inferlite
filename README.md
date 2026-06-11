@@ -76,7 +76,9 @@ flowchart LR
   - ✅ T1 RMSNorm（12/12 单测）
   - ✅ T2 SwiGLU（10/10 单测）
   - ✅ T3 RoPE（12/12 单测）
-  - ⬜ T4 Attention · T5 Block · T6 LM Head
+  - ✅ T4 Attention（7/7 单测）
+  - 🟡 T5 Block
+  - ⬜ T6 LM Head
 - ⬜ M2 KV Cache · M3 Continuous Batching · M4 PagedAttention · M5 API+SSE
 - ⬜ M6+ MoE / Spec Decoding / Triton / VLM …
 
