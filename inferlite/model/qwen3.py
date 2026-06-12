@@ -130,3 +130,94 @@ class DecoderLayer(nn.Module):
         # 第二次 residual add：把 MLP 增量加回主干。
         hidden_states = residual + hidden_states
         return hidden_states
+
+
+class Qwen3Model(nn.Module):
+    """Qwen3 backbone：embedding + N 个 DecoderLayer + final RMSNorm。
+
+    从接口语义上看，它对应 transformers 里的 `Qwen3Model`，也就是“裸模型主干”：
+
+        input_ids -> token embeddings -> decoder layers -> final norm -> last_hidden_state
+
+    注意它不是 `Qwen3ForCausalLM`：
+    - 不包含 `lm_head`
+    - 不输出 vocab logits
+    - 不计算 loss
+    - 不做采样 / 生成循环
+
+    T6 只返回 last_hidden_state；T7 负责真实权重加载，T8 才会接 lm_head 做 logits 对齐。
+    """
+
+    def __init__(self, config: ModelConfig) -> None:
+        super().__init__()
+        # 保存完整 config，后续 T7/T8 可能需要读取层数、词表大小、tie_word_embeddings 等信息。
+        self.config: ModelConfig = config
+        # Qwen3Config 的 pad_token_id 在某些场景可能为 None；T6 暂不处理 padding 语义。
+        # 这里保留 padding_idx 字段主要是为了结构上贴近 transformers.Qwen3Model。
+        self.padding_idx: int = 0
+        self.vocab_size: int = config.vocab_size
+
+        # token embedding：把离散 token id 映射成 residual stream 向量。
+        # input_ids: [B, T] -> hidden_states: [B, T, H]
+        # 这里还没有 position embedding，因为 Qwen3 使用 RoPE；位置信息会在 attention 的 q/k 上注入。
+        self.embed_tokens: nn.Embedding = nn.Embedding(
+            config.vocab_size,
+            config.hidden_size,
+            self.padding_idx,
+        )
+
+        # decoder layer 堆叠：每层都是 T5 实现的 DecoderLayer。
+        # ModuleList 会把子模块注册进 state_dict，T7 加载权重时会形成类似：
+        #   layers.0.self_attn.q_proj.weight
+        #   layers.1.mlp.gate_proj.weight
+        # 的层级路径。
+        self.layers: nn.ModuleList = nn.ModuleList(
+            [DecoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
+
+        # final norm：所有 decoder layers 之后的最后一次 RMSNorm。
+        # 它仍然作用在 hidden_size 维上，输出 last_hidden_state，供后续 lm_head 计算 logits。
+        self.norm: RMSNorm = RMSNorm(config.hidden_size, config.rms_norm_eps)
+
+    @override
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        position_ids: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """执行 Qwen3 主干前向，返回最后一层 hidden states。
+
+        Args:
+            input_ids: [B, T]
+                token ids，来自 tokenizer encode 后的整数序列。
+            position_ids: [B, T]。如果不传，则按 0..T-1 自动生成。
+                T6 只处理无 KV cache 的 full forward，因此每个 batch 都从 0 开始。
+
+        Returns:
+            last_hidden_state: [B, T, hidden_size]
+        """
+        batch_size, seq_len = input_ids.shape
+        if position_ids is None:
+            # 默认 position ids 是每个序列从 0 到 T-1。
+            # arange 必须放在 input_ids.device 上，避免 CPU/MPS/CUDA 混用。
+            # expand 到 [B, T] 后，每个 batch 共享同一套位置编号。
+            position_ids = (
+                torch.arange(seq_len, device=input_ids.device).unsqueeze(0).expand(batch_size, -1)
+            )
+
+        # Step 1: token id -> token embedding。
+        # hidden_states 是后续所有 decoder layers 传递的 residual stream。
+        hidden_states = self.embed_tokens(input_ids)
+
+        # Step 2: 逐层通过 decoder blocks。
+        # 每层都接收同一份 position_ids，用于内部 attention 的 RoPE。
+        # transformers 当前实现会在 model 层预先算 position_embeddings 再传给每层；
+        # inferlite 当前实现让每层 attention 自己根据 position_ids 计算 cos/sin。
+        # 两者接口不同，但数值目标等价。
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, position_ids)
+
+        # Step 3: final RMSNorm。
+        # 这是 Qwen3Model 输出前的最后归一化；lm_head/logits 会在后续 T8 接在它后面。
+        hidden_states = self.norm(hidden_states)
+        return hidden_states
