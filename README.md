@@ -79,7 +79,8 @@ flowchart LR
   - ✅ T4 Attention（7/7 单测）
   - ✅ T5 Block（5/5 单测）
   - ✅ T6 Qwen3Model（6/6 单测）
-  - 🟡 T7 WeightMap + HF 加载
+  - ✅ T7 WeightMap + HF 加载（7/7 单测）
+  - 🟡 T8 L1 logits 对齐
 - ⬜ M2 KV Cache · M3 Continuous Batching · M4 PagedAttention · M5 API+SSE
 - ⬜ M6+ MoE / Spec Decoding / Triton / VLM …
 

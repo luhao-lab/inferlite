@@ -16,8 +16,8 @@
 | T4 | [M1-T4-GQA-Attention.md](./M1-T4-GQA-Attention.md) | ✅ |
 | T5 | [M1-T5-DecoderLayer.md](./M1-T5-DecoderLayer.md) | ✅ |
 | T6 | [M1-T6-Qwen3Model.md](./M1-T6-Qwen3Model.md) | ✅ |
-| T7 | [M1-T7-WeightMap-load-from-hf.md](./M1-T7-WeightMap-load-from-hf.md) | 🟡 |
-| T8 | — 开工时再创建 | ⬜ |
+| T7 | [M1-T7-WeightMap-load-from-hf.md](./M1-T7-WeightMap-load-from-hf.md) | ✅ |
+| T8 | [M1-T8-L1-logits-alignment.md](./M1-T8-L1-logits-alignment.md) | 🟡 |
 
 ## M1 Phase 2（出字）闭环
 
