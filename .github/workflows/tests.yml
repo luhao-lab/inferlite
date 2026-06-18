@@ -37,6 +37,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      # 跑测试时跳过标了 slow 的（CI 上线后期我们再加 nightly 跑 slow）
+      # 跑测试时跳过标了 slow 或 local_model 的
+      # - slow: 耗时长的测试，后期可加 nightly 单独跑
+      # - local_model: 需要本地下载大模型权重，CI 无法提供
       - name: Run pytest
-        run: uv run pytest -v -m "not slow"
+        run: uv run pytest -v -m "not slow and not local_model"

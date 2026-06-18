@@ -1391,7 +1391,61 @@ test:
 
 ### pytest-mark / CI matrix
 
-CI 跑 `-m "not slow"` 跳过慢测试。matrix: ubuntu + macos, python 3.12。
+CI 跑 `-m "not slow and not local_model"` 跳过慢测试和需要本地模型的测试。matrix: ubuntu + macos, python 3.12。
+
+### local_model marker（T12 引入）
+
+`@pytest.mark.local_model` 用于需要本地下载大模型权重的集成测试：
+- CI 通过 `-m "not local_model"` 跳过（不报 skip，是 deselect，更干净）
+- 本地开发：`pytest -m local_model -v -s` 手动跑
+- 两个 ModelScope 缓存路径都可能存在（用 `pathlib.Path.exists()` 判断）：
+  ```
+  ~/.cache/modelscope/hub/models/Qwen/Qwen3-0.6B
+  ~/.cache/modelscope/hub/models/Qwen/Qwen3-0___6B
+  ```
+
+### chat template 对推理质量的影响（T11/T12 经验）
+
+Qwen3 在 `<|im_start|>...<|im_end|>` 格式下训练。裸 prompt 直接扔给模型会导致：
+1. 输出不稳定、重复
+2. thinking 模式下产生大量 `<think>` token
+
+正确姿势：
+```python
+messages = [{"role": "user", "content": "What is 1+1?"}]
+prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+```
+
+`add_generation_prompt=True` 会在末尾加 `<|im_start|>assistant\n`，提示模型该输出回答了。
+
+**thinking 模式**：Qwen3 默认开启 thinking（`<think>...</think>` 开头），用 `/no_think` 可关闭：
+```python
+messages = [{"role": "user", "content": "What is 1+1? /no_think"}]
+```
+但两侧（inferlite 和 transformers）行为必须一致，token 才能对齐。
+
+### greedy generate 对齐的前提条件（T12 经验）
+
+inferlite 和 transformers greedy generate 输出完全一致需要：
+1. 相同权重（同一个 safetensors 文件）
+2. 相同 dtype（都用 fp32，避免 bf16 精度差异）
+3. 相同 input_ids（用相同 tokenizer + 相同 chat template）
+4. `do_sample=False` + `temperature=1.0` + `top_p=1.0`（覆盖 generation_config.json 的默认值）
+5. `use_cache=False`（inferlite 没有 KV cache，关掉 HF KV cache 保持等价）
+
+### transformers generation_config.json 陷阱
+
+每个 HF 模型目录里可能有 `generation_config.json`，包含 `do_sample`、`temperature`、`top_p` 等。
+`transformers.generate()` 默认读取它，可能把 `do_sample` 改成 `True` 导致非确定性输出。
+**必须显式传参覆盖**：
+```python
+model.generate(
+    input_ids,
+    do_sample=False,
+    temperature=1.0,
+    top_p=1.0,
+)
+```
 
 ---
 

@@ -51,4 +51,5 @@ ignore = ["E501"]
 testpaths = ["tests"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "local_model: tests that require a locally downloaded model (skipped in CI by default)",
 ]
