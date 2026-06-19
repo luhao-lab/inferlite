@@ -26,9 +26,10 @@ uv run pytest tests/unit/ -q
 # 用真实 Qwen3-0.6B 生成
 # 模型下载：ModelScope（国内推荐）https://modelscope.cn/models/Qwen/Qwen3-0.6B
 #           HuggingFace https://huggingface.co/Qwen/Qwen3-0.6B
-# ModelScope 默认缓存位置：~/.cache/modelscope/hub/Qwen/Qwen3-0.6B
+# ModelScope 默认缓存位置：~/.cache/modelscope/hub/models/Qwen/Qwen3-0___6B
+#   注意：模型名中的 "." 被 ModelScope 转义为 "___"，且多一层 models/ 子目录
 uv run inferlite-generate \
-  --model-dir /path/to/Qwen3-0.6B \
+  --model-dir ~/.cache/modelscope/hub/models/Qwen/Qwen3-0___6B \
   --prompt "请解释 Transformer 中 Attention 的作用" \
   --max-new-tokens 100 \
   --chat-template
