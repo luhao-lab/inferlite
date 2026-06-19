@@ -34,6 +34,7 @@
   - `docs/2-tasks/M<n>-T*.md` 任务卡（一卡一文件）
   - `docs/3-kb/knowledge.md` 知识点（H2: Papers/Libraries/Concepts/Tools）
   - `docs/3-kb/lessons.md` 教训（L1, L2, ...）
+  - `docs/3-kb/blueprints.md` 模块契约（每个核心模块的接口/位置/踩坑/跨M依赖）← 新增
   - `docs/3-kb/decisions.md` ADR
   - `docs/3-kb/REFERENCES.md` 参考资料
   - `docs/4-setup.md` 环境 + 仓库结构
@@ -46,7 +47,7 @@
 - `/plan <scope>` — 规划（M / T / 调整），含前置调研，自动补 knowledge.md
 - `/work <task-id>` — 开任务卡，含前置 knowledge gap 检查，输出作战简报
 - `/review <task-id>` — review 已完成的任务卡
-- `/archive task <id>` / `/archive milestone M<n>` — 归档（含 lessons + knowledge + summary）
+- `/archive task <id>` / `/archive milestone M<n>` — 归档（含 lessons + knowledge + blueprints + summary）
 - `/preflight` — 环境健康检查
 
 ## 测试纪律

@@ -26,6 +26,10 @@
 - **L3** 地基 vs 算法是两个频道，不要混着切（→ 协作节奏）
 - **L4** GQA 的 `head_dim` 是独立超参，不能从 KV 头数推导（→ Papers#Qwen3, Concepts#shape）
 
+**模块契约**（[详见 blueprints.md](./blueprints.md)）：
+
+每个核心模块（ModelConfig / RMSNorm / GQAAttention / EngineCore 等）的接口契约、推理链路位置、踩坑记录、跨 M 依赖。越写越复杂时先查这里。
+
 **已落地的 ADR**（[详见 decisions.md](./decisions.md)）：
 
 - **ADR-001** spec-driven 工作流 + 双文件知识库
