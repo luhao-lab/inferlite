@@ -12,7 +12,7 @@ hide:
 
 <div class="badges" markdown>
 
-![CI](https://img.shields.io/github/actions/workflow/status/luhao2013/inferlite/tests.yml?branch=main&label=CI&style=flat-square&color=26c6da)
+![CI](https://img.shields.io/github/actions/workflow/status/luhao-lab/inferlite/tests.yml?branch=main&label=CI&style=flat-square&color=26c6da)
 ![Tests](https://img.shields.io/badge/tests-12%2F12-5dff9b?style=flat-square)
 ![Python](https://img.shields.io/badge/python-3.12-26c6da?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-94a3b8?style=flat-square)
@@ -23,7 +23,7 @@ hide:
 
 [:octicons-rocket-16: &nbsp;立即开始](./4-setup.md){ .primary }
 [:octicons-graph-16: &nbsp;查看进度](./1-plan/PROGRESS.md){ .secondary }
-[:fontawesome-brands-github: &nbsp;GitHub](https://github.com/luhao2013/inferlite){ .secondary }
+[:fontawesome-brands-github: &nbsp;GitHub](https://github.com/luhao-lab/inferlite){ .secondary }
 
 </div>
 

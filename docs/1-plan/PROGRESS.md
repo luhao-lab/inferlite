@@ -56,7 +56,7 @@
 ## 日志
 
 ### 2026-06-06
-- 仓库 `luhao2013/inferlite` 创建（MIT，公开）
+- 仓库 `luhao-lab/inferlite` 创建（MIT，公开）
 - 完整 PLAN 落地（含 4 层抽象 / L0–L3 四层验证 / Benchmark 三件套 / 14 个里程碑）
 - M1 收窄为 M1·P1（数值对齐）+ M1·P2（Engine/CLI 出字），避免首阶段 DoD 过载
 
@@ -85,7 +85,7 @@
 ## 日志
 
 ### 2026-06-06
-- 仓库 `luhao2013/inferlite` 创建（MIT，公开）
+- 仓库 `luhao-lab/inferlite` 创建（MIT，公开）
 - 完整 PLAN 落地（含 4 层抽象 / L0–L3 四层验证 / Benchmark 三件套 / 14 个里程碑）
 - M1 收窄为 M1·P1（数值对齐）+ M1·P2（Engine/CLI 出字），避免首阶段 DoD 过载
 

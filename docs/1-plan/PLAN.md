@@ -1,13 +1,13 @@
 # inferlite — 从零手写 LLM 推理引擎 · 里程碑路线
 
-> 目标：在 `luhao2013/inferlite` 仓库里，**手敲** 一个可读、可跑、可解释的 LLM 推理框架，覆盖 vLLM 的核心思想（KV cache / PagedAttention / Continuous Batching / Prefix Cache），并通过持续迭代不断扩充（MoE / Spec Decoding / Triton kernel / 量化 / VLM …）。
+> 目标：在 `luhao-lab/inferlite` 仓库里，**手敲** 一个可读、可跑、可解释的 LLM 推理框架，覆盖 vLLM 的核心思想（KV cache / PagedAttention / Continuous Batching / Prefix Cache），并通过持续迭代不断扩充（MoE / Spec Decoding / Triton kernel / 量化 / VLM …）。
 >
 > 节奏不绑定时间，按**里程碑驱动**：M1–M5 完成核心 demo（"跑得起来"），M6+ 在同仓库长期扩充，每个里程碑配一篇知乎文章。
 
 <!-- anchor:positioning -->
 ## 0. 定位与不变量
 
-- **仓库**：`luhao2013/inferlite`（公开 / MIT）
+- **仓库**：`luhao-lab/inferlite`（公开 / MIT）
 - **代码全手敲**：Agent 不写 `inferlite/*.py`，只做：研究、计划、资料检索、原理讲解、Review、文章草稿
 - **里程碑闭环**：每个 M 完成 = ① 代码 push ② 文章发知乎 ③ PROGRESS 更新
 - **学习 > 性能**：优先可读性；性能优化作为后续里程碑慢慢加
@@ -184,7 +184,7 @@ class Qwen3:
 
 | 维度 | 选型 | 理由 |
 | --- | --- | --- |
-| 仓库 | `luhao2013/inferlite` | 已创建，MIT，公开 |
+| 仓库 | `luhao-lab/inferlite` | 已创建，MIT，公开 |
 | 语言 | Python 3.11 | 教学优先 |
 | DL 框架 | PyTorch 2.4+（当前 lock：2.12.0） | SDPA、Triton 入口成熟；数值对齐以 lockfile 为准 |
 | 模型 | **Qwen3-0.6B**（主，M1–M5） / M13 VLM 模型待定 | Qwen3-0.6B 同权重支持 thinking/non-thinking；VLM 候选到 M13 前再按可下载性、显存和架构复杂度确认 |

@@ -1,8 +1,8 @@
 site_name: inferlite
 site_description: 从零手撕的 LLM 推理引擎学习项目 · L0-aligned with transformers
-site_url: https://luhao2013.github.io/inferlite/
-repo_url: https://github.com/luhao2013/inferlite
-repo_name: luhao2013/inferlite
+site_url: https://luhao-lab.github.io/inferlite/
+repo_url: https://github.com/luhao-lab/inferlite
+repo_name: luhao-lab/inferlite
 edit_uri: edit/main/docs/
 
 docs_dir: docs
@@ -147,7 +147,7 @@ plugins:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/luhao2013/inferlite
+      link: https://github.com/luhao-lab/inferlite
   status:
     new: 新增
     deprecated: 已废弃

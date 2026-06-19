@@ -7,7 +7,7 @@
 ## 1. 一键安装
 
 ```bash
-git clone git@github.com:luhao2013/inferlite.git
+git clone git@github.com:luhao-lab/inferlite.git
 cd inferlite
 make setup        # 装 uv + sync 依赖 + 健康检查
 make preflight    # 下载 Qwen3-0.6B（CN: ~5-15 min）+ 跑通推理

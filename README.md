@@ -7,13 +7,13 @@
 覆盖 vLLM 核心思想 — KV cache · PagedAttention · Continuous Batching · Prefix Cache —
 按里程碑驱动持续扩充（MoE / Spec Decoding / Triton / VLM …）
 
-[![docs](https://img.shields.io/badge/📖_docs-online-26c6da?style=for-the-badge)](https://luhao2013.github.io/inferlite/)
-[![tests](https://github.com/luhao2013/inferlite/actions/workflows/tests.yml/badge.svg)](https://github.com/luhao2013/inferlite/actions/workflows/tests.yml)
+[![docs](https://img.shields.io/badge/📖_docs-online-26c6da?style=for-the-badge)](https://luhao-lab.github.io/inferlite/)
+[![tests](https://github.com/luhao-lab/inferlite/actions/workflows/tests.yml/badge.svg)](https://github.com/luhao-lab/inferlite/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 
-[**🌐 在线文档站**](https://luhao2013.github.io/inferlite/)  ·  [路线图](docs/1-plan/PLAN.md)  ·  [实时进度](docs/1-plan/PROGRESS.md)  ·  [当前作战 M1](docs/1-plan/M1.md)
+[**🌐 在线文档站**](https://luhao-lab.github.io/inferlite/)  ·  [路线图](docs/1-plan/PLAN.md)  ·  [实时进度](docs/1-plan/PROGRESS.md)  ·  [当前作战 M1](docs/1-plan/M1.md)
 
 </div>
 
@@ -31,7 +31,7 @@
 ## 30 秒 Quick Start
 
 ```bash
-git clone git@github.com:luhao2013/inferlite.git
+git clone git@github.com:luhao-lab/inferlite.git
 cd inferlite
 make setup            # uv 装环境 + sanity check
 make test             # 跑 12/12 单测，全绿
@@ -95,7 +95,7 @@ flowchart LR
 
 | 入口 | 内容 |
 | --- | --- |
-| 🌐 [**在线文档站**](https://luhao2013.github.io/inferlite/) | 极客风深色主题 · 全文搜索 · mermaid 渲染 |
+| 🌐 [**在线文档站**](https://luhao-lab.github.io/inferlite/) | 极客风深色主题 · 全文搜索 · mermaid 渲染 |
 | 🗺️ [`docs/1-plan/`](docs/1-plan/) | PLAN（14 个 M）· PROGRESS · 当前作战 M1 |
 | 📋 [`docs/2-tasks/`](docs/2-tasks/) | 任务卡（一卡一文件，七字段闭环） |
 | 📚 [`docs/3-kb/`](docs/3-kb/) | knowledge / lessons / decisions / references |
@@ -131,5 +131,5 @@ MIT — 见 [LICENSE](LICENSE)。
 ---
 
 <div align="center">
-<sub>Built with ❤ + uv + PyTorch · Powered by <a href="https://luhao2013.github.io/inferlite/">MkDocs Material</a></sub>
+<sub>Built with ❤ + uv + PyTorch · Powered by <a href="https://luhao-lab.github.io/inferlite/">MkDocs Material</a></sub>
 </div>
