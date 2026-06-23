@@ -68,6 +68,12 @@ argument-hint: "task <id>  或  milestone M<n>"
 | 根 `README.md` | 本任务改变首页可见进度时 | 更新"当前进度"一行 |
 | `mkdocs.yml` | 本卡新增/删除了 .md 文件时 | 更新 nav |
 
+**代码变更联动检查**（本卡有代码改动时额外执行）：
+- 新增模块 → `kb/blueprints.md` 新增该模块的契约卡
+- 修改公共接口签名 → `kb/blueprints.md` + 任务卡 §接口签名 同步更新
+- 新增/修改 CLI 参数 → `docs/README.md` §快速上手 示例命令同步
+- 新增顶层目录 → `docs/README.md` §仓库结构 + `CLAUDE.md` 文件清单同步
+
 ### A.6 commit + push
 ```
 docs: archive T<x> <title> + lessons L<N> + knowledge <topic>

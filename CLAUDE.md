@@ -52,6 +52,19 @@
 | `mkdocs.yml` | 文档站导航 nav | 新增/删除/移动文档文件 | 手动 |
 | 根 `README.md` | GitHub 首页（项目介绍 + 进度） | M 归档、进度大变 | `/archive milestone` |
 
+**代码文件改动触发的文档联动**：
+
+| 代码文件改动 | 必须同步更新的文档 | 原因 |
+|------------|-----------------|------|
+| 新增模块（如 `model/kv_cache.py`） | `docs/kb/blueprints.md` 新增模块契约卡 | 接口签名/设计意图需要记录 |
+| 修改模块公共接口（函数签名/参数） | `docs/kb/blueprints.md` 对应模块卡 | 契约变了，依赖方要感知 |
+| 修改模块公共接口 | `docs/tasks/M<n>-T<x>.md` 任务卡 §接口签名 | 任务卡里的接口签名要和代码一致 |
+| 新增/修改测试文件 | 任务卡 §测试清单 / §测试结果 | 测试结论要可追溯 |
+| 修改 `inferlite/cli.py` 参数 | `docs/README.md` §快速上手（若影响 example 命令） | 示例命令要能跑通 |
+| 新增顶层目录（如 `inferlite/server/`） | `docs/README.md` §仓库结构 + `CLAUDE.md` 本表 | 结构文档要同步 |
+| 修改 `Makefile` 目标 | `docs/README.md` §快速上手（若影响常用命令） | 速查命令要准确 |
+| 修改 `pyproject.toml` 依赖 | `docs/kb/knowledge.md` → Tools（若引入新工具） | 新工具要有知识卡 |
+
 **Memory**：CodeFlicker repos dimension，关键字 `inferlite`，`update_memory` 在 `/archive` 时同步。
 
 ## Slash 命令（5 个）
