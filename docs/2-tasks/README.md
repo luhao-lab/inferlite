@@ -1,4 +1,4 @@
-# M1 任务卡索引
+# 任务卡索引
 
 > spec-kit 风格：每张任务卡一个独立文件，便于 AI/人精准定位与 review。
 > 进度状态汇总见 `docs/1-plan/M1.md` §4 任务卡总表；本目录是任务卡详细内容。
@@ -28,6 +28,16 @@
 | T11 | [M1-T11-CLI-L2-e2e.md](./M1-T11-CLI-L2-e2e.md) | ✅ |
 | T12-pre | [M1-T12-pre-last-token-logits.md](./M1-T12-pre-last-token-logits.md) | ✅ |
 | T12 | [M1-T12-smoke-test.md](./M1-T12-smoke-test.md) | ✅ |
+
+## M2（KV Cache + 设备支持）
+
+| ID | 文件 | 状态 |
+| --- | --- | --- |
+| M2-T1 | [M2-T1-KVCache-DataStructure.md](./M2-T1-KVCache-DataStructure.md) | ⬜ |
+| M2-T2 | [M2-T2-Attention-KVCache.md](./M2-T2-Attention-KVCache.md) | ⬜ |
+| M2-T3 | [M2-T3-Model-Passthrough.md](./M2-T3-Model-Passthrough.md) | ⬜ |
+| M2-T4 | [M2-T4-Generate-Loop.md](./M2-T4-Generate-Loop.md) | ⬜ |
+| M2-T5 | [M2-T5-CLI-Device-Dtype.md](./M2-T5-CLI-Device-Dtype.md) | ⬜ |
 
 ## 任务卡模板（7 字段）
 
