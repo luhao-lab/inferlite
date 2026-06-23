@@ -55,11 +55,18 @@ argument-hint: "task <id>  或  milestone M<n>"
 - 若 `docs/kb/knowledge.md` 没对应章节，追加 `### <title>` 子段
 - 更新 `update_memory`（category=`project_introduction`）
 
-### A.5 更新状态文件
-- `docs/plan/PROGRESS.md` 勾选本任务
-- `README.md` 当前进度同步（若本任务改变首页可见进度）
-- `docs/M<n>.md` §6 任务清单状态 ✅
-- `docs/tasks/README.md` 表格状态
+### A.5 文件清单逐项检查（对照 CLAUDE.md §文件清单与更新触发器）
+
+| 文件 | 本次需要更新？ | 操作 |
+|------|-------------|------|
+| `docs/tasks/M<n>-T<x>.md` | ✅ 必须 | 末尾追加完成总结（A.2 步骤） |
+| `docs/plan/PROGRESS.md` | ✅ 必须 | 勾选本任务 ✅ |
+| `docs/plan/M<n>.md` | 看情况 | §任务清单 勾选 ✅（若文件存在） |
+| `docs/kb/lessons.md` | 有新坑时 | 追加 L<N+1>（A.3 步骤） |
+| `docs/kb/knowledge.md` | 有新知识时 | 追加卡片（A.4 步骤） |
+| `docs/kb/blueprints.md` | 本卡改了模块接口时 | 更新对应模块的契约 |
+| 根 `README.md` | 本任务改变首页可见进度时 | 更新"当前进度"一行 |
+| `mkdocs.yml` | 本卡新增/删除了 .md 文件时 | 更新 nav |
 
 ### A.6 commit + push
 ```

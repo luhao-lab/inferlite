@@ -27,21 +27,32 @@
 6. **里程碑归档**：`/archive milestone M<n>` → 写 Summary + tag
 7. **环境体检**：随时 `/preflight`
 
-## 知识库（双轨制 · R1 平面化 + 分组可视化版）
-- **文件**（全在 `inferlite/docs/` 内，按 1/2/3/4 分组）：
-  - `docs/README.md` 文档地图（mermaid 跳转图，总入口）
-  - `docs/plan/{PLAN,PROGRESS,M<n>}.md` 规划层
-  - `docs/tasks/M<n>-T*.md` 任务卡（一卡一文件）
-  - `docs/kb/knowledge.md` 知识点（H2: Papers/Libraries/Concepts/Tools）
-  - `docs/kb/lessons.md` 教训（L1, L2, ...）
-  - `docs/kb/blueprints.md` 模块契约（每个核心模块的接口/位置/踩坑/跨M依赖）← 新增
-  - `docs/kb/knowledge.md` ADR
-  - `docs/kb/knowledge.md` 参考资料
-  - `docs/README.md` 环境 + 仓库结构（快速上手）
-- **Memory**：CodeFlicker repos dimension，关键字 `inferlite`
-- **可视化**：`make docs-serve` 起本地 MkDocs Material（http://localhost:8000），或 GitHub Pages（push main 自动 deploy）
-- 新会话进入项目时先 `search_memory("inferlite")`，再读 `docs/README.md` + `docs/plan/PROGRESS.md` + 当前 `M<n>.md`
-- 详见 `docs/kb/knowledge.md` ADR-001 / ADR-002 / ADR-003
+## 新会话启动顺序（必须执行）
+1. `search_memory("inferlite")` — 拉取跨会话长期记忆
+2. 读 `CLAUDE.md`（本文件）— 角色分工 + 文件清单 + 反模式
+3. 读 `docs/plan/PROGRESS.md` — 当前进度，确认做到哪了
+4. 读当前 M 的设计文档（如 `docs/plan/m2-kv-cache-design.md`）— 理解方案
+
+## 文件清单与更新触发器
+
+> AI 每次 `/archive` 时必须逐项对照此表，确保没有文件被遗漏更新。
+
+| 文件 | 功能（一句话） | 触发更新的事件 | 更新方式 |
+|------|--------------|--------------|--------|
+| `CLAUDE.md` | AI 常驻规范，新会话必读 | 工作流变化、文件结构变化 | 手动 |
+| `docs/README.md` | 文档地图 + 快速上手 + 工作流说明 | 新增/删除文件、工作流变化 | 手动 |
+| `docs/plan/PLAN.md` | 14 个里程碑路线图 | 调整路线、新开 M | `/plan` 命令 |
+| `docs/plan/PROGRESS.md` | 跨 M 进度状态 + 变更日志 | 每张任务卡 ✅ | `/archive task` |
+| `docs/plan/M<n>.md` | 单 M 作战地图（架构/任务/测试） | 新开 M 时新建；M 归档时追加 Summary | `/plan` + `/archive milestone` |
+| `docs/plan/m<n>-design.md` | 单 M 技术设计文档 | 里程碑启动时创建 | `/plan` 命令 |
+| `docs/tasks/M<n>-T<x>.md` | 任务卡（算法/测试/DoD/坑） | `/work` 开卡；`/archive` 时追加完成总结 | `/work` + `/archive task` |
+| `docs/kb/knowledge.md` | 知识卡片（Papers/Libs/Concepts/Tools/ADR/参考资料） | 每次任务归档后追加新卡 | `/archive task` |
+| `docs/kb/lessons.md` | 踩坑教训（叙事性，L1~Ln） | 每次任务归档后追加新坑 | `/archive task` |
+| `docs/kb/blueprints.md` | 模块契约（接口/踩坑/跨M依赖） | 每次任务归档后更新相关模块 | `/archive task` |
+| `mkdocs.yml` | 文档站导航 nav | 新增/删除/移动文档文件 | 手动 |
+| 根 `README.md` | GitHub 首页（项目介绍 + 进度） | M 归档、进度大变 | `/archive milestone` |
+
+**Memory**：CodeFlicker repos dimension，关键字 `inferlite`，`update_memory` 在 `/archive` 时同步。
 
 ## Slash 命令（5 个）
 - `/plan <scope>` — 规划（M / T / 调整），含前置调研，自动补 knowledge.md
