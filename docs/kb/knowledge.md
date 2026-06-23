@@ -2013,7 +2013,7 @@ inferlite = 作者手撕 + AI 辅助 plan/review/doc 的学习项目。采用 sp
 
 **状态**：Accepted (2026-06-07)
 
-`make docs-serve` 起本地 http://localhost:8000，GitHub Actions 自动 deploy 到 gh-pages。按"何时读"分 3 组：`plan/`（规划层）/ `tasks/`（执行层）/ `kb/`（知识层），`setup.md` 顶层独立新人入口。
+`make docs-serve` 起本地 http://localhost:8000，GitHub Actions 自动 deploy 到 gh-pages。按"何时读"分 3 组：`plan/`（规划层）/ `tasks/`（执行层）/ `kb/`（知识层），`README.md` 顶层入口（含快速上手）。
 
 ---
 

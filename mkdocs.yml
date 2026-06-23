@@ -106,7 +106,7 @@ nav:
       - knowledge: kb/knowledge.md
       - lessons: kb/lessons.md
       - blueprints: kb/blueprints.md
-  - 环境: setup.md
+  - 环境 & 快速上手: README.md
 
 markdown_extensions:
   - admonition

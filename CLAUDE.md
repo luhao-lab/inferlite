@@ -37,7 +37,7 @@
   - `docs/kb/blueprints.md` 模块契约（每个核心模块的接口/位置/踩坑/跨M依赖）← 新增
   - `docs/kb/knowledge.md` ADR
   - `docs/kb/knowledge.md` 参考资料
-  - `docs/setup.md` 环境 + 仓库结构
+  - `docs/README.md` 环境 + 仓库结构（快速上手）
 - **Memory**：CodeFlicker repos dimension，关键字 `inferlite`
 - **可视化**：`make docs-serve` 起本地 MkDocs Material（http://localhost:8000），或 GitHub Pages（push main 自动 deploy）
 - 新会话进入项目时先 `search_memory("inferlite")`，再读 `docs/README.md` + `docs/plan/PROGRESS.md` + 当前 `M<n>.md`
@@ -64,7 +64,7 @@
 ## 网络环境（国内）
 - HuggingFace 不可达 → 默认走 ModelScope
 - `make preflight` 已配置好
-- 详见 `docs/setup.md` §4.2 + `docs/kb/lessons.md` L2
+- 详见 `docs/README.md` §大坑 + `docs/kb/lessons.md` L2
 
 ## 反模式（NEVER）
 - ❌ AI 直接写 `inferlite/model/*.py` 业务代码（侵犯学习目标）
