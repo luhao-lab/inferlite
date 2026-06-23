@@ -36,7 +36,7 @@
 - **ADR-002** 知识库与代码同仓（R1 重构）
 - **ADR-003** 分组目录 + MkDocs Material 可视化
 
-**任务卡进度**（[详见 PROGRESS](../1-plan/PROGRESS.md)）：M1-T0 ModelConfig ✅ · M1-T1 RMSNorm ✅ · M1-T2 SwiGLUMLP ✅ · M1-T3 RoPE ✅ · T4-T6 ⬜
+**任务卡进度**（[详见 PROGRESS](../plan/PROGRESS.md)）：M1-T0 ModelConfig ✅ · M1-T1 RMSNorm ✅ · M1-T2 SwiGLUMLP ✅ · M1-T3 RoPE ✅ · T4-T6 ⬜
 
 **已知缺口**（开工时回填）：
 

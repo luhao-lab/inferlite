@@ -79,7 +79,7 @@ if T > 1:
 - [ ] `kv_cache=None` 时所有 M1 attention 单测继续通过：`uv run pytest tests/unit/test_attention.py -q`
 - [ ] 有 cache 的输出与无 cache fp32 误差 < 1e-5
 - [ ] commit `feat(model): add KV cache support to GQAAttention (M2-T2)`
-- [ ] `docs/2-tasks/README.md` 状态改 ✅
+- [ ] `docs/tasks/README.md` 状态改 ✅
 
 ## 坑（按概率排序）
 1. **causal mask shape 变了**：有 cache 时 K 维度是 `cache_position + T`，mask 应是 `[T, T_k]` 不是 `[T, T]`；prefill 无 cache 时仍是 `[T, T]`。

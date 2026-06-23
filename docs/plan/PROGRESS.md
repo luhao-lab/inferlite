@@ -80,7 +80,7 @@
 - M11 ↔ M12 顺序调整：Chunked Prefill 提前到 M11（长上下文前置依赖），Long context (YaRN) 后移到 M12
 - M1.md §4 任务总表：新增 `前置` 列 + `[P]` 并行标记列 → 一眼看出 T1/T2/T3 三线可并开
 - `scripts/doctor.sh` + `make doctor`：跨文档一致性自检（任务卡 ↔ M1.md ↔ PROGRESS ↔ README）
-- 知识缺口归档到 `docs/3-kb/knowledge.md` 顶部"📊 索引摘要"段（首次会话即可看到）
+- 知识缺口归档到 `docs/kb/knowledge.md` 顶部"📊 索引摘要"段（首次会话即可看到）
 
 ## 日志
 

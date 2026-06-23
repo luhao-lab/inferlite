@@ -313,7 +313,7 @@ Qwen3 是 LLaMA 家族：RoPE、`RMSNorm`、`bias=False`、QK-norm。
 
 | 借鉴源 | 本仓库实现 |
 | --- | --- |
-| spec-kit tasks 模板 | `docs/1-plan/M1.md` §4 任务卡总表 + `docs/2-tasks/T*.md` 每卡独立 |
+| spec-kit tasks 模板 | `docs/plan/M1.md` §4 任务卡总表 + `docs/tasks/T*.md` 每卡独立 |
 | CLAUDE.md 常驻记忆 | `~/learning/AGENTS.md`（仓库根） |
 | Claude Code custom commands | `.claude/commands/`（plan / work / review / archive / preflight） |
 | OpenSpec 状态机 | 任务卡 status 列（⬜ pending / 🟡 in-progress / ✅ done） |

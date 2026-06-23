@@ -6,7 +6,7 @@
 ## 项目定位
 - inferlite = 从零手撕的 LLM 推理引擎学习项目
 - 主要参考: nano-vllm（千行体量目标）、rasbt LLMs-from-scratch（教学）、transformers（数值对齐）
-- 详见 `docs/1-plan/PLAN.md`（14 个里程碑）、`docs/1-plan/M1.md`（当前 M1 作战地图）
+- 详见 `docs/plan/PLAN.md`（14 个里程碑）、`docs/plan/M1.md`（当前 M1 作战地图）
 
 ## 角色分工（重要）
 - **作者本人**手写所有 `inferlite/**/*.py` 业务代码
@@ -30,18 +30,18 @@
 ## 知识库（双轨制 · R1 平面化 + 分组可视化版）
 - **文件**（全在 `inferlite/docs/` 内，按 1/2/3/4 分组）：
   - `docs/README.md` 文档地图（mermaid 跳转图，总入口）
-  - `docs/1-plan/{PLAN,PROGRESS,M<n>}.md` 规划层
-  - `docs/2-tasks/M<n>-T*.md` 任务卡（一卡一文件）
-  - `docs/3-kb/knowledge.md` 知识点（H2: Papers/Libraries/Concepts/Tools）
-  - `docs/3-kb/lessons.md` 教训（L1, L2, ...）
-  - `docs/3-kb/blueprints.md` 模块契约（每个核心模块的接口/位置/踩坑/跨M依赖）← 新增
-  - `docs/3-kb/decisions.md` ADR
-  - `docs/3-kb/REFERENCES.md` 参考资料
-  - `docs/4-setup.md` 环境 + 仓库结构
+  - `docs/plan/{PLAN,PROGRESS,M<n>}.md` 规划层
+  - `docs/tasks/M<n>-T*.md` 任务卡（一卡一文件）
+  - `docs/kb/knowledge.md` 知识点（H2: Papers/Libraries/Concepts/Tools）
+  - `docs/kb/lessons.md` 教训（L1, L2, ...）
+  - `docs/kb/blueprints.md` 模块契约（每个核心模块的接口/位置/踩坑/跨M依赖）← 新增
+  - `docs/kb/decisions.md` ADR
+  - `docs/kb/REFERENCES.md` 参考资料
+  - `docs/setup.md` 环境 + 仓库结构
 - **Memory**：CodeFlicker repos dimension，关键字 `inferlite`
 - **可视化**：`make docs-serve` 起本地 MkDocs Material（http://localhost:8000），或 GitHub Pages（push main 自动 deploy）
-- 新会话进入项目时先 `search_memory("inferlite")`，再读 `docs/README.md` + `docs/1-plan/PROGRESS.md` + 当前 `M<n>.md`
-- 详见 `docs/3-kb/decisions.md` ADR-001 / ADR-002 / ADR-003
+- 新会话进入项目时先 `search_memory("inferlite")`，再读 `docs/README.md` + `docs/plan/PROGRESS.md` + 当前 `M<n>.md`
+- 详见 `docs/kb/decisions.md` ADR-001 / ADR-002 / ADR-003
 
 ## Slash 命令（5 个）
 - `/plan <scope>` — 规划（M / T / 调整），含前置调研，自动补 knowledge.md
@@ -54,7 +54,7 @@
 - 每个手写模块必须有 L0 单测 vs `transformers.models.qwen3.modeling_qwen3.*` allclose
 - 容差: fp32 1e-5 / fp16/bf16 5e-3
 - 12 cases 全绿才能进下一张任务卡
-- 详见 `docs/1-plan/M1.md` §7 测试金字塔
+- 详见 `docs/plan/M1.md` §7 测试金字塔
 
 ## 数值对齐 ground truth
 - transformers==5.10.2（已 lock 在 pyproject.toml）
@@ -64,7 +64,7 @@
 ## 网络环境（国内）
 - HuggingFace 不可达 → 默认走 ModelScope
 - `make preflight` 已配置好
-- 详见 `docs/4-setup.md` §4.2 + `docs/3-kb/lessons.md` L2
+- 详见 `docs/setup.md` §4.2 + `docs/kb/lessons.md` L2
 
 ## 反模式（NEVER）
 - ❌ AI 直接写 `inferlite/model/*.py` 业务代码（侵犯学习目标）

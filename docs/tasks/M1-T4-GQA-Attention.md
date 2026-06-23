@@ -140,8 +140,8 @@ def forward(self, hidden_states: torch.Tensor, position_ids: torch.Tensor) -> to
 - [ ] `repeat_kv` 与 transformers 行为一致
 - [ ] `GQAAttention` 可与 transformers 小尺寸 `Qwen3Attention` fp32 对齐
 - [ ] `uv run pytest tests/unit/test_config.py tests/unit/test_rmsnorm.py tests/unit/test_mlp.py tests/unit/test_rope.py tests/unit/test_attention.py -q` 全绿
-- [ ] `docs/3-kb/knowledge.md` 补 GQA/QK-norm 知识卡
-- [ ] `docs/2-tasks/README.md` 与 `docs/1-plan/M1.md` 状态更新
+- [ ] `docs/kb/knowledge.md` 补 GQA/QK-norm 知识卡
+- [ ] `docs/tasks/README.md` 与 `docs/plan/M1.md` 状态更新
 - [ ] `README.md` 当前进度同步（若本任务完成）
 - [ ] commit `feat(model): add GQA attention aligned with Qwen3Attention`
 

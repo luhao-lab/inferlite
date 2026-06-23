@@ -178,8 +178,8 @@ sample 1 最后位置选 0
 - [ ] 单测覆盖 batch 场景
 - [ ] `tests/unit/test_engine_core.py` 全绿
 - [ ] T0-T10 回归全绿
-- [ ] `docs/3-kb/knowledge.md` 补 engine/step 概念（如缺）
-- [ ] `docs/2-tasks/README.md` 与 `docs/1-plan/M1.md` 状态更新
+- [ ] `docs/kb/knowledge.md` 补 engine/step 概念（如缺）
+- [ ] `docs/tasks/README.md` 与 `docs/plan/M1.md` 状态更新
 - [ ] `README.md` 当前进度同步（任务完成时）
 - [ ] commit `feat(engine): add single-step engine core`
 

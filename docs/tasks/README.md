@@ -1,7 +1,7 @@
 # 任务卡索引
 
 > spec-kit 风格：每张任务卡一个独立文件，便于 AI/人精准定位与 review。
-> 进度状态汇总见 `docs/1-plan/M1.md` §4 任务卡总表；本目录是任务卡详细内容。
+> 进度状态汇总见 `docs/plan/M1.md` §4 任务卡总表；本目录是任务卡详细内容。
 > 新建任务卡：`cp _TEMPLATE.md M1-TX-name.md` 或运行 `/work TX` 自动建。
 
 ## M1 Phase 1（数值对齐）

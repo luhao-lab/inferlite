@@ -93,8 +93,8 @@ def forward(self, hidden_states: torch.Tensor, position_ids: torch.Tensor) -> to
 - [ ] `tests/unit/test_decoder_layer.py` 全绿
 - [ ] 小尺寸 `DecoderLayer` 与 transformers `Qwen3DecoderLayer` fp32 对齐
 - [ ] `uv run pytest tests/unit/test_config.py tests/unit/test_rmsnorm.py tests/unit/test_mlp.py tests/unit/test_rope.py tests/unit/test_attention.py tests/unit/test_decoder_layer.py -q` 全绿
-- [ ] `docs/3-kb/knowledge.md` 补 DecoderLayer / pre-norm 知识卡（如缺）
-- [ ] `docs/2-tasks/README.md` 与 `docs/1-plan/M1.md` 状态更新
+- [ ] `docs/kb/knowledge.md` 补 DecoderLayer / pre-norm 知识卡（如缺）
+- [ ] `docs/tasks/README.md` 与 `docs/plan/M1.md` 状态更新
 - [ ] `README.md` 当前进度同步（若本任务完成）
 - [ ] commit `feat(model): add Qwen3 decoder layer`
 

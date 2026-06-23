@@ -23,7 +23,7 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class ModelConfig:
-    # 11 个字段（来自 docs/3-kb/knowledge.md §Qwen3 Tech Report §4）
+    # 11 个字段（来自 docs/kb/knowledge.md §Qwen3 Tech Report §4）
     hidden_size: int            # H
     num_hidden_layers: int      # N
     num_attention_heads: int    # n_q
@@ -65,7 +65,7 @@ class ModelConfig:
 - [x] 测试 5/5 绿
 - [x] commit `feat(config): ModelConfig dataclass (T0 done)`
 - [x] 回填 `RMSNorm(config.hidden_size, eps=config.rms_norm_eps)` 调用点（暂无，等 T6 一并改）
-- [x] PROGRESS.md / docs/2-tasks/README.md 更新
+- [x] PROGRESS.md / docs/tasks/README.md 更新
 
 ## 坑（按概率排序）
 1. **HF config.json 有几十个字段**，不要全收 —— 按白名单只取 11 个；其余字段未来 M 用到再加
@@ -78,7 +78,7 @@ class ModelConfig:
 8. **annotated tag 不能当 GitHub blob commit 用** —— 固定源码链接时要用 `refs/tags/vX.Y.Z^{}` 的 peeled commit，或在 GitHub 按 `y`
 
 ## 启动 checklist
-- [x] `docs/3-kb/knowledge.md` Qwen3-0.6B 架构精读已读
+- [x] `docs/kb/knowledge.md` Qwen3-0.6B 架构精读已读
 - [x] ModelScope 缓存里能找到 `config.json`（`~/.cache/modelscope/hub/models/Qwen/Qwen3-0___6B/config.json`）
 - [x] dataclass 基础语法（frozen / __post_init__ / classmethod）确认
 
@@ -107,6 +107,6 @@ bash scripts/doctor.sh                     # 9/9 PASS
 5. GQA 中 `num_key_value_heads` 减少的是 KV 组数，不改变每个 head 的维度；`head_dim` 优先读 JSON，不能随意推导。
 
 ## 链接
-- 字段来源: `docs/3-kb/knowledge.md` → `Qwen3 Tech Report` → `ModelConfig 11 字段`
+- 字段来源: `docs/kb/knowledge.md` → `Qwen3 Tech Report` → `ModelConfig 11 字段`
 - Transformers `Qwen3Config` 固定源码: https://github.com/huggingface/transformers/blob/0dad7b822255a0ae261ec45ae937371e859ffd1a/src/transformers/models/qwen3/configuration_qwen3.py
 - Qwen3-0.6B `config.json`: https://huggingface.co/Qwen/Qwen3-0.6B/blob/main/config.json

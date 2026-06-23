@@ -83,7 +83,7 @@ kv_cache = KVCache.from_config(config, batch_size=1, max_seq_len=args.max_seq_le
 - [ ] MPS 可用时自动选 mps + bf16
 - [ ] `uv run pytest tests/unit/test_cli.py -q` 全绿（含新增 M2 用例）
 - [ ] commit `feat(cli): add --device, --dtype, --max-seq-len for M2 (M2-T5)`
-- [ ] `docs/2-tasks/README.md` 状态改 ✅
+- [ ] `docs/tasks/README.md` 状态改 ✅
 
 ## 坑（按概率排序）
 1. **`mps` 上 bf16 兼容性**：Qwen3 的 `RMSNorm` 在 M1 里已有 fp32 upcast 再 cast 回原 dtype 的逻辑，bf16 应该没问题；但 `index_copy_` 在 MPS 上有限制，M2 用切片写入可以规避。

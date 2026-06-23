@@ -24,14 +24,14 @@ argument-hint: "<scope>  例: M2 / T0' / 整体重排"
 - **concepts**：数学/工程概念
 - **tools**：工具链
 
-### 2.2 检查 docs/3-kb/knowledge.md 已有章节
+### 2.2 检查 docs/kb/knowledge.md 已有章节
 对照各 H2 的 `### <title>` 子段。
 
 ### 2.3 缺口 → web 调研
 对每个缺失 topic：
 1. `search_web` 找官方源 / 论文 / 权威博客
 2. `fetch_web` 抓取关键内容
-3. 在 `docs/3-kb/knowledge.md` 对应 H2 末尾追加 `### <title>` 章节，按 knowledge 卡模板写：
+3. 在 `docs/kb/knowledge.md` 对应 H2 末尾追加 `### <title>` 章节，按 knowledge 卡模板写：
    - 一句话
    - 关键论点 / 公式 / 接口
    - 在本项目用在 → 列出未来要修改的 inferlite/ 路径
@@ -49,7 +49,7 @@ argument-hint: "<scope>  例: M2 / T0' / 整体重排"
 ## Step 3: 基于研究做规划
 
 ### 3.1 若 scope = M<n>
-1. 读 `docs/1-plan/PLAN.md` 找到 M<n> 段
+1. 读 `docs/plan/PLAN.md` 找到 M<n> 段
 2. 读上一 M 的 `docs/M<m>.md` Summary 段（如有）
 3. 生成 `docs/M<n>.md`，含：
    - §1 目标（一句话 / 完成条件 / 演示场景）
@@ -59,12 +59,12 @@ argument-hint: "<scope>  例: M2 / T0' / 整体重排"
    - §5 验证策略（L0-L3 各做什么）
    - §6 易踩坑（引用 lessons.md L<N>）
    - §7 路径图（mermaid sequenceDiagram，可在 M 完成后回填）
-4. 给每张任务卡建 `docs/2-tasks/M<n>-T<x>-<title>.md` 骨架（用 `_TEMPLATE.md`）
+4. 给每张任务卡建 `docs/tasks/M<n>-T<x>-<title>.md` 骨架（用 `_TEMPLATE.md`）
 
 ### 3.2 若 scope = T<x>
 1. 读 `docs/M<current>.md` §6 找该任务的简短描述
-2. 生成 / 补全 `docs/2-tasks/M<n>-T<x>-<title>.md`：
-   - 用 `docs/2-tasks/_TEMPLATE.md` 7 字段
+2. 生成 / 补全 `docs/tasks/M<n>-T<x>-<title>.md`：
+   - 用 `docs/tasks/_TEMPLATE.md` 7 字段
    - 前置：列 knowledge.md / lessons.md 引用
    - 接口签名：从研究简报推导
    - 测试清单：vs `Qwen3<X>` 的对齐 case
@@ -77,4 +77,4 @@ argument-hint: "<scope>  例: M2 / T0' / 整体重排"
 
 输出后**停**。
 
-**禁止**：跳过调研直接规划；不引用 knowledge.md 凭空写技术细节；不更新 docs/1-plan/PROGRESS.md。
+**禁止**：跳过调研直接规划；不引用 knowledge.md 凭空写技术细节；不更新 docs/plan/PROGRESS.md。

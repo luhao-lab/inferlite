@@ -40,7 +40,7 @@ class ClassName(nn.Module):
 - [ ] commit `feat(...): ... (TX done)`
 - [ ] PROGRESS.md 更新
 - [ ] `README.md` 当前进度同步（若本任务改变首页可见进度）
-- [ ] docs/2-tasks/README.md 状态改 ✅
+- [ ] docs/tasks/README.md 状态改 ✅
 
 ## 坑（按概率排序）
 1. ...

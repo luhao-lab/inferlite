@@ -271,8 +271,8 @@ load_from_hf: 测 config.json -> Qwen3Model -> 权重加载 -> 返回模型
 - [ ] `lm_head.weight` 在 T7 被明确 skip，不静默误加载
 - [ ] shape mismatch 有清晰错误
 - [ ] `uv run pytest tests/unit/test_config.py tests/unit/test_rmsnorm.py tests/unit/test_mlp.py tests/unit/test_rope.py tests/unit/test_attention.py tests/unit/test_decoder_layer.py tests/unit/test_qwen3_model.py tests/unit/test_weights.py -q` 全绿
-- [ ] `docs/3-kb/knowledge.md` 补权重加载 / safetensors / HF key 映射知识卡（如缺）
-- [ ] `docs/2-tasks/README.md` 与 `docs/1-plan/M1.md` 状态更新
+- [ ] `docs/kb/knowledge.md` 补权重加载 / safetensors / HF key 映射知识卡（如缺）
+- [ ] `docs/tasks/README.md` 与 `docs/plan/M1.md` 状态更新
 - [ ] `README.md` 当前进度同步（若本任务完成）
 - [ ] commit `feat(model): add HF weight loading for Qwen3Model`
 

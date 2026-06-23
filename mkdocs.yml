@@ -77,22 +77,41 @@ extra_javascript:
 
 nav:
   - 首页: README.md
-  - 1. 规划:
-      - 路线图 PLAN: 1-plan/PLAN.md
-      - 进度 PROGRESS: 1-plan/PROGRESS.md
-      - M1 作战地图: 1-plan/M1.md
-  - 2. 任务卡:
-      - 索引: 2-tasks/README.md
-      - 模板: 2-tasks/_TEMPLATE.md
-      - "T0' ModelConfig": 2-tasks/M1-T0p-ModelConfig.md
-      - T1 RMSNorm: 2-tasks/M1-T1-RMSNorm.md
-      - T2 SwiGLU: 2-tasks/M1-T2-SwiGLU.md
-  - 3. 知识库:
-      - knowledge: 3-kb/knowledge.md
-      - lessons: 3-kb/lessons.md
-      - decisions ADR: 3-kb/decisions.md
-      - references: 3-kb/REFERENCES.md
-  - 4. 环境: 4-setup.md
+  - 规划:
+      - 路线图 PLAN: plan/PLAN.md
+      - 进度 PROGRESS: plan/PROGRESS.md
+      - M1 作战地图: plan/M1.md
+      - M2 KV Cache 设计: plan/m2-kv-cache-design.md
+  - 任务卡:
+      - 索引: tasks/README.md
+      - 模板: tasks/_TEMPLATE.md
+      - T0 ModelConfig: tasks/M1-T0-ModelConfig.md
+      - T1 RMSNorm: tasks/M1-T1-RMSNorm.md
+      - T2 SwiGLU: tasks/M1-T2-SwiGLU.md
+      - T3 RoPE: tasks/M1-T3-RoPE.md
+      - T4 GQA Attention: tasks/M1-T4-GQA-Attention.md
+      - T5 DecoderLayer: tasks/M1-T5-DecoderLayer.md
+      - T6 Qwen3Model: tasks/M1-T6-Qwen3Model.md
+      - T7 WeightLoader: tasks/M1-T7-WeightMap-load-from-hf.md
+      - T8 Logits 对齐: tasks/M1-T8-L1-logits-alignment.md
+      - T9 LLMModel+Sampler: tasks/M1-T9-LLMModel-GreedySampler.md
+      - T10 EngineCore: tasks/M1-T10-EngineCore-step.md
+      - T11 CLI e2e: tasks/M1-T11-CLI-L2-e2e.md
+      - T12 smoke test: tasks/M1-T12-smoke-test.md
+      - M2-T1 KVCache: tasks/M2-T1-KVCache-DataStructure.md
+      - M2-T2 Attention KV: tasks/M2-T2-Attention-KVCache.md
+      - M2-T3 Model 透传: tasks/M2-T3-Model-Passthrough.md
+      - M2-T4 Generate Loop: tasks/M2-T4-Generate-Loop.md
+      - M2-T5 CLI 设备: tasks/M2-T5-CLI-Device-Dtype.md
+  - 知识库:
+      - knowledge: kb/knowledge.md
+      - lessons: kb/lessons.md
+      - decisions ADR: kb/decisions.md
+      - blueprints: kb/blueprints.md
+      - references: kb/REFERENCES.md
+  - 文章:
+      - M1 Naive Forward: articles/m1-naive-forward.md
+  - 环境: setup.md
 
 markdown_extensions:
   - admonition

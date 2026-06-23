@@ -100,8 +100,8 @@ def forward(
 - [ ] `tests/unit/test_qwen3_model.py` 全绿
 - [ ] 小尺寸 `Qwen3Model` 与 transformers `Qwen3Model` fp32 对齐
 - [ ] `uv run pytest tests/unit/test_config.py tests/unit/test_rmsnorm.py tests/unit/test_mlp.py tests/unit/test_rope.py tests/unit/test_attention.py tests/unit/test_decoder_layer.py tests/unit/test_qwen3_model.py -q` 全绿
-- [ ] `docs/3-kb/knowledge.md` 补 Qwen3Model / position_ids / shared RoPE 知识卡（如缺）
-- [ ] `docs/2-tasks/README.md` 与 `docs/1-plan/M1.md` 状态更新
+- [ ] `docs/kb/knowledge.md` 补 Qwen3Model / position_ids / shared RoPE 知识卡（如缺）
+- [ ] `docs/tasks/README.md` 与 `docs/plan/M1.md` 状态更新
 - [ ] `README.md` 当前进度同步（若本任务完成）
 - [ ] commit `feat(model): add Qwen3Model backbone`
 

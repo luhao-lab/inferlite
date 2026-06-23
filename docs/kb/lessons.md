@@ -189,7 +189,7 @@ if "head_dim" not in raw:
 
 ### 相关
 - knowledge.md → Papers → Qwen3 Tech Report → Self-Attention 内部
-- docs/2-tasks/M1-T0-ModelConfig.md
+- docs/tasks/M1-T0-ModelConfig.md
 
 ---
 

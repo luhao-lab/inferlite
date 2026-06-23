@@ -79,8 +79,8 @@ markers = [
 - [ ] `tests/integration/test_real_qwen3_smoke.py` 实现，本地 `pytest -m local_model` 全绿
 - [ ] `pytest` (不加 `-m`) 跳过该测试（CI 安全）
 - [ ] 前 10 个 token ID 与 transformers 精确匹配
-- [ ] `docs/3-kb/knowledge.md` 补知识点（真实权重加载路径、chat template 影响）
-- [ ] `docs/2-tasks/README.md` + `docs/1-plan/M1.md` 状态更新
+- [ ] `docs/kb/knowledge.md` 补知识点（真实权重加载路径、chat template 影响）
+- [ ] `docs/tasks/README.md` + `docs/plan/M1.md` 状态更新
 - [ ] `README.md` 进度同步
 - [ ] commit `feat(tests): add real Qwen3-0.6B smoke test (T12 done)`
 

@@ -74,7 +74,7 @@ def forward(self, hidden_states, position_embeddings,
 - [ ] `uv run pytest tests/ -q` 全部 95 个 M1 单测继续通过（不允许任何回归）
 - [ ] `kv_cache=None` 路径行为与 M1 完全不变
 - [ ] commit `refactor(model): unify position_embeddings in Qwen3Model, add kv_cache passthrough (M2-T3)`
-- [ ] `docs/2-tasks/README.md` 状态改 ✅
+- [ ] `docs/tasks/README.md` 状态改 ✅
 
 ## 坑（按概率排序）
 1. **`rotary_emb` 放在哪里**：`GQAAttention.__init__` 里的 `self.rotary_emb` 要删（已移到 Model 层），否则多余参数会占显存并影响权重加载（如果有 checkpoint）。

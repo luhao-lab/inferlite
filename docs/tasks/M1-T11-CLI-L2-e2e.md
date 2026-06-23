@@ -159,8 +159,8 @@ model(input_ids, logits_to_keep=1) -> logits [B, 1, V]
 - [ ] 单测覆盖 append 和每轮 input_ids 更新
 - [ ] CLI 测试不依赖真实大模型下载
 - [ ] T0-T11 回归全绿
-- [ ] `docs/3-kb/knowledge.md` 补 generate loop / CLI e2e 知识点（如缺）
-- [ ] `docs/2-tasks/README.md` 与 `docs/1-plan/M1.md` 状态更新
+- [ ] `docs/kb/knowledge.md` 补 generate loop / CLI e2e 知识点（如缺）
+- [ ] `docs/tasks/README.md` 与 `docs/plan/M1.md` 状态更新
 - [ ] `README.md` 当前进度同步（任务完成时）
 - [ ] commit `feat(engine): add greedy generate loop`
 

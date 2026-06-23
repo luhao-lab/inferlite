@@ -126,8 +126,8 @@ def test_next_token_uses_last_position_only():
 - [ ] 单步 next-token helper 如有必要实现
 - [ ] `tests/unit/test_sampler.py` 全绿
 - [ ] T0-T9 回归全绿
-- [ ] `docs/3-kb/knowledge.md` 补 greedy decoding / sampler 概念（如缺）
-- [ ] `docs/2-tasks/README.md` 与 `docs/1-plan/M1.md` 状态更新
+- [ ] `docs/kb/knowledge.md` 补 greedy decoding / sampler 概念（如缺）
+- [ ] `docs/tasks/README.md` 与 `docs/plan/M1.md` 状态更新
 - [ ] `README.md` 当前进度同步（任务完成时）
 - [ ] commit `feat(sampler): add greedy next-token sampler`
 

@@ -79,8 +79,8 @@ T3 只做 default RoPE，不实现 dynamic/yarn/longrope 等扩展。
 - [ ] `tests/unit/test_rope.py` 全绿
 - [ ] 已确认 `head_dim=128` 路径，不误用 `hidden_size / num_attention_heads`
 - [ ] `uv run pytest tests/unit/test_config.py tests/unit/test_rmsnorm.py tests/unit/test_mlp.py tests/unit/test_rope.py -q` 全绿
-- [ ] `docs/3-kb/knowledge.md` 补 RoPE 知识卡
-- [ ] `docs/2-tasks/README.md` 与 `docs/1-plan/M1.md` 状态更新
+- [ ] `docs/kb/knowledge.md` 补 RoPE 知识卡
+- [ ] `docs/tasks/README.md` 与 `docs/plan/M1.md` 状态更新
 - [ ] `README.md` 当前进度同步
 - [ ] commit `feat(model): add RoPE aligned with Qwen3RotaryEmbedding`
 

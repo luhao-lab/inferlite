@@ -179,8 +179,8 @@ source Qwen3ForCausalLM state_dict
 - [ ] `lm_head.weight` 权重加载逻辑清晰
 - [ ] `tests/unit/test_qwen3_causal_lm.py` 或等价测试全绿
 - [ ] T0-T8 回归全绿
-- [ ] `docs/3-kb/knowledge.md` 补 logits / lm_head / tied embedding 知识点（如缺）
-- [ ] `docs/2-tasks/README.md` 与 `docs/1-plan/M1.md` 状态更新
+- [ ] `docs/kb/knowledge.md` 补 logits / lm_head / tied embedding 知识点（如缺）
+- [ ] `docs/tasks/README.md` 与 `docs/plan/M1.md` 状态更新
 - [ ] `README.md` 当前进度同步（任务完成时）
 - [ ] commit `feat(model): add Qwen3 causal LM logits`
 
