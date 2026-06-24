@@ -51,7 +51,8 @@ import torch.nn as nn
 
 from inferlite.config import ModelConfig
 from inferlite.model.attention import GQAAttention
-from inferlite.model.layers import RMSNorm, SwiGLUMLP
+from inferlite.model.kv_cache import KVCache, LayerKVCache
+from inferlite.model.layers import RMSNorm, RotaryEmbedding, SwiGLUMLP
 
 
 class DecoderLayer(nn.Module):
@@ -91,14 +92,23 @@ class DecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_ids: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        layer_kv_cache: LayerKVCache | None = None,
+        cache_position: int = 0,
     ) -> torch.Tensor:
-        """执行一个 Qwen3 decoder layer。
+        """执行一个 Qwen3 decoder block：self-attention + MLP。
 
         Args:
             hidden_states: [B, T, hidden_size]
                 当前层输入的 residual stream。
             position_ids: [B, T]
-                传给 attention 内部 RoPE，用于给 q/k 注入位置信息。
+                M1 兼容路径：传给 attention 内部 RoPE。
+                M2 路径使用 position_embeddings，但 position_ids 仍保留即 M1 单测继续可用。
+            position_embeddings: (cos, sin)，由 Qwen3Model 统一计算后传入。
+                None 时 Attention 内部自己根据 position_ids 计算（M1 兼容）。
+            layer_kv_cache: 当前层的 LayerKVCache。
+                None 时走 M1 无 cache 路径，非 None 时启用 cache 读写。
+            cache_position: 当前 token(s) 写入 cache 的起始槽位，= kv_cache.cur_len。
 
         Returns:
             [B, T, hidden_size]
@@ -113,8 +123,15 @@ class DecoderLayer(nn.Module):
         # 这里归一化每个 token 的 hidden_size 维，让 attention 输入尺度更稳定。
         hidden_states = self.input_layernorm(hidden_states)
         # self_attn 内部会执行：q/k/v projection -> q/k norm -> RoPE -> GQA attention -> o_proj。
+        # M2 路径：RoPE 后写入 cache，从 cache 读取完整历史 K/V。
         # 输出仍是 [B, T, H]，表示 attention 子层计算出的“增量”。
-        hidden_states = self.self_attn(hidden_states, position_ids)
+        hidden_states = self.self_attn(
+            hidden_states,
+            position_ids,
+            position_embeddings,
+            layer_kv_cache=layer_kv_cache,
+            cache_position=cache_position,
+        )
         # residual add：把 attention 增量加回主干。
         hidden_states = residual + hidden_states
 
@@ -168,6 +185,11 @@ class Qwen3Model(nn.Module):
             self.padding_idx,
         )
 
+        self.rotary_emb: RotaryEmbedding = RotaryEmbedding(config.head_dim, config.rope_theta)
+        # M2 把 rotary_emb 从每层 GQAAttention 移到 Qwen3Model，统一计算一次 cos/sin 传入所有层。
+        # 好处：num_hidden_layers=28 层不再重复计算 28 次，数值结果完全一致。
+        # 注意：各层 GQAAttention 仍保留自己的 rotary_emb 属性（M1 单测依赖它），未来 T4 完成后再考虑删除。
+
         # decoder layer 堆叠：每层都是 T5 实现的 DecoderLayer。
         # ModuleList 会把子模块注册进 state_dict，T7 加载权重时会形成类似：
         #   layers.0.self_attn.q_proj.weight
@@ -186,14 +208,17 @@ class Qwen3Model(nn.Module):
         self,
         input_ids: torch.Tensor,
         position_ids: torch.Tensor | None = None,
+        kv_cache: KVCache | None = None,
     ) -> torch.Tensor:
-        """执行 Qwen3 主干前向，返回最后一层 hidden states。
+        """Qwen3 backbone 前向，返回最后一层 hidden states。
 
         Args:
-            input_ids: [B, T]
-                token ids，来自 tokenizer encode 后的整数序列。
-            position_ids: [B, T]。如果不传，则按 0..T-1 自动生成。
-                T6 只处理无 KV cache 的 full forward，因此每个 batch 都从 0 开始。
+            input_ids: [B, T]  token ids。
+                M2 prefill: T = prompt 长度；
+                M2 decode:  T = 1（只传当前新 token，历史从 kv_cache 读取）。
+            position_ids: [B, T]。不传时按 0..T-1 自动生成。
+                M2 decode 步需传入绝对位置（不是从 0 重新开始），由 generate loop 负责传入。
+            kv_cache: 全模型 KVCache 容器。None 时走 M1 full attention 路径。
 
         Returns:
             last_hidden_state: [B, T, hidden_size]
@@ -211,13 +236,22 @@ class Qwen3Model(nn.Module):
         # hidden_states 是后续所有 decoder layers 传递的 residual stream。
         hidden_states = self.embed_tokens(input_ids)
 
+        # 统一计算一次 position_embeddings，传入所有层。
+        # M1 是各层 Attention 各自调用 self.rotary_emb，重复 28 次；
+        # M2 在 Model 层统一算一次并传入，数值结果完全相同。
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
         # Step 2: 逐层通过 decoder blocks。
-        # 每层都接收同一份 position_ids，用于内部 attention 的 RoPE。
-        # transformers 当前实现会在 model 层预先算 position_embeddings 再传给每层；
-        # inferlite 当前实现让每层 attention 自己根据 position_ids 计算 cos/sin。
-        # 两者接口不同，但数值目标等价。
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, position_ids)
+        # M2 路径：传入 position_embeddings + kv_cache.layers[i]，每层 Attention 自动读写 cache。
+        # kv_cache=None 时（M1 路径）：layer_kv_cache=None，行为与原屙实现完全相同。
+        for i, layer in enumerate(self.layers):
+            hidden_states = layer(
+                hidden_states,
+                position_ids,
+                position_embeddings=position_embeddings,
+                layer_kv_cache=kv_cache.layers[i] if kv_cache is not None else None,
+                cache_position=kv_cache.cur_len if kv_cache is not None else 0,
+            )
 
         # Step 3: final RMSNorm。
         # 这是 Qwen3Model 输出前的最后归一化；lm_head/logits 会在后续 T8 接在它后面。
@@ -291,20 +325,23 @@ class Qwen3ForCausalLM(nn.Module):
         input_ids: torch.Tensor,
         position_ids: torch.Tensor | None = None,
         logits_to_keep: int | None = None,
+        kv_cache: KVCache | None = None,
     ) -> torch.Tensor:
         """执行 CausalLM 前向，返回每个位置的 vocab logits。
 
         Args:
-            input_ids: [B, T]
-            position_ids: [B, T]，可选。不传时由内部 Qwen3Model 自动生成 0..T-1。
+            input_ids: [B, T]。M2 decode 步只传 1 个 token。
+            position_ids: [B, T]，可选。M2 decode 步需传入绝对位置。
+            logits_to_keep: 只保留最后 N 个位置的 logits，减少 lm_head 计算量。
+                decode 步传 1 可节省 vocab-size 级忾小计算。
+            kv_cache: 全模型 KVCache。None 时走 M1 路径。
 
         Returns:
             logits: [B, T, vocab_size]
-                logits[b, t, v] 表示第 b 条序列、第 t 个位置对词表 token v 的未归一化分数。
         """
         # Step 1: 先走 backbone，得到每个 token 的上下文表示。
         # 这里用关键字传 position_ids，避免未来 Qwen3Model.forward 参数顺序变化造成误传。
-        hidden_states = self.model(input_ids, position_ids=position_ids)
+        hidden_states = self.model(input_ids, position_ids=position_ids, kv_cache=kv_cache)
         if logits_to_keep is not None:
             hidden_states = hidden_states[:, -logits_to_keep:, :]
 
