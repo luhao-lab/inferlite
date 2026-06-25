@@ -8,13 +8,13 @@
 因此这里用 `Protocol` 定义一个结构化类型：只要某个对象支持
 `model(input_ids)` 并返回 logits Tensor，它就可以被 EngineCore 当作 LLMModel 使用。
 
-T12-pre（本任务卡）在原有基础上扩展了 `logits_to_keep` 参数，用来优化只计算最后几个 token 位置的
-logits，例如 `model(input_ids, logits_to_keep=1)` 可以节省前 T-1 个位置的 lm_head 计算和内存。
+M2-T4 在原有基础上扩展了 `position_ids` 和 `kv_cache` 两个可选参数：
+- `position_ids`：decode 阶段需要传绝对位置，而不是从 0 重新计数。
+- `kv_cache`：有 cache 时触发 prefill/decode 两阶段逻辑；None 时走 M1 full forward。
 
 注意：
 - `LLMModel` 不是模型实现，不会被实例化。
-- `__call__` 里的 `...` 不是 TODO，而是“只声明接口，不实现逻辑”。
-- 调用方可以传入 `logits_to_keep` 来控制 logits 范围；None 表示不截断。
+- `__call__` 里的 `...` 不是 TODO，而是"只声明接口，不实现逻辑"。
 - 真实逻辑由具体模型提供，例如 `Qwen3ForCausalLM.forward`。
 - FakeModel 只要实现 `__call__`，也能在单测里满足这个协议。
 """
@@ -23,19 +23,23 @@ from typing import Protocol
 
 import torch
 
+from inferlite.model.kv_cache import KVCache
+
 
 class LLMModel(Protocol):
-    """最小 LLM 推理协议：input_ids -> logits，支持可选的 logits_to_keep。
+    """最小 LLM 推理协议：input_ids -> logits，支持可选的 logits_to_keep / position_ids / kv_cache。
 
     这个协议描述的是 EngineCore 对模型的最低要求：
 
-        logits = model(input_ids)             # 默认返回完整 logits [B, T, V]
-        logits = model(input_ids, logits_to_keep=1)  # 仅返回最后一个位置的 logits
+        # M1 full forward（无 cache）
+        logits = model(input_ids)
+        logits = model(input_ids, logits_to_keep=1)
 
-    其中：
-    - input_ids: [B, T]，token id tensor。
-    - logits: [B, T, vocab_size]，每个位置对词表的未归一化分数。
-    - 若传入 logits_to_keep，只保留该数量的最后位置。
+        # M2 prefill
+        logits = model(input_ids, position_ids=pos, kv_cache=cache)
+
+        # M2 decode（每步只传 1 个 token）
+        logits = model(next_token, position_ids=abs_pos, kv_cache=cache)
 
     为什么定义 `__call__` 而不是 `forward`？
     - EngineCore 实际会调用 `model(input_ids)`。
@@ -44,13 +48,21 @@ class LLMModel(Protocol):
     """
 
     def __call__(
-        self, input_ids: torch.Tensor, *, logits_to_keep: int | None = None
+        self,
+        input_ids: torch.Tensor,
+        *,
+        logits_to_keep: int | None = None,
+        position_ids: torch.Tensor | None = None,
+        kv_cache: KVCache | None = None,
     ) -> torch.Tensor:
         """返回 logits。
 
         Args:
             input_ids: [B, T] 形状的 token ids。
-            logits_to_keep: 若为非 None，只返回最后 ``logits_to_keep`` 个位置的 logits。
+            logits_to_keep: 若为非 None，只返回最后 logits_to_keep 个位置的 logits。
+            position_ids: [B, T]，绝对位置。None 时模型内部自动生成 0..T-1。
+                decode 阶段必须传绝对位置（如 [[cur_len]]），否则 RoPE 每步都在位置 0。
+            kv_cache: 全模型 KVCache。None 走 M1 full attention；非 None 走 M2 两阶段。
 
         Returns:
             logits: [B, T, V] 或 [B, logits_to_keep, V]。
