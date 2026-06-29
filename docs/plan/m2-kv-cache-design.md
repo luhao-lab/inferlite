@@ -1,6 +1,6 @@
 # inferlite M2 设计文档：KV Cache
 
-> **状态**：设计中
+> **状态**：✅ 已完成（2026-06-29）
 > **作者**：luhao
 > **基于**：M1 tag `m1/naive-forward`（95 单测全通过，数值对齐 transformers）
 
@@ -89,6 +89,21 @@ M2 总量 = O(N · T)    比 M1 的 O(N · T²) 少了 T 倍
 | decode 单步 Attention | O(T²) ≈ 360,000 | O(T) ≈ 600 |
 | N=500 步总量 | O(N·T²) ≈ 1.8 亿 | O(N·T) ≈ 30 万 |
 | 理论加速比 | 1× | **600×** |
+
+**实测结果**（Mac M3 Pro，MPS，bfloat16，gen_tokens=128，见 `bench/results/2026-06-29-m2-kv-cache-mps-bf16.md`）：
+
+| prompt_tokens | M1 tok/s | M2 tok/s | 实测加速比 |
+|--------------|---------|---------|----------|
+| 32 | 13.8 | 24.9 | 1.80× |
+| 64 | 12.7 | 28.9 | 2.27× |
+| 128 | 9.6 | 25.7 | 2.67× |
+| 256 | 6.2 | 24.1 | 3.91× |
+| 512 | 3.3 | 24.1 | **7.36×** |
+
+**理论 600× vs 实测 7.36× 的差距说明**：
+- 理论值假设 Attention 是唯一瓶颈。实测中，每步 decode 的大头是把 28 层权重从内存读一遍（约数百 MB），这是 M1/M2 共有的 I/O 开销，KV Cache 无法消除。
+- 对于 Qwen3-0.6B（0.6B 参数 × 2 bytes ≈ 1.2 GB），单步权重读取远比 Attention 计算耗时，导致实测加速比远低于理论上限。
+- 权重越大、序列越长，实测加速比越高；M3 Continuous Batching 多请求共享权重读取后，收益会更显著。
 
 ### 1.4 代价：显存
 
@@ -622,7 +637,10 @@ for i, layer in enumerate(self.layers):
 
 | 文件 | 说明 |
 |------|------|
-| `docs/m2-kv-cache.md` | 对外文章（知乎发布版） |
+| `docs/plan/m2-kv-cache-design.md` | 本设计文档 |
+| `scripts/bench_kv_cache.py` | M1 vs M2 性能对比 benchmark 脚本 |
+| `bench/results/2026-06-29-m2-kv-cache-mps-bf16.md` | 实测结果归档 |
+| `docs/plan/m2-kv-cache-article.md`（待写） | 对外文章（知乎发布版） |
 
 ---
 
@@ -651,15 +669,15 @@ def test_kv_cache_output_matches_no_cache():
 
 ## 7. 实施计划
 
-| 步骤 | 子问题 | 内容 | 验收 |
-|------|--------|------|------|
-| S1 | A | 新建 `kv_cache.py` + `test_kv_cache.py` | 单测通过 |
-| S2 | B | 改 `attention.py`（接口 + cache 逻辑 + causal mask） | `test_attention_kv.py` 通过 |
-| S3 | C | 改 `qwen3.py`（position_embeddings 统一计算 + cache 透传） | 全部 95 个 M1 单测继续通过 |
-| S4 | D | 改 `protocol.py` + `core.py`（prefill/decode 拆分） | `test_generate_kv.py` 通过 |
-| S5 | D | 改 `cli.py`（device/dtype/max-seq-len 参数） | Qwen3-0.6B 在 MPS 上跑通 |
-| S6 | — | 写 `docs/m2-kv-cache.md` | — |
-| S7 | — | tag `m2/kv-cache`，生成知乎版 | — |
+| 步骤 | 子问题 | 内容 | 验收 | 状态 |
+|------|--------|------|------|------|
+| S1 | A | 新建 `kv_cache.py` + `test_kv_cache.py` | 单测通过 | ✅ |
+| S2 | B | 改 `attention.py`（接口 + cache 逻辑 + causal mask） | `test_attention_kv.py` 通过 | ✅ |
+| S3 | C | 改 `qwen3.py`（position_embeddings 统一计算 + cache 透传） | 全部 95 个 M1 单测继续通过 | ✅ |
+| S4 | D | 改 `protocol.py` + `core.py`（prefill/decode 拆分） | `test_generate_kv.py` 通过 | ✅ |
+| S5 | D | 改 `cli.py`（device/dtype/max-seq-len 参数） | Qwen3-0.6B 在 MPS 上跑通 | ✅ |
+| S6 | — | benchmark 脚本 + 结果归档 | `bench/results/` 有实测数据 | ✅ |
+| S7 | — | tag `m2/kv-cache`，生成知乎版 | 文章发布 | ⬜ |
 
 ---
 
