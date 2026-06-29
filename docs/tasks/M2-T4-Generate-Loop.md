@@ -3,7 +3,7 @@
 ## 元信息
 - **任务 ID**: M2-T4
 - **里程碑**: M2（KV Cache）
-- **状态**: ⬜ pending
+- **状态**: ✅ done
 - **前置**: M2-T3（Model 层 cache 透传）
 - **估时**: 2h
 
@@ -117,11 +117,11 @@ class LLMModel(Protocol):
 | 5 | decode 步 `position_ids` 是绝对位置（非从 0 开始） | `kv_cache.cur_len` | exact |
 
 ## DoD
-- [ ] `tests/unit/test_generate_kv.py` 全绿
-- [ ] `uv run pytest tests/ -q` 所有 M1 单测（95 个）继续通过
-- [ ] 有 cache == 无 cache（`torch.equal`）在 Qwen3-0.6B 规格小模型上验证
-- [ ] commit `feat(engine): add prefill/decode split with KV cache (M2-T4)`
-- [ ] `docs/tasks/README.md` 状态改 ✅
+- [x] `tests/unit/test_generate_kv.py` 全绿
+- [x] `uv run pytest tests/ -q` 所有 M1 单测（95 个）继续通过
+- [x] 有 cache == 无 cache（`torch.equal`）在 Qwen3-0.6B 规格小模型上验证
+- [x] commit `feat(engine): add prefill/decode split with KV cache (M2-T4)` (`0e13a42`)
+- [x] 任务状态改 ✅
 
 ## 坑（按概率排序）
 1. **prefill 的 `cur_len` 更新时机**：prefill `model()` 调用后立刻 `kv_cache.cur_len = T_p`，不是在 loop 里累加。

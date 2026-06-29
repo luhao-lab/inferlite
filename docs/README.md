@@ -132,7 +132,7 @@ inferlite/
 
 ## 当前进度
 
-M1 Qwen3 单序列推理 ✅ → **M2 KV Cache 进行中** → M3 Continuous Batching ⬜
+M1 Qwen3 单序列推理 🟡 → **M2 KV Cache ✅** → M3 Continuous Batching ⬜
 
 详见 [plan/PROGRESS.md](./plan/PROGRESS.md)
 

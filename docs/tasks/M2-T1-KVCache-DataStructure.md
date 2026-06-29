@@ -3,7 +3,7 @@
 ## 元信息
 - **任务 ID**: M2-T1
 - **里程碑**: M2（KV Cache）
-- **状态**: ⬜ pending
+- **状态**: ✅ done
 - **前置**: M1 全部完成（tag `m1/naive-forward`）
 - **估时**: 1h
 
@@ -93,11 +93,11 @@ class KVCache:
 | 6 | device 和 dtype 与参数一致 | 构造参数 | exact |
 
 ## DoD
-- [ ] `tests/unit/test_kv_cache.py` 全绿
-- [ ] `KVCache.from_config(ModelConfig.qwen3_0_6b(), B=1, max_seq_len=1024, dtype=torch.float32, device="cpu")` 分配正确
-- [ ] `uv run pytest tests/unit/test_kv_cache.py -q` 通过
-- [ ] commit `feat(model): add KVCache data structure (M2-T1)`
-- [ ] `docs/tasks/README.md` 状态改 ✅
+- [x] `tests/unit/test_kv_cache.py` 全绿
+- [x] `KVCache.from_config(ModelConfig.qwen3_0_6b(), B=1, max_seq_len=1024, dtype=torch.float32, device="cpu")` 分配正确
+- [x] `uv run pytest tests/unit/test_kv_cache.py -q` 通过
+- [x] commit `feat(model): add KVCache data structure (M2-T1)` (`474c04f`)
+- [x] 任务状态改 ✅
 
 ## 坑（按概率排序）
 1. **`cur_len` 不要放在 `LayerKVCache` 里**：各层共享同一个 `cur_len`，放在 `KVCache` 层管理，避免多层不同步的 bug。

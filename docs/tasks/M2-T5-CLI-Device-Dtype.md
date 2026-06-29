@@ -3,7 +3,7 @@
 ## 元信息
 - **任务 ID**: M2-T5
 - **里程碑**: M2（KV Cache）
-- **状态**: ⬜ pending
+- **状态**: ✅ done
 - **前置**: M2-T4（Generate Loop）
 - **估时**: 1h
 
@@ -105,11 +105,11 @@ kv_cache = KVCache.from_config(config, batch_size=1, max_seq_len=args.max_seq_le
 | 5 | `--dtype bf16` 显式指定 bf16 | `torch.bfloat16` | exact |
 
 ## DoD
-- [ ] `uv run python -m inferlite.cli --model <path> --prompt "hello" --device auto --dtype auto` 在当前机器上跑通
-- [ ] MPS 可用时自动选 mps + bf16
-- [ ] `uv run pytest tests/unit/test_cli.py -q` 全绿（含新增 M2 用例）
-- [ ] commit `feat(cli): add --device, --dtype, --max-seq-len for M2 (M2-T5)`
-- [ ] `docs/tasks/README.md` 状态改 ✅
+- [x] `uv run python -m inferlite.cli --model <path> --prompt "hello" --device auto --dtype auto` 在当前机器上跑通
+- [x] MPS 可用时自动选 mps + bf16
+- [x] `uv run pytest tests/unit/test_cli.py -q` 全绿（10 个用例）
+- [x] commit `feat(T5): add --device/--dtype/--max-seq-len, KVCache wiring, and tests` (`a0a2004`)
+- [x] 任务状态改 ✅
 
 ## 坑（按概率排序）
 1. **`mps` 上 bf16 兼容性**：Qwen3 的 `RMSNorm` 在 M1 里已有 fp32 upcast 再 cast 回原 dtype 的逻辑，bf16 应该没问题；但 `index_copy_` 在 MPS 上有限制，M2 用切片写入可以规避。

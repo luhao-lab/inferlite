@@ -3,7 +3,7 @@
 ## 元信息
 - **任务 ID**: M2-T2
 - **里程碑**: M2（KV Cache）
-- **状态**: ⬜ pending
+- **状态**: ✅ done
 - **前置**: M2-T1（KVCache 数据结构）
 - **估时**: 2h
 
@@ -101,11 +101,11 @@ if T > 1:
 | 6 | `kv_cache=None` 时行为与 M1 完全一致（兼容路径） | M1 `forward` | exact |
 
 ## DoD
-- [ ] `tests/unit/test_attention_kv.py` 全绿
-- [ ] `kv_cache=None` 时所有 M1 attention 单测继续通过：`uv run pytest tests/unit/test_attention.py -q`
-- [ ] 有 cache 的输出与无 cache fp32 误差 < 1e-5
-- [ ] commit `feat(model): add KV cache support to GQAAttention (M2-T2)`
-- [ ] `docs/tasks/README.md` 状态改 ✅
+- [x] `tests/unit/test_attention_kv.py` 全绿
+- [x] `kv_cache=None` 时所有 M1 attention 单测继续通过：`uv run pytest tests/unit/test_attention.py -q`
+- [x] 有 cache 的输出与无 cache fp32 误差 < 1e-5
+- [x] commit `feat(model): add KV cache support to GQAAttention (M2-T2)` (`8179b74`)
+- [x] 任务状态改 ✅
 
 ## 坑（按概率排序）
 1. **causal mask shape 变了**：有 cache 时 K 维度是 `cache_position + T`，mask 应是 `[T, T_k]` 不是 `[T, T]`；prefill 无 cache 时仍是 `[T, T]`。

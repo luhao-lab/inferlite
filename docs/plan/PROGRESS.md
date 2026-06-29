@@ -16,7 +16,7 @@
 | M | 状态 | Tag | 完成日期 | 文章 | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | **M1** Qwen3 单序列推理 | 🟡 | — | — | — | P1 数值对齐（T0/T1/T2 ✅, T3-T8 ⬜）+ P2 出字（T9-T11 ⬜） |
-| **M2** KV Cache | ⬜ | — | — | — | `ContiguousKVCache` |
+| **M2** KV Cache | ✅ | — | 2026-06-26 | — | T1~T5 全部完成，ContiguousKVCache + prefill/decode + MPS/bf16 |
 | **M3** Continuous Batching | ⬜ | — | — | — | `FCFSScheduler` + 三队列 |
 | **M4** PagedAttention (PyTorch) | ⬜ | — | — | — | `PagedKVCache`，伪版 |
 | **M5** 服务化收口 v1 | ⬜ | `v1.0` | — | — | P1 API+SSE / P2 Prefix+Reasoning / P3 Benchmark+CI |
@@ -72,6 +72,36 @@
   - `scripts/setup.sh` 加包骨架 + pre-commit hook 自动注册
   - `RMSNorm.variance_eps` 重命名为 `.eps`（与社区一致）
 - **工具链**：make setup → make preflight (ModelScope) → uv run pytest → CI
+
+### 2026-06-26 — M2 KV Cache 完成
+
+- **T1 KVCache 数据结构** (`474c04f`)
+  - `inferlite/model/kv_cache.py`：`LayerKVCache`（dataclass）+ `KVCache`（含 `from_config`/`reset`）
+  - 静态预分配 28 层 × [B, n_kv, max_seq_len, head_dim] tensor，`cur_len` 是唯一事实源
+  - `tests/unit/test_kv_cache.py`：from_config shape/dtype/device、reset、LayerKVCache 结构，共 7 个测试全绿
+
+- **T2 Attention KV Cache 接口** (`8179b74`)
+  - `GQAAttention.forward`：新增 `layer_kv_cache` + `cache_position` 参数
+  - Prefill：写入 `k[:, :, :T_p, :]`；Decode：追加写入 + `k[:, :, :cur_len+1, :]` 做 Attention
+  - `kv_cache=None` 完全兼容 M1 路径
+  - `tests/unit/test_attention_kv.py`：prefill/decode 输出一致性、兼容路径，fp32 误差 < 1e-5
+
+- **T3 Model Passthrough** (`1dd4c8d`)
+  - `Qwen3Model.forward` + `Qwen3ForCausalLM.__call__` 新增 `kv_cache`/`position_ids` 透传
+  - `position_embeddings` (cos/sin) 统一在 `Qwen3Model` 里算一次，传给各层
+  - 全部 95 个 M1 单测继续通过，无回归
+
+- **T4 Generate Loop 拆 Prefill/Decode** (`0e13a42`)
+  - `generate()` 新增 `kv_cache` 参数；有 cache 时走 prefill（全量 prompt）+ decode loop
+  - decode 每步 `position_ids = [[cur_len]]`（绝对位置），`cur_len` 在 generate 里维护
+  - `engine/protocol.py`：`ModelProtocol.__call__` 新增 `position_ids`/`kv_cache` 参数
+  - `tests/unit/test_generate_kv.py`：输出一致性、长度、EOS 停止、绝对位置、reset 复用，共 5 个测试
+
+- **T5 CLI device/dtype/max-seq-len** (`a0a2004`)
+  - `--device auto/cpu/mps/cuda`、`--dtype auto/bf16/fp16/fp32`、`--max-seq-len`
+  - `resolve_device_dtype()`：auto 优先级 mps > cuda > cpu，bf16 on gpu
+  - `model.to(device, dtype=dtype)` + `KVCache.from_config(..., device, dtype)` 接入
+  - `tests/unit/test_cli.py`：10 个用例覆盖新参数解析、resolve 逻辑、kv_cache wiring
 
 ### 2026-06-07（晚）— 整体规划体检 & R2 微调
 - M1 任务编号统一：去掉 `T0'/T0p` 撇号 → **T0** ModelConfig；其他 T1-T11 不动
