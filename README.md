@@ -13,7 +13,7 @@
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 
-[**🌐 在线文档站**](https://luhao-lab.github.io/inferlite/)  ·  [路线图](docs/1-plan/PLAN.md)  ·  [实时进度](docs/1-plan/PROGRESS.md)  ·  [当前作战 M1](docs/1-plan/M1.md)
+[**🌐 在线文档站**](https://luhao-lab.github.io/inferlite/)  ·  [路线图](docs/plan/PLAN.md)  ·  [实时进度](docs/plan/PROGRESS.md)  ·  [当前作战 M3](docs/plan/PLAN.md)
 
 </div>
 
@@ -34,7 +34,7 @@
 git clone git@github.com:luhao-lab/inferlite.git
 cd inferlite
 make setup            # uv 装环境 + sanity check
-make test             # 跑 12/12 单测，全绿
+make test             # 跑 123/123 单测，全绿
 make preflight        # 一键拉 Qwen3-0.6B + 端到端跑一句话
 ```
 
@@ -66,40 +66,30 @@ flowchart LR
     M6 --> M9
 ```
 
-完整 14 个里程碑见 [`docs/1-plan/PLAN.md`](docs/1-plan/PLAN.md)。
+完整 14 个里程碑见 [`docs/plan/PLAN.md`](docs/plan/PLAN.md)。
 
 ## 当前进度
 
 - ✅ **M0** 仓库 + 计划 + 知识库脚手架
-- 🟡 **M1** Qwen3 数值对齐 + 单序列前向
-  - ✅ T0 ModelConfig（5/5 单测）
-  - ✅ T1 RMSNorm（12/12 单测）
-  - ✅ T2 SwiGLU（10/10 单测）
-  - ✅ T3 RoPE（12/12 单测）
-  - ✅ T4 Attention（7/7 单测）
-  - ✅ T5 Block（5/5 单测）
-  - ✅ T6 Qwen3Model（6/6 单测）
-  - ✅ T7 WeightMap + HF 加载（7/7 单测）
-  - ✅ T8 L1 logits 对齐（14/14 T8 单测）
-  - ✅ T9 LLMModel Protocol + GreedySampler（4/4 单测）
-  - ✅ T10 EngineCore.step() 三段式（5/5 单测）
-  - ✅ T11 CLI + L2 e2e（5/5 单测）
-  - ✅ T12-pre Last-token logits optimization（87/87 全量回归）
-  - ✅ T12 Real Qwen3-0.6B smoke test（前 10 token 与 transformers 精确对齐）
-- ⬜ M2 KV Cache · M3 Continuous Batching · M4 PagedAttention · M5 API+SSE
+- ✅ **M1** Qwen3 数值对齐 + 单序列前向（tag: `m1/naive-forward`，2026-06-19）
+  - 95 个单测全绿，Qwen3-0.6B e2e 与 transformers 精确对齐
+- ✅ **M2** KV Cache（tag: `m2-complete`，2026-06-29）
+  - T1~T5 全部完成，新增 28 个单测，M1/M2 端到端 bench 实测加速 7.36×
+- 🟡 **M3** Continuous Batching（进行中）
+- ⬜ M4 PagedAttention · M5 API+SSE
 - ⬜ M6+ MoE / Spec Decoding / Triton / VLM …
 
-实时状态见 [`docs/1-plan/PROGRESS.md`](docs/1-plan/PROGRESS.md)。
+实时状态见 [`docs/plan/PROGRESS.md`](docs/plan/PROGRESS.md)。
 
 ## 文档导航
 
 | 入口 | 内容 |
 | --- | --- |
 | 🌐 [**在线文档站**](https://luhao-lab.github.io/inferlite/) | 极客风深色主题 · 全文搜索 · mermaid 渲染 |
-| 🗺️ [`docs/1-plan/`](docs/1-plan/) | PLAN（14 个 M）· PROGRESS · 当前作战 M1 |
-| 📋 [`docs/2-tasks/`](docs/2-tasks/) | 任务卡（一卡一文件，七字段闭环） |
-| 📚 [`docs/3-kb/`](docs/3-kb/) | knowledge / lessons / decisions / references |
-| ⚙️ [`docs/4-setup.md`](docs/4-setup.md) | 环境 + 仓库结构速查 |
+| 🗺️ [`docs/plan/`](docs/plan/) | PLAN（14 个 M）· PROGRESS · M1.md · M2.md |
+| 📋 [`docs/tasks/`](docs/tasks/) | 任务卡（一卡一文件，七字段闭环） |
+| 📚 [`docs/kb/`](docs/kb/) | knowledge / lessons / decisions / references |
+| ⚙️ [`docs/README.md`](docs/README.md) | 环境 + 仓库结构速查 |
 | 🤖 [`CLAUDE.md`](CLAUDE.md) | AI 协作约定（双轨制 · spec-driven） |
 
 ## 技术栈
@@ -122,7 +112,7 @@ flowchart LR
 /preflight         环境健康检查
 ```
 
-详见 [`docs/3-kb/decisions.md`](docs/3-kb/decisions.md) ADR-001。
+详见 [`docs/kb/decisions.md`](docs/kb/decisions.md) ADR-001。
 
 ## License
 

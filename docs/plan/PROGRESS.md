@@ -15,9 +15,9 @@
 
 | M | 状态 | Tag | 完成日期 | 文章 | 备注 |
 | --- | --- | --- | --- | --- | --- |
-| **M1** Qwen3 单序列推理 | 🟡 | — | — | — | P1 数值对齐（T0/T1/T2 ✅, T3-T8 ⬜）+ P2 出字（T9-T11 ⬜） |
-| **M2** KV Cache | ✅ | — | 2026-06-26 | — | T1~T5 全部完成，ContiguousKVCache + prefill/decode + MPS/bf16 |
-| **M3** Continuous Batching | ⬜ | — | — | — | `FCFSScheduler` + 三队列 |
+| **M1** Qwen3 单序列推理 | ✅ | `m1/naive-forward` | 2026-06-19 | — | 95 个单测全绿，Qwen3-0.6B e2e 与 transformers 精确对齐 |
+| **M2** KV Cache | ✅ | `m2-complete` | 2026-06-29 | — | T1~T5 全部完成，+28 单测，端到端 bench 7.36×@T=512 |
+| **M3** Continuous Batching | 🟡 | — | — | — | `FCFSScheduler` + 三队列 |
 | **M4** PagedAttention (PyTorch) | ⬜ | — | — | — | `PagedKVCache`，伪版 |
 | **M5** 服务化收口 v1 | ⬜ | `v1.0` | — | — | P1 API+SSE / P2 Prefix+Reasoning / P3 Benchmark+CI |
 
@@ -72,6 +72,15 @@
   - `scripts/setup.sh` 加包骨架 + pre-commit hook 自动注册
   - `RMSNorm.variance_eps` 重命名为 `.eps`（与社区一致）
 - **工具链**：make setup → make preflight (ModelScope) → uv run pytest → CI
+
+### 2026-06-07（晚）— 整体规划体检 & R2 微调
+- M1 任务编号统一：去掉 `T0'/T0p` 撇号 → **T0** ModelConfig；其他 T1-T11 不动
+- M1·P1 / M1·P2 替代 M1a / M1b（保留 Phase 概念，不再算两个独立里程碑）
+- M5 合并：M5a/M5b/M5c 改为 M5 单一里程碑 + 三个内部 Phase（与 M1 同思路）
+- M11 ↔ M12 顺序调整：Chunked Prefill 提前到 M11（长上下文前置依赖），Long context (YaRN) 后移到 M12
+- M1.md §4 任务总表：新增 `前置` 列 + `[P]` 并行标记列 → 一眼看出 T1/T2/T3 三线可并开
+- `scripts/doctor.sh` + `make doctor`：跨文档一致性自检（任务卡 ↔ M1.md ↔ PROGRESS ↔ README）
+- 知识缺口归档到 `docs/kb/knowledge.md` 顶部"📊 索引摘要"段（首次会话即可看到）
 
 ### 2026-06-26 — M2 KV Cache 完成
 
