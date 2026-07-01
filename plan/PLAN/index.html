@@ -1,0 +1,3796 @@
+
+<!doctype html>
+<html lang="zh" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="从零手撕的 LLM 推理引擎学习项目 · L0-aligned with transformers">
+      
+      
+      
+        <link rel="canonical" href="https://luhao-lab.github.io/inferlite/plan/PLAN/">
+      
+      
+        <link rel="prev" href="../..">
+      
+      
+        <link rel="next" href="../PROGRESS/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>路线图 PLAN - inferlite</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+  
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+  
+  <style>:root{--md-admonition-icon--note:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M0%208a8%208%200%201%201%2016%200A8%208%200%200%201%200%208m8-6.5a6.5%206.5%200%201%200%200%2013%206.5%206.5%200%200%200%200-13M6.5%207.75A.75.75%200%200%201%207.25%207h1a.75.75%200%200%201%20.75.75v2.75h.25a.75.75%200%200%201%200%201.5h-2a.75.75%200%200%201%200-1.5h.25v-2h-.25a.75.75%200%200%201-.75-.75M8%206a1%201%200%201%201%200-2%201%201%200%200%201%200%202%22/%3E%3C/svg%3E');--md-admonition-icon--abstract:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2.5%201.75v11.5c0%20.138.112.25.25.25h3.17a.75.75%200%200%201%200%201.5H2.75A1.75%201.75%200%200%201%201%2013.25V1.75C1%20.784%201.784%200%202.75%200h8.5C12.216%200%2013%20.784%2013%201.75v7.736a.75.75%200%200%201-1.5%200V1.75a.25.25%200%200%200-.25-.25h-8.5a.25.25%200%200%200-.25.25m13.274%209.537zl-4.557%204.45a.75.75%200%200%201-1.055-.008l-1.943-1.95a.75.75%200%200%201%201.062-1.058l1.419%201.425%204.026-3.932a.75.75%200%201%201%201.048%201.074M4.75%204h4.5a.75.75%200%200%201%200%201.5h-4.5a.75.75%200%200%201%200-1.5M4%207.75A.75.75%200%200%201%204.75%207h2a.75.75%200%200%201%200%201.5h-2A.75.75%200%200%201%204%207.75%22/%3E%3C/svg%3E');--md-admonition-icon--info:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M0%208a8%208%200%201%201%2016%200A8%208%200%200%201%200%208m8-6.5a6.5%206.5%200%201%200%200%2013%206.5%206.5%200%200%200%200-13M6.5%207.75A.75.75%200%200%201%207.25%207h1a.75.75%200%200%201%20.75.75v2.75h.25a.75.75%200%200%201%200%201.5h-2a.75.75%200%200%201%200-1.5h.25v-2h-.25a.75.75%200%200%201-.75-.75M8%206a1%201%200%201%201%200-2%201%201%200%200%201%200%202%22/%3E%3C/svg%3E');--md-admonition-icon--tip:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M8%201.5c-2.363%200-4%201.69-4%203.75%200%20.984.424%201.625.984%202.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621%201.49a.75.75%200%200%201-1.484.211c-.04-.282-.163-.547-.37-.847a9%209%200%200%200-.542-.68q-.126-.149-.268-.32C3.201%207.75%202.5%206.766%202.5%205.25%202.5%202.31%204.863%200%208%200s5.5%202.31%205.5%205.25c0%201.516-.701%202.5-1.328%203.259q-.142.172-.268.319c-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751%200%200%201-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848q.113-.133.213-.253c.561-.679.985-1.32.985-2.304%200-2.06-1.637-3.75-4-3.75M5.75%2012h4.5a.75.75%200%200%201%200%201.5h-4.5a.75.75%200%200%201%200-1.5M6%2015.25a.75.75%200%200%201%20.75-.75h2.5a.75.75%200%200%201%200%201.5h-2.5a.75.75%200%200%201-.75-.75%22/%3E%3C/svg%3E');--md-admonition-icon--success:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M0%208a8%208%200%201%201%2016%200A8%208%200%200%201%200%208m1.5%200a6.5%206.5%200%201%200%2013%200%206.5%206.5%200%200%200-13%200m10.28-1.72-4.5%204.5a.75.75%200%200%201-1.06%200l-2-2a.75.75%200%200%201%20.018-1.042.75.75%200%200%201%201.042-.018l1.47%201.47%203.97-3.97a.75.75%200%200%201%201.042.018.75.75%200%200%201%20.018%201.042%22/%3E%3C/svg%3E');--md-admonition-icon--question:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M0%208a8%208%200%201%201%2016%200A8%208%200%200%201%200%208m8-6.5a6.5%206.5%200%201%200%200%2013%206.5%206.5%200%200%200%200-13M6.92%206.085h.001a.749.749%200%201%201-1.342-.67c.169-.339.436-.701.849-.977C6.845%204.16%207.369%204%208%204a2.76%202.76%200%200%201%201.637.525c.503.377.863.965.863%201.725%200%20.448-.115.83-.329%201.15-.205.307-.47.513-.692.662-.109.072-.22.138-.313.195l-.006.004a6%206%200%200%200-.26.16%201%201%200%200%200-.276.245.75.75%200%200%201-1.248-.832c.184-.264.42-.489.692-.661q.154-.1.313-.195l.007-.004c.1-.061.182-.11.258-.161a1%201%200%200%200%20.277-.245C8.96%206.514%209%206.427%209%206.25a.61.61%200%200%200-.262-.525A1.27%201.27%200%200%200%208%205.5c-.369%200-.595.09-.74.187a1%201%200%200%200-.34.398M9%2011a1%201%200%201%201-2%200%201%201%200%200%201%202%200%22/%3E%3C/svg%3E');--md-admonition-icon--warning:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M6.457%201.047c.659-1.234%202.427-1.234%203.086%200l6.082%2011.378A1.75%201.75%200%200%201%2014.082%2015H1.918a1.75%201.75%200%200%201-1.543-2.575Zm1.763.707a.25.25%200%200%200-.44%200L1.698%2013.132a.25.25%200%200%200%20.22.368h12.164a.25.25%200%200%200%20.22-.368Zm.53%203.996v2.5a.75.75%200%200%201-1.5%200v-2.5a.75.75%200%200%201%201.5%200M9%2011a1%201%200%201%201-2%200%201%201%200%200%201%202%200%22/%3E%3C/svg%3E');--md-admonition-icon--failure:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2.344%202.343za8%208%200%200%201%2011.314%2011.314A8.002%208.002%200%200%201%20.234%2010.089a8%208%200%200%201%202.11-7.746m1.06%2010.253a6.5%206.5%200%201%200%209.108-9.275%206.5%206.5%200%200%200-9.108%209.275M6.03%204.97%208%206.94l1.97-1.97a.749.749%200%200%201%201.275.326.75.75%200%200%201-.215.734L9.06%208l1.97%201.97a.749.749%200%200%201-.326%201.275.75.75%200%200%201-.734-.215L8%209.06l-1.97%201.97a.749.749%200%200%201-1.275-.326.75.75%200%200%201%20.215-.734L6.94%208%204.97%206.03a.75.75%200%200%201%20.018-1.042.75.75%200%200%201%201.042-.018%22/%3E%3C/svg%3E');--md-admonition-icon--danger:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.504.43a1.516%201.516%200%200%201%202.437%201.713L10.415%205.5h2.123c1.57%200%202.346%201.909%201.22%203.004l-7.34%207.142a1.25%201.25%200%200%201-.871.354h-.302a1.25%201.25%200%200%201-1.157-1.723L5.633%2010.5H3.462c-1.57%200-2.346-1.909-1.22-3.004zm1.047%201.074L3.286%208.571A.25.25%200%200%200%203.462%209H6.75a.75.75%200%200%201%20.694%201.034l-1.713%204.188%206.982-6.793A.25.25%200%200%200%2012.538%207H9.25a.75.75%200%200%201-.683-1.06l2.008-4.418.003-.006-.004-.009-.006-.006-.008-.001q-.005%200-.009.004%22/%3E%3C/svg%3E');--md-admonition-icon--bug:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M4.72.22a.75.75%200%200%201%201.06%200l1%20.999a3.5%203.5%200%200%201%202.441%200l.999-1a.748.748%200%200%201%201.265.332.75.75%200%200%201-.205.729l-.775.776c.616.63.995%201.493.995%202.444v.327q0%20.15-.025.292c.408.14.764.392%201.029.722l1.968-.787a.75.75%200%200%201%20.556%201.392L13%207.258V9h2.25a.75.75%200%200%201%200%201.5H13v.5q-.002.615-.141%201.186l2.17.868a.75.75%200%200%201-.557%201.392l-2.184-.873A5%205%200%200%201%208%2016a5%205%200%200%201-4.288-2.427l-2.183.873a.75.75%200%200%201-.558-1.392l2.17-.868A5%205%200%200%201%203%2011v-.5H.75a.75.75%200%200%201%200-1.5H3V7.258L.971%206.446a.75.75%200%200%201%20.558-1.392l1.967.787c.265-.33.62-.583%201.03-.722a1.7%201.7%200%200%201-.026-.292V4.5c0-.951.38-1.814.995-2.444L4.72%201.28a.75.75%200%200%201%200-1.06m.53%206.28a.75.75%200%200%200-.75.75V11a3.5%203.5%200%201%200%207%200V7.25a.75.75%200%200%200-.75-.75ZM6.173%205h3.654A.17.17%200%200%200%2010%204.827V4.5a2%202%200%201%200-4%200v.327c0%20.096.077.173.173.173%22/%3E%3C/svg%3E');--md-admonition-icon--example:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M5%205.782V2.5h-.25a.75.75%200%200%201%200-1.5h6.5a.75.75%200%200%201%200%201.5H11v3.282l3.666%205.76C15.619%2013.04%2014.543%2015%2012.767%2015H3.233c-1.776%200-2.852-1.96-1.899-3.458Zm-2.4%206.565a.75.75%200%200%200%20.633%201.153h9.534a.75.75%200%200%200%20.633-1.153L12.225%2010.5h-8.45ZM9.5%202.5h-3V6c0%20.143-.04.283-.117.403L4.73%209h6.54L9.617%206.403A.75.75%200%200%201%209.5%206Z%22/%3E%3C/svg%3E');--md-admonition-icon--quote:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M1.75%202.5h10.5a.75.75%200%200%201%200%201.5H1.75a.75.75%200%200%201%200-1.5m4%205h8.5a.75.75%200%200%201%200%201.5h-8.5a.75.75%200%200%201%200-1.5m0%205h8.5a.75.75%200%200%201%200%201.5h-8.5a.75.75%200%200%201%200-1.5M2.5%207.75v6a.75.75%200%200%201-1.5%200v-6a.75.75%200%200%201%201.5%200%22/%3E%3C/svg%3E');}</style>
+
+
+  
+  
+  
+  
+  <style>:root{--md-annotation-icon:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M17%2013h-4v4h-2v-4H7v-2h4V7h2v4h4m-5-9A10%2010%200%200%200%202%2012a10%2010%200%200%200%2010%2010%2010%2010%200%200%200%2010-10A10%2010%200%200%200%2012%202%22/%3E%3C/svg%3E');}</style>
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../_assets/stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#inferlite-llm" class="md-skip">
+          跳转至
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="页眉">
+    <a href="../.." title="inferlite" class="md-header__button md-logo" aria-label="inferlite" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M6.5.75V2h3V.75a.75.75 0 0 1 1.5 0V2h1.25c.966 0 1.75.784 1.75 1.75V5h1.25a.75.75 0 0 1 0 1.5H14v3h1.25a.75.75 0 0 1 0 1.5H14v1.25A1.75 1.75 0 0 1 12.25 14H11v1.25a.75.75 0 0 1-1.5 0V14h-3v1.25a.75.75 0 0 1-1.5 0V14H3.75A1.75 1.75 0 0 1 2 12.25V11H.75a.75.75 0 0 1 0-1.5H2v-3H.75a.75.75 0 0 1 0-1.5H2V3.75C2 2.784 2.784 2 3.75 2H5V.75a.75.75 0 0 1 1.5 0m5.75 11.75a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25ZM5.75 5h4.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-4.5a.75.75 0 0 1-.75-.75v-4.5A.75.75 0 0 1 5.75 5m.75 4.5h3v-3h-3Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            inferlite
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              路线图 PLAN
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="cyan"  aria-label="Switch to light"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="black" data-md-color-accent="teal"  aria-label="Switch to dark"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="查找">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="分享" aria-label="分享" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜索引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/luhao-lab/inferlite" title="前往仓库" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    luhao-lab/inferlite
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="标签" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  首页
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+    
+  
+  规划
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tasks/M2-T1-KVCache-DataStructure/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  任务卡 (M2 活跃)
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tasks/M1-archive/M1-T0-ModelConfig/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  任务卡 (M1 归档)
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../kb/knowledge/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  知识库
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  首页
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="导航栏" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="inferlite" class="md-nav__button md-logo" aria-label="inferlite" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M6.5.75V2h3V.75a.75.75 0 0 1 1.5 0V2h1.25c.966 0 1.75.784 1.75 1.75V5h1.25a.75.75 0 0 1 0 1.5H14v3h1.25a.75.75 0 0 1 0 1.5H14v1.25A1.75 1.75 0 0 1 12.25 14H11v1.25a.75.75 0 0 1-1.5 0V14h-3v1.25a.75.75 0 0 1-1.5 0V14H3.75A1.75 1.75 0 0 1 2 12.25V11H.75a.75.75 0 0 1 0-1.5H2v-3H.75a.75.75 0 0 1 0-1.5H2V3.75C2 2.784 2.784 2 3.75 2H5V.75a.75.75 0 0 1 1.5 0m5.75 11.75a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25ZM5.75 5h4.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-4.5a.75.75 0 0 1-.75-.75v-4.5A.75.75 0 0 1 5.75 5m.75 4.5h3v-3h-3Z"/></svg>
+
+    </a>
+    inferlite
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/luhao-lab/inferlite" title="前往仓库" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    luhao-lab/inferlite
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    规划
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    规划
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    路线图 PLAN
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    路线图 PLAN
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0. 定位与不变量
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0. 定位与不变量">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#01-m0-t1-2026-06-07" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1 协作原则（基于 M0 + T1 经验沉淀，2026-06-07）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. 框架的 4 层抽象（贯穿所有里程碑）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. 框架的 4 层抽象（贯穿所有里程碑）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 模型扩展机制（如何支持多模型）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. 技术栈
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5 硬件矩阵 + 验证 + 评测约定（贯穿所有里程碑）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2.5 硬件矩阵 + 验证 + 评测约定（贯穿所有里程碑）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#251" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5.1 硬件可达性
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#252" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5.2 四层正确性验证策略
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#253-m5-m" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5.3 性能评测三件套（M5 一次性建好，后续 M 复用）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-m1m5demo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. 核心里程碑 M1–M5（"demo 跑起来"）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. 核心里程碑 M1–M5（&#34;demo 跑起来&#34;）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#m1-phase-1-qwen3-l1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M1 Phase 1 — Qwen3 数值对齐：先把 L1 打穿
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m1p2-engine-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M1·P2 — 单序列前向：Engine + CLI 能出字
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m2-kv-cache-on2-on" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M2 — KV Cache：从 O(n²) 到 O(n)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m3-continuous-batching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M3 — Continuous Batching：调度器的诞生
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m4-pagedattentionpytorch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M4 — PagedAttention（PyTorch 伪版）：显存当虚拟内存
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m5-api-prefix-cache-benchmark" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M5 — 服务化收口（API + Prefix Cache + Benchmark）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-m6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. 扩充里程碑 M6+（同仓库长期迭代，无截止）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. 扩充里程碑 M6+（同仓库长期迭代，无截止）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#m6-moe-for-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M6 — MoE 教学版（for-loop）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m7-speculative-decodingn-gram-lookup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M7 — Speculative Decoding（n-gram lookup）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m8-triton-pagedattention-kernel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M8 — Triton PagedAttention kernel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m9-moe-grouped-gemm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M9 — MoE 升级（grouped GEMM）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m10-speculative-decoding-eagle-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M10 — Speculative Decoding 升级（EAGLE-1 简化版）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m11-chunked-prefill" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M11 — Chunked Prefill
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m12-long-contextyarn-ntk-rope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M12 — Long context（YaRN / NTK RoPE 缩放）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m13-vlm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M13 — VLM 教学版（图→文）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m14-vlm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M14 — VLM 工程化
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M15+ — 持续扩充候选池（无截止）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. 模型类型矩阵与归属里程碑
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Agent / 你 分工 + 文章工作流
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Agent / 你 分工 + 文章工作流">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 分工边界
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 单个里程碑的闭环
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-m" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 文章结构模板（每篇 M 文章固定章节）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. 风险与应对
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. 立刻可做的下一步
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROGRESS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    进度 PROGRESS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../M1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M1 作战地图
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../m2-kv-cache-design/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2 KV Cache 设计
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    任务卡 (M2 活跃)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    任务卡 (M2 活跃)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M2-T1-KVCache-DataStructure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T1 KVCache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M2-T2-Attention-KVCache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T2 Attention KV
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M2-T3-Model-Passthrough/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T3 Model 透传
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M2-T4-Generate-Loop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T4 Generate Loop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M2-T5-CLI-Device-Dtype/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T5 CLI 设备
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    任务卡 (M1 归档)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    任务卡 (M1 归档)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T0-ModelConfig/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T0 ModelConfig
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T1-RMSNorm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T1 RMSNorm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T2-SwiGLU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T2 SwiGLU
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T3-RoPE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T3 RoPE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T4-GQA-Attention/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T4 GQA Attention
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T5-DecoderLayer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T5 DecoderLayer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T6-Qwen3Model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T6 Qwen3Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T7-WeightMap-load-from-hf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T7 WeightLoader
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T8-L1-logits-alignment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T8 Logits 对齐
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T9-LLMModel-GreedySampler/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T9 LLMModel+Sampler
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T10-EngineCore-step/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T10 EngineCore
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T11-CLI-L2-e2e/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T11 CLI e2e
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T12-smoke-test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T12 smoke test
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    知识库
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    知识库
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kb/knowledge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    knowledge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kb/lessons/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    lessons
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kb/blueprints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    blueprints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0. 定位与不变量
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0. 定位与不变量">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#01-m0-t1-2026-06-07" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.1 协作原则（基于 M0 + T1 经验沉淀，2026-06-07）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. 框架的 4 层抽象（贯穿所有里程碑）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. 框架的 4 层抽象（贯穿所有里程碑）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 模型扩展机制（如何支持多模型）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. 技术栈
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5 硬件矩阵 + 验证 + 评测约定（贯穿所有里程碑）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2.5 硬件矩阵 + 验证 + 评测约定（贯穿所有里程碑）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#251" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5.1 硬件可达性
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#252" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5.2 四层正确性验证策略
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#253-m5-m" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5.3 性能评测三件套（M5 一次性建好，后续 M 复用）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-m1m5demo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. 核心里程碑 M1–M5（"demo 跑起来"）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. 核心里程碑 M1–M5（&#34;demo 跑起来&#34;）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#m1-phase-1-qwen3-l1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M1 Phase 1 — Qwen3 数值对齐：先把 L1 打穿
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m1p2-engine-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M1·P2 — 单序列前向：Engine + CLI 能出字
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m2-kv-cache-on2-on" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M2 — KV Cache：从 O(n²) 到 O(n)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m3-continuous-batching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M3 — Continuous Batching：调度器的诞生
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m4-pagedattentionpytorch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M4 — PagedAttention（PyTorch 伪版）：显存当虚拟内存
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m5-api-prefix-cache-benchmark" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M5 — 服务化收口（API + Prefix Cache + Benchmark）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-m6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. 扩充里程碑 M6+（同仓库长期迭代，无截止）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. 扩充里程碑 M6+（同仓库长期迭代，无截止）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#m6-moe-for-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M6 — MoE 教学版（for-loop）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m7-speculative-decodingn-gram-lookup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M7 — Speculative Decoding（n-gram lookup）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m8-triton-pagedattention-kernel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M8 — Triton PagedAttention kernel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m9-moe-grouped-gemm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M9 — MoE 升级（grouped GEMM）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m10-speculative-decoding-eagle-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M10 — Speculative Decoding 升级（EAGLE-1 简化版）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m11-chunked-prefill" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M11 — Chunked Prefill
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m12-long-contextyarn-ntk-rope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M12 — Long context（YaRN / NTK RoPE 缩放）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m13-vlm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M13 — VLM 教学版（图→文）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m14-vlm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M14 — VLM 工程化
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M15+ — 持续扩充候选池（无截止）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. 模型类型矩阵与归属里程碑
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Agent / 你 分工 + 文章工作流
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Agent / 你 分工 + 文章工作流">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 分工边界
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 单个里程碑的闭环
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-m" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 文章结构模板（每篇 M 文章固定章节）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. 风险与应对
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. 立刻可做的下一步
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="导航栏" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../.." class="md-path__link">
+        
+  <span class="md-ellipsis">
+    首页
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="./" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    规划
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="inferlite-llm">inferlite — 从零手写 LLM 推理引擎 · 里程碑路线<a class="headerlink" href="#inferlite-llm" title="锚点">#</a></h1>
+<blockquote>
+<p>目标：在 <code>luhao-lab/inferlite</code> 仓库里，<strong>手敲</strong> 一个可读、可跑、可解释的 LLM 推理框架，覆盖 vLLM 的核心思想（KV cache / PagedAttention / Continuous Batching / Prefix Cache），并通过持续迭代不断扩充（MoE / Spec Decoding / Triton kernel / 量化 / VLM …）。</p>
+<p>节奏不绑定时间，按<strong>里程碑驱动</strong>：M1–M5 完成核心 demo（"跑得起来"），M6+ 在同仓库长期扩充，每个里程碑配一篇知乎文章。</p>
+</blockquote>
+<!-- anchor:positioning -->
+<h2 id="0">0. 定位与不变量<a class="headerlink" href="#0" title="锚点">#</a></h2>
+<ul>
+<li><strong>仓库</strong>：<code>luhao-lab/inferlite</code>（公开 / MIT）</li>
+<li><strong>代码全手敲</strong>：Agent 不写 <code>inferlite/*.py</code>，只做：研究、计划、资料检索、原理讲解、Review、文章草稿</li>
+<li><strong>里程碑闭环</strong>：每个 M 完成 = ① 代码 push ② 文章发知乎 ③ PROGRESS 更新</li>
+<li><strong>学习 &gt; 性能</strong>：优先可读性；性能优化作为后续里程碑慢慢加</li>
+<li><strong>对照参照</strong>：</li>
+<li><code>MinivLLM</code> — 最小教学版，模块映射底图</li>
+<li><code>nano-vllm</code>（GeeeekExplorer）— 千行版结构最干净</li>
+<li><code>vLLM v1</code>（<code>vllm/v1/</code>）— 工程级对照，<strong>只读不抄</strong></li>
+<li><code>SGLang</code> runtime — RadixAttention / 调度策略对照</li>
+</ul>
+<h3 id="01-m0-t1-2026-06-07">0.1 协作原则（基于 M0 + T1 经验沉淀，2026-06-07）<a class="headerlink" href="#01-m0-t1-2026-06-07" title="锚点">#</a></h3>
+<blockquote>
+<p>这五条是 R2 体检后从前期实操中抽取的高频失败模式，写在 PLAN 顶部用于约束后续每个 M。</p>
+</blockquote>
+<ol>
+<li>
+<p><strong>地基与算法是两个频道</strong>（→ Lessons L3）
+   同一会话 / 同一 commit 内，只 push <strong>基础设施改动</strong>（CI / Makefile / docs）或<strong>算法实现</strong>（layers / engine）之一，不要混。混在一起会让 review 失焦、回滚成本高。</p>
+</li>
+<li>
+<p><strong>任务卡 7 字段写完再开工</strong>
+   <code>前置 / 产出 / 算法核心 / L0 测试 / DoD / 易踩坑 / 估时</code> 全部填好（即使只填一句"待补"也比空着强）。开工后任何"哦还有一个事"先回填到对应字段，不直接动代码。</p>
+</li>
+<li>
+<p><strong>每张完成的任务卡 → 至少回填 1 处知识/教训</strong></p>
+</li>
+<li>完成总结段是最低门槛</li>
+<li>如果踩坑了 → <code>lessons.md</code> 加 L 编号</li>
+<li>如果用到了新论文/库/概念 → <code>knowledge.md</code> 对应章节加卡片</li>
+<li>
+<p>如果产生方法论决策 → <code>knowledge.md → 架构决策章节</code> 加 ADR</p>
+</li>
+<li>
+<p><strong><code>make doctor</code> 是 commit 的零成本守卫</strong>
+   PLAN/PROGRESS/任务卡 改动后 push 前手动跑一次。doctor 没绿不 push。</p>
+</li>
+<li>
+<p><strong><code>[P]</code> 标记并行机会，但单线推进默认</strong>
+   M1 §4 的 <code>[P] ✓</code> 表示<strong>可以</strong>并行，不表示<strong>必须</strong>并行。学习导向项目里，单线深读比并行铺面更高效；只在等模型下载等 IO 阻塞时考虑切到并行卡。</p>
+</li>
+</ol>
+<!-- anchor:architecture -->
+<h2 id="1-4">1. 框架的 4 层抽象（贯穿所有里程碑）<a class="headerlink" href="#1-4" title="锚点">#</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────────────────────────────┐
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│  L4  Server 层    协议入口（同步 / SSE / OpenAI 兼容）
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>├─────────────────────────────────────────┤
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│  L3  Engine 层    调度器（continuous batching / 采样 / spec）
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>├─────────────────────────────────────────┤
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│  L2  Memory 层    KV 存储与复用（cache → 分页 → 前缀复用）
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>├─────────────────────────────────────────┤
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│  L1  Model 层     一次前向（dense / MoE / attention kernel）
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>└─────────────────────────────────────────┘
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>本质问题</th>
+<th>解决方案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>L1 Model</td>
+<td>tokens → logits</td>
+<td>Transformer 前向</td>
+</tr>
+<tr>
+<td>L2 Memory</td>
+<td>KV 怎么存才能既不浪费又能复用</td>
+<td>分页 + 引用计数</td>
+</tr>
+<tr>
+<td>L3 Engine</td>
+<td>多请求怎么挤进同一次前向</td>
+<td>按 step 重组 batch</td>
+</tr>
+<tr>
+<td>L4 Server</td>
+<td>外部怎么调用</td>
+<td>HTTP/SSE 协议</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>一句话心智模型：<strong>用一个调度器（L3），把多个请求复用同一份模型权重（L1）和同一块显存（L2），通过统一协议（L4）对外服务。</strong></p>
+</blockquote>
+<h4 id="4">里程碑 × 4 层抽象映射表<a class="headerlink" href="#4" title="锚点">#</a></h4>
+<p>每个里程碑明确徽章一到两层主战场，避免"一个 M 什么都动":</p>
+<table>
+<thead>
+<tr>
+<th>里程碑</th>
+<th style="text-align: center;">L1 Model</th>
+<th style="text-align: center;">L2 Memory</th>
+<th style="text-align: center;">L3 Engine</th>
+<th style="text-align: center;">L4 Server</th>
+<th>主战场</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>M1·P1</strong> Qwen3 数值对齐</td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td>L1 算子 + 整模型 logits allclose</td>
+</tr>
+<tr>
+<td><strong>M1·P2</strong> 单序列前向</td>
+<td style="text-align: center;">⚫</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;"></td>
+<td>最小 Engine + CLI 出字</td>
+</tr>
+<tr>
+<td><strong>M2</strong> KV Cache</td>
+<td style="text-align: center;">⚫</td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td>L2 首实现 <code>ContiguousKVCache</code></td>
+</tr>
+<tr>
+<td><strong>M3</strong> Continuous Batching</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;"></td>
+<td>L3 调度器诞生</td>
+</tr>
+<tr>
+<td><strong>M4</strong> PagedAttention（PyTorch）</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;">⚫</td>
+<td style="text-align: center;"></td>
+<td>L2 升级为 <code>PagedKVCache</code></td>
+</tr>
+<tr>
+<td><strong>M5a</strong> API 闭环</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">⚫（sampler）</td>
+<td style="text-align: center;">⚫主</td>
+<td>OpenAI API + SSE</td>
+</tr>
+<tr>
+<td><strong>M5b</strong> 复用能力</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">⚫主（prefix）</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">⚫</td>
+<td>Prefix cache + reasoning 字段</td>
+</tr>
+<tr>
+<td><strong>M5c</strong> 工程收口</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">⚫</td>
+<td>Benchmark + CI + v1.0</td>
+</tr>
+<tr>
+<td><strong>M6</strong> MoE for-loop</td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td>L1 添加二路模型、验证 Registry</td>
+</tr>
+<tr>
+<td><strong>M7</strong> Spec Decoding (n-gram)</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;"></td>
+<td>L3 加 <code>Drafter</code> Plugin</td>
+</tr>
+<tr>
+<td><strong>M8</strong> Triton PagedAttention</td>
+<td style="text-align: center;">⚫</td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td>L1↔L2 边界 kernel</td>
+</tr>
+<tr>
+<td><strong>M9</strong> MoE grouped GEMM</td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td>L1 优化</td>
+</tr>
+<tr>
+<td><strong>M10</strong> EAGLE-1 spec</td>
+<td style="text-align: center;">⚫</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;"></td>
+<td>L3 插件升级</td>
+</tr>
+<tr>
+<td><strong>M11</strong> Long context (YaRN)</td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;">⚫</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td>L1 RoPE 重映射 + L2 长度</td>
+</tr>
+<tr>
+<td><strong>M12</strong> Chunked Prefill</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;"></td>
+<td>L3 调度策略</td>
+</tr>
+<tr>
+<td><strong>M13</strong> VLM 教学版</td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">⚫</td>
+<td>L1 + L4 multipart 请求</td>
+</tr>
+<tr>
+<td><strong>M14</strong> VLM 工程化</td>
+<td style="text-align: center;">⚫</td>
+<td style="text-align: center;">⚫主</td>
+<td style="text-align: center;">⚫</td>
+<td style="text-align: center;"></td>
+<td>L2 image hash prefix cache</td>
+</tr>
+<tr>
+<td><strong>M15+</strong></td>
+<td style="text-align: center;">取决于选题</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td>量化/MLA ⚫ L1 · TP/PP ⚫ L3 · Disagg P/D ⚫ L4</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>读法：<strong>主</strong>表示主战场（该 M 可调用、可讲验、可写文章的核心层），不带标记的⚫表示"有轻微修改但不是重点"。同一讲里程碑只让 1–2 层点亮，其他层保持不变量，你才能在文章里准确表达"这个 M 在学什么"。</p>
+</blockquote>
+<!-- anchor:model-extension -->
+<h3 id="11">1.1 模型扩展机制（如何支持多模型）<a class="headerlink" href="#11" title="锚点">#</a></h3>
+<p>让 L2/L3/L4 对"具体是哪个模型"无感知，靠三件套：<strong>Protocol + Registry + WeightMap</strong>。</p>
+<h4 id="a-llmmodel-protocolm1">A. 统一接口 <code>LLMModel</code> Protocol（M1 就定）<a class="headerlink" href="#a-llmmodel-protocolm1" title="锚点">#</a></h4>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">LLMModel</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">config</span><span class="p">:</span> <span class="n">ModelConfig</span>                       <span class="c1"># num_layers/num_kv_heads/head_dim/hidden/vocab/dtype/max_pos</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>        <span class="n">input_ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>   <span class="c1"># 纯文本走这里 [batch, seq]</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="n">inputs_embeds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># 多模态走这里（VLM 把图 token embedding 塞进来）</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="n">positions</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">=</span> <span class="o">...</span><span class="p">,</span>              <span class="c1"># 位置（PagedAttention 需要）</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        <span class="n">kv_cache</span><span class="p">:</span> <span class="n">KVCache</span> <span class="o">=</span> <span class="o">...</span><span class="p">,</span>              <span class="c1"># 框架统一的 cache 对象</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>                              <span class="c1"># logits [batch, seq, vocab]</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>        <span class="o">...</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="nd">@classmethod</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_from_hf</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">hf_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;LLMModel&quot;</span><span class="p">:</span> <span class="o">...</span>
+</span></code></pre></div>
+<p>调度器 / PagedAttention / Server <strong>只调 <code>model.forward(...)</code>，永不导入具体模型类</strong>。</p>
+<blockquote>
+<p><strong>M1 设计纪律</strong>：哪怕只支持文本，<code>forward</code> 签名也要保留 <code>inputs_embeds</code> 参数（默认 None），M13 上 VLM 时零返工。</p>
+</blockquote>
+<h4 id="b-registrym6">B. 模型注册表 Registry（M6 引入）<a class="headerlink" href="#b-registrym6" title="锚点">#</a></h4>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@register</span><span class="p">(</span><span class="s2">&quot;Qwen3ForCausalLM&quot;</span><span class="p">)</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">Qwen3</span><span class="p">(</span><span class="n">LLMModel</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="nd">@register</span><span class="p">(</span><span class="s2">&quot;Qwen3MoeForCausalLM&quot;</span><span class="p">)</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">Qwen3Moe</span><span class="p">(</span><span class="n">LLMModel</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">load_model</span><span class="p">(</span><span class="n">hf_path</span><span class="p">):</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">arch</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">hf_path</span><span class="si">}</span><span class="s2">/config.json&quot;</span><span class="p">))[</span><span class="s2">&quot;architectures&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="k">return</span> <span class="n">MODEL_REGISTRY</span><span class="p">[</span><span class="n">arch</span><span class="p">]</span><span class="o">.</span><span class="n">load_from_hf</span><span class="p">(</span><span class="n">hf_path</span><span class="p">)</span>
+</span></code></pre></div>
+<p>按 HF <code>config.json</code> 的 <code>architectures</code> 字段查表分发（vLLM <code>model_executor/models/registry.py</code> 同款）。</p>
+<h4 id="c-weightmap-hf">C. WeightMap（每个模型自己声明 HF → 自有命名）<a class="headerlink" href="#c-weightmap-hf" title="锚点">#</a></h4>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Qwen3</span><span class="p">:</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">WEIGHT_MAP</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>        <span class="s2">&quot;model.embed_tokens.weight&quot;</span><span class="p">:</span> <span class="s2">&quot;tok_emb.weight&quot;</span><span class="p">,</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>        <span class="s2">&quot;model.layers.</span><span class="si">{l}</span><span class="s2">.self_attn.q_proj.weight&quot;</span><span class="p">:</span> <span class="s2">&quot;layers.</span><span class="si">{l}</span><span class="s2">.attn.wq.weight&quot;</span><span class="p">,</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>        <span class="c1"># ... 约 20–30 条</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        <span class="s2">&quot;lm_head.weight&quot;</span><span class="p">:</span> <span class="s2">&quot;lm_head.weight&quot;</span><span class="p">,</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="p">}</span>
+</span></code></pre></div>
+<p>加载逻辑统一在框架层：遍历 safetensors → 查 WEIGHT_MAP → 塞进对应参数。</p>
+<h4 id="d">D. 差异如何被"消化"在模型类内部<a class="headerlink" href="#d" title="锚点">#</a></h4>
+<table>
+<thead>
+<tr>
+<th>差异点</th>
+<th>框架怎么不关心</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Attention 类型（MHA/GQA/MQA）</td>
+<td>模型内部决定 head 切分；cache 只看 <code>num_kv_heads</code></td>
+</tr>
+<tr>
+<td>位置编码（RoPE/ALiBi/NoPE）</td>
+<td>模型内部加；cache 只存 K/V</td>
+</tr>
+<tr>
+<td>Norm（RMSNorm/LayerNorm）</td>
+<td>模型内部</td>
+</tr>
+<tr>
+<td>FFN（SwiGLU/GeGLU/MoE）</td>
+<td>模型内部；MoE forward 黑盒</td>
+</tr>
+<tr>
+<td>词表 / 上下文长度</td>
+<td>来自 <code>ModelConfig</code>，sampler 读 <code>vocab_size</code></td>
+</tr>
+<tr>
+<td>Tokenizer</td>
+<td>不归框架，用 <code>transformers.AutoTokenizer</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="e-hookm9">E. 进阶 Hook（M9+ 视需要再加）<a class="headerlink" href="#e-hookm9" title="锚点">#</a></h4>
+<table>
+<thead>
+<tr>
+<th>Hook</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_input_embeddings(input_ids)</code></td>
+<td>VLM 注入 image token embedding</td>
+</tr>
+<tr>
+<td><code>attention_metadata</code></td>
+<td>让 attention 知道 prefill/decode、block_table 映射</td>
+</tr>
+<tr>
+<td><code>sampler</code></td>
+<td>大多数共用，特殊模型可重写</td>
+</tr>
+<tr>
+<td><code>lora_adapter_hook</code></td>
+<td>LoRA serving</td>
+</tr>
+</tbody>
+</table>
+<h4 id="f">F. 落地节奏（关键）<a class="headerlink" href="#f" title="锚点">#</a></h4>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>模型扩展机制实现度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>M1·P1–M5</strong></td>
+<td>单文件 <code>inferlite/model/qwen3.py</code>，<strong>不做 registry</strong>，先钉 <code>LLMModel</code> / <code>Sampler</code> / <code>EngineCore.step()</code> 三个最小契约；KV / Scheduler / Executor / Drafter 只保留占位，等 M2/M3/M7 用真实需求反推签名</td>
+</tr>
+<tr>
+<td><strong>M6</strong></td>
+<td>加入 <code>model/registry.py</code> + <code>qwen3_moe.py</code>，按 <code>architectures</code> 字段分发；契约第一次被验证</td>
+</tr>
+<tr>
+<td><strong>M9+</strong></td>
+<td>每个新模型 100–200 行（attention + MLP + WEIGHT_MAP），90% 框架代码完全复用</td>
+</tr>
+</tbody>
+</table>
+<p><strong>M1 关键纪律</strong>：哪怕只有一个模型，也要<strong>走 <code>LLMModel</code> 接口调用</strong>，不要在 cli 里直接 <code>Qwen3()</code>。但除 <code>LLMModel</code> 外的协议不要过早追求“签名稳定”，避免 M2/M3 返工。</p>
+<!-- anchor:tech-stack -->
+<h2 id="2">2. 技术栈<a class="headerlink" href="#2" title="锚点">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>选型</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仓库</td>
+<td><code>luhao-lab/inferlite</code></td>
+<td>已创建，MIT，公开</td>
+</tr>
+<tr>
+<td>语言</td>
+<td>Python 3.11</td>
+<td>教学优先</td>
+</tr>
+<tr>
+<td>DL 框架</td>
+<td>PyTorch 2.4+（当前 lock：2.12.0）</td>
+<td>SDPA、Triton 入口成熟；数值对齐以 lockfile 为准</td>
+</tr>
+<tr>
+<td>模型</td>
+<td><strong>Qwen3-0.6B</strong>（主，M1–M5） / M13 VLM 模型待定</td>
+<td>Qwen3-0.6B 同权重支持 thinking/non-thinking；VLM 候选到 M13 前再按可下载性、显存和架构复杂度确认</td>
+</tr>
+<tr>
+<td>Tokenizer</td>
+<td><code>transformers</code> 直接复用</td>
+<td>不造 BPE 轮子</td>
+</tr>
+<tr>
+<td>数值基准</td>
+<td><code>transformers==5.10.2</code>（当前 lock）</td>
+<td>L0/L1 allclose 只承诺对齐该版本，避免 HF 内部实现升级导致测试漂移</td>
+</tr>
+<tr>
+<td>Attention</td>
+<td><code>F.scaled_dot_product_attention</code> → 自写 PagedAttention（后期 Triton）</td>
+<td>渐进</td>
+</tr>
+<tr>
+<td>服务层</td>
+<td>FastAPI</td>
+<td>SSE 流式省事</td>
+</tr>
+<tr>
+<td>硬件</td>
+<td>Mac MPS（M1–M7 主开发） + GPU（M5 benchmark / M8 Triton 必需，按需租用云 GPU）</td>
+<td>见 §2.5 硬件矩阵</td>
+</tr>
+</tbody>
+</table>
+<!-- anchor:hardware-validation -->
+<h2 id="25">2.5 硬件矩阵 + 验证 + 评测约定（贯穿所有里程碑）<a class="headerlink" href="#25" title="锚点">#</a></h2>
+<h3 id="251">2.5.1 硬件可达性<a class="headerlink" href="#251" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>里程碑</th>
+<th>Mac MPS (16GB+)</th>
+<th>CPU only</th>
+<th>单 GPU (A10/3090+)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M1–M3</td>
+<td>流畅，10–30 tok/s</td>
+<td>慢但可跑</td>
+<td>100+ tok/s</td>
+</tr>
+<tr>
+<td>M4 PagedAttention (PyTorch 伪版)</td>
+<td>正确性可验</td>
+<td>可跑</td>
+<td>显存利用率才有意义</td>
+</tr>
+<tr>
+<td>M5 benchmark</td>
+<td>主开发可 Mac，<strong>性能数对照必须 GPU</strong></td>
+<td>不推荐</td>
+<td>必需</td>
+</tr>
+<tr>
+<td>M6 MoE A2.7B</td>
+<td>32GB 内存够，速度感人</td>
+<td>太慢</td>
+<td>推荐</td>
+</tr>
+<tr>
+<td>M7 n-gram Spec</td>
+<td>全平台可跑</td>
+<td>可</td>
+<td>推荐</td>
+</tr>
+<tr>
+<td><strong>M8 Triton kernel</strong></td>
+<td><strong>不支持 MPS</strong></td>
+<td>不支持</td>
+<td><strong>必需 NVIDIA GPU</strong></td>
+</tr>
+<tr>
+<td>M9+ (grouped GEMM / EAGLE / 量化 / TP/PP / VLM)</td>
+<td>大概率不支持</td>
+<td>—</td>
+<td>必需</td>
+</tr>
+</tbody>
+</table>
+<p><strong>硬件路径</strong>：Mac 主开发到 M7；M5 benchmark 与 M8 起按需租用云 GPU（Colab Pro / AutoDL / RunPod / Lambda 等），不建议自购卡。</p>
+<h3 id="252">2.5.2 四层正确性验证策略<a class="headerlink" href="#252" title="锚点">#</a></h3>
+<p>每个函数 / 模块 / 系统按需做这四层验证，对应文件按目录分类：</p>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>粒度</th>
+<th>ground truth 来源</th>
+<th>文件位置</th>
+<th>适用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>L0 单元</strong></td>
+<td>单函数 / 单算子</td>
+<td>① 数学闭式定义 / ② <code>transformers</code> 同名函数 / ③ 性质断言</td>
+<td><code>tests/unit/test_&lt;fn&gt;.py</code></td>
+<td>rope / rmsnorm / silu / swiglu / attention 等</td>
+</tr>
+<tr>
+<td><strong>L1 数值对齐</strong></td>
+<td>单模块 forward</td>
+<td><code>transformers</code> 同模型 logits：<code>torch.allclose(my, ref, atol=1e-3)</code></td>
+<td><code>tests/module/test_&lt;mod&gt;_logits.py</code></td>
+<td>Attention 层、FFN 层、单层 Decoder、整模型 forward</td>
+</tr>
+<tr>
+<td><strong>L2 端到端行为</strong></td>
+<td>整模型 + 调度</td>
+<td>固定 seed + 贪心解码，断言 token 序列与 <code>transformers.generate</code> 完全一致</td>
+<td><code>tests/e2e/test_&lt;scene&gt;.py</code></td>
+<td>所有里程碑的 smoke test</td>
+</tr>
+<tr>
+<td><strong>L3 不变式</strong></td>
+<td>系统状态</td>
+<td>内部断言（无外部 ref）</td>
+<td><code>tests/invariant/test_&lt;sys&gt;.py</code></td>
+<td>KV 长度、refcount、scheduler 三队列守恒、spec 输出不变</td>
+</tr>
+</tbody>
+</table>
+<h4 id="l0-ground-truth">L0 单元测试 — 三种 ground truth 来源<a class="headerlink" href="#l0-ground-truth" title="锚点">#</a></h4>
+<ul>
+<li><strong>① 数学闭式定义</strong>：<code>rmsnorm = x * rsqrt(x.pow(2).mean(-1)+eps) * w</code>、<code>swiglu = silu(x@Wg) * (x@Wu)</code></li>
+<li><strong>② <code>transformers</code> 同名函数</strong>：<code>apply_rotary_pos_emb</code>、<code>repeat_kv</code>、<code>scaled_dot_product_attention</code></li>
+<li><strong>③ 性质断言</strong>：<code>attention(causal=True)</code> 位置 i 的输出只受位置 ≤ i 影响；<code>softmax(x).sum(-1) == 1</code></li>
+</ul>
+<p><strong>M1 典型 L0 清单</strong>（写 Qwen3 时同步产出）：</p>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>ground truth</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>build_rope</code> / <code>apply_rope</code></td>
+<td>transformers <code>apply_rotary_pos_emb</code></td>
+</tr>
+<tr>
+<td><code>rmsnorm</code></td>
+<td>闭式公式</td>
+</tr>
+<tr>
+<td><code>swiglu</code></td>
+<td>闭式公式</td>
+</tr>
+<tr>
+<td><code>repeat_kv</code> (GQA)</td>
+<td><code>x.repeat_interleave(n_rep, dim=-3)</code></td>
+</tr>
+<tr>
+<td><code>attention(q,k,v,causal)</code></td>
+<td><code>F.scaled_dot_product_attention</code> + causal 性质</td>
+</tr>
+<tr>
+<td><code>Qwen3Attention.forward</code></td>
+<td>transformers 同层</td>
+</tr>
+<tr>
+<td><code>Qwen3MLP.forward</code></td>
+<td>transformers 同层</td>
+</tr>
+<tr>
+<td><code>Qwen3DecoderLayer.forward</code></td>
+<td>transformers 同层</td>
+</tr>
+</tbody>
+</table>
+<h4 id="l3">L3 关键不变式速查<a class="headerlink" href="#l3" title="锚点">#</a></h4>
+<ul>
+<li>KV cache：<code>cache.shape[len] == prompt_len + step</code></li>
+<li>Scheduler：<code>len(waiting) + len(running) + len(finished) == total_requests</code></li>
+<li>Block manager：<code>sum(refcount) == sum(block_table 中所有引用)</code></li>
+<li>Prefix cache：相同前缀两请求 → 前缀部分 block_id 完全一致</li>
+<li>Spec decoding：任何接受率下，最终输出 == 不开 spec 的输出</li>
+</ul>
+<h4 id="_1">测试目录与跑法<a class="headerlink" href="#_1" title="锚点">#</a></h4>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>tests/
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>  conftest.py              # 共享 fixture：tiny_config（4 层/8 head/64 dim）、tiny_qwen3
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>  unit/                    # L0 — 函数级，秒级
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>  module/                  # L1 — 模块级数值对齐，~10s
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>  e2e/                     # L2 — 行为对齐，~分钟
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>  invariant/               # L3 — 系统不变式
+</span></code></pre></div>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>pytest<span class="w"> </span>tests/unit<span class="w">                    </span><span class="c1"># 改一个函数就跑</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>pytest<span class="w"> </span>tests/module<span class="w">                  </span><span class="c1"># 改一个模块就跑</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>pytest<span class="w"> </span>tests<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;not slow&quot;</span><span class="w">           </span><span class="c1"># 默认（跳过加载真实大模型的）</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>pytest<span class="w"> </span>tests<span class="w">                         </span><span class="c1"># 全量</span>
+</span></code></pre></div>
+<p><strong>工程纪律</strong>：
+1. <strong>TDD-lite</strong>：写核心数学函数前，先写 5–10 行 ground truth 调用，再写实现去对齐
+2. <strong>fixture 共享</strong>：<code>conftest.py</code> 造 tiny 模型，所有测试复用
+3. <strong>slow 标签</strong>：加载真实 Qwen3-0.6B 的测试打 <code>@pytest.mark.slow</code>，平时跳过</p>
+<p><strong>CI 约定</strong>：M1–M4 不上 CI（本地 pytest 即可）；<strong>M5 引入最小 GitHub Actions</strong>，跑 CPU-only 的 <code>unit + module(tiny) + invariant</code>；e2e/slow 本地手跑。README 加 CI badge。</p>
+<h3 id="253-m5-m">2.5.3 性能评测三件套（M5 一次性建好，后续 M 复用）<a class="headerlink" href="#253-m5-m" title="锚点">#</a></h3>
+<p><strong>核心指标</strong>（OpenAI 业界标准）：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>含义</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>TTFT</strong></td>
+<td>Time To First Token (ms)</td>
+<td>用户体感</td>
+</tr>
+<tr>
+<td><strong>ITL / TPOT</strong></td>
+<td>Inter-Token Latency (ms)</td>
+<td>流式速度</td>
+</tr>
+<tr>
+<td><strong>Throughput</strong></td>
+<td>聚合 tok/s</td>
+<td>服务器成本</td>
+</tr>
+<tr>
+<td>Mem</td>
+<td>GPU 显存峰值 (GB)</td>
+<td>M4 之后必看</td>
+</tr>
+<tr>
+<td>p50/p95/p99</td>
+<td>请求级 latency 分布</td>
+<td>看长尾</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Benchmark 三件套</strong>：</p>
+<ol>
+<li><strong>内置 micro-bench</strong>：<code>inferlite bench --model qwen3-0.6b --prompt-len 256 --gen-len 128 --concurrency 1,4,8,16</code></li>
+<li><strong>对照 transformers baseline</strong>：证明教学版相对朴素实现有 N 倍提升（文章爽点）</li>
+<li><strong>对照 vLLM upper bound</strong>：证明能达官方 30–50%</li>
+</ol>
+<p><strong>标准 prompt 集</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>数据集</th>
+<th>用途</th>
+<th>规模</th>
+<th>为什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ShareGPT-100</strong>（主）</td>
+<td>性能 benchmark 主战场</td>
+<td>100 条真实对话</td>
+<td>长度方差大，才能测出 continuous batching / PagedAttention / prefix cache 的真实收益；vLLM/SGLang 论文事实标准，数字可横向对比</td>
+</tr>
+<tr>
+<td><strong>GSM8K-20</strong>（选）</td>
+<td>M5 reasoning 模式验证</td>
+<td>20 条数学题</td>
+<td>长 CoT 输出，暴露 reasoning 模式下 KV cache 容量、SSE <code>reasoning_content</code> 分流、长生成 ITL 稳定性</td>
+</tr>
+<tr>
+<td><del>MMLU</del>（<strong>不用</strong>）</td>
+<td>—</td>
+<td>—</td>
+<td>输出只有 1 token，调度器/PagedAttention 无用武之地，等于"拉力测试评 F1"</td>
+</tr>
+</tbody>
+</table>
+<p><strong>固定 <code>--seed 42</code></strong> 保证可复现。</p>
+<p><strong>评测一致性五原则</strong>：
+1. 同 prompt 集 + 同 batch + 同硬件 + 同精度（bf16）
+2. Warmup 一轮后再统计
+3. 三家精度必须一致（避免 fp32 vs bf16 对比）
+4. 跑 bench 时机器静默（不开 Chrome / 不切训练任务）
+5. 数据落 <code>bench/results/&lt;date&gt;-&lt;hardware&gt;.md</code>，每次跑都归档</p>
+<p><strong>M5 输出的标准对照表</strong>（文章用）：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>模型：Qwen3-0.6B  硬件：A10 24GB  精度：bf16  prompt：ShareGPT-100  seed=42
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>| 框架           | conc=1 TTFT | conc=1 ITL | conc=8 TTFT | conc=8 Throughput | Mem |
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>| transformers  | 120 ms      | 25 ms      | 980 ms      | 60 tok/s          | 5.2 GB |
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>| inferlite     | 95 ms       | 12 ms      | 110 ms      | 380 tok/s         | 18.5 GB |
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>| vLLM          | 80 ms       | 8 ms       | 92 ms       | 920 tok/s         | 21.3 GB |
+</span></code></pre></div>
+<p>文章一句话总结模板：「inferlite 用 vLLM <strong>1/N</strong> 的代码量，拿到 vLLM <strong>X%</strong> 的性能、比 transformers 快 <strong>Y×</strong>。」</p>
+<!-- anchor:milestones-core -->
+<h2 id="3-m1m5demo">3. 核心里程碑 M1–M5（"demo 跑起来"）<a class="headerlink" href="#3-m1m5demo" title="锚点">#</a></h2>
+<p>每个里程碑给出：<strong>完成定义</strong> / <strong>关键概念</strong> / <strong>必读资料</strong> / <strong>配套文章</strong>。
+不给时间，按你节奏推进；每完成一个，仓库打 tag <code>v0.&lt;N&gt;</code>。</p>
+<h3 id="m1-phase-1-qwen3-l1">M1 Phase 1 — Qwen3 数值对齐：先把 L1 打穿<a class="headerlink" href="#m1-phase-1-qwen3-l1" title="锚点">#</a></h3>
+<ul>
+<li>
+<p><strong>L 层覆盖</strong>：L1 Model 主战场</p>
+</li>
+<li>
+<p><strong>完成定义</strong>：</p>
+</li>
+<li><code>RMSNorm / SwiGLU / RoPE / Attention / WeightMap / Qwen3Model</code> 手写完成</li>
+<li><code>tests/unit/</code> 8 个 L0 单元测试全绿</li>
+<li><code>tests/module/test_qwen3_logits.py</code> 与当前 lock 的 <code>transformers==5.10.2</code> logits <code>allclose(atol=1e-3, rtol=1e-3)</code></li>
+<li><strong>显式不做</strong>：CLI、Engine、KV cache、Scheduler、Server、文章定稿</li>
+<li><strong>硬件</strong>：Mac MPS 主开发；必要时 CPU 跑小 shape debug</li>
+<li><strong>关键概念</strong>：HF safetensors 加载、GQA、RoPE、QK-norm、RMSNorm、SwiGLU、tie embedding</li>
+<li><strong>必读</strong>：</li>
+<li><code>transformers</code> 当前 lock 版本的 <code>models/qwen3/modeling_qwen3.py</code></li>
+<li>Sebastian Raschka《Qwen3 from scratch》notebook</li>
+<li>Qwen3 技术报告 arXiv:2505.09388 §3 Architecture</li>
+<li><strong>本质题</strong>：为什么“形状对”不等于“数值对”？</li>
+</ul>
+<h3 id="m1p2-engine-cli">M1·P2 — 单序列前向：Engine + CLI 能出字<a class="headerlink" href="#m1p2-engine-cli" title="锚点">#</a></h3>
+<ul>
+<li>
+<p><strong>L 层覆盖</strong>：L1 主 + L3 最小 Engine 骨架</p>
+</li>
+<li>
+<p><strong>完成定义</strong>：</p>
+</li>
+<li><code>python -m inferlite.cli "讲个笑话" --max-new-tokens 32</code> 在 Mac MPS 上能输出连续文本，无 KV cache</li>
+<li>CLI 通过 <code>LLMModel</code> 接口调用，不直接 <code>Qwen3()</code></li>
+<li><code>Sampler</code> 与 <code>EngineCore.step()</code> 最小契约落地；<code>KVCache / Scheduler / Executor / Drafter</code> 仅占位，不承诺签名稳定</li>
+<li><strong>验证标准</strong>：<code>tests/e2e/test_greedy.py</code> 前 16 个 token 与 HF <code>generate(do_sample=False)</code> 完全一致 + <code>tests/invariant/test_step_three_phase.py</code> 覆盖三段式</li>
+<li><strong>硬件</strong>：Mac MPS 主开发</li>
+<li><strong>关键概念</strong>：贪心解码循环、三段式 step、接口隔离、为什么 M1 不做 KV cache</li>
+<li><strong>必读</strong>：</li>
+<li>Attention Is All You Need</li>
+<li>Llama 2 paper §2（架构基线）</li>
+<li>Qwen2 / Qwen3 技术报告（GQA group 数、RoPE θ 差异）</li>
+<li><strong>本质题</strong>：RoPE 为什么是"旋转"而不是"加法"？</li>
+<li><strong>配套文章</strong>：《从零手写 Qwen3 —— 解剖一个现代 decoder》</li>
+</ul>
+<h3 id="m2-kv-cache-on2-on">M2 — KV Cache：从 O(n²) 到 O(n)<a class="headerlink" href="#m2-kv-cache-on2-on" title="锚点">#</a></h3>
+<ul>
+<li>
+<p><strong>L 层覆盖</strong>：L2主（<code>ContiguousKVCache</code>） + L1（接口接 KV）</p>
+</li>
+<li>
+<p><strong>完成定义</strong>：单序列吞吐相对 M1 提升 ≥ 5×，prefill/decode 两阶段清晰；落地 <code>KVCache</code> Protocol 的第一个实现 <code>ContiguousKVCache</code></p>
+</li>
+<li><strong>验证标准</strong>：<code>tests/module/test_kv_cache_logits.py</code>（带 cache vs 不带 cache logits <code>allclose</code>）+ <code>tests/invariant/test_kv_invariant.py</code>（cache 长度守恒）</li>
+<li><strong>硬件</strong>：Mac MPS</li>
+<li><strong>L 层覆盖</strong>：L1 + L2</li>
+<li><strong>关键概念</strong>：prefill vs decode、<code>past_key_values</code> 张量布局 <code>[layers, 2, batch, kv_heads, len, head_dim]</code>、为什么 Q 不 cache</li>
+<li><strong>必读</strong>：GPT-3 §2.1、MQA paper、GQA paper</li>
+<li><strong>本质题</strong>：为什么 K 和 V 都要 cache，而 Q 不用？</li>
+<li><strong>配套文章</strong>：《为什么只 cache K 和 V —— KV 缓存的本质》</li>
+</ul>
+<h3 id="m3-continuous-batching">M3 — Continuous Batching：调度器的诞生<a class="headerlink" href="#m3-continuous-batching" title="锚点">#</a></h3>
+<ul>
+<li>
+<p><strong>L 层覆盖</strong>：L3主（<code>FCFSScheduler</code> + 三队列）</p>
+</li>
+<li>
+<p><strong>完成定义</strong>：8 并发请求聚合吞吐 ≥ 串行 ×4，每 step 重新组 batch，无 head-of-line blocking</p>
+</li>
+<li><strong>验证标准</strong>：<code>test_scheduler_invariant.py</code>（三队列守恒、EOS 立即出队）+ <code>test_batch_e2e.py</code>（8 并发结果与单条串行完全一致）</li>
+<li><strong>硬件</strong>：Mac MPS 可跑功能，性能数最好上 GPU</li>
+<li><strong>L 层覆盖</strong>：L3</li>
+<li><strong>关键概念</strong>：<code>waiting / running / finished</code> 三队列、变长 attention mask、EOS 立即出队、新请求立即入队</li>
+<li><strong>必读</strong>：</li>
+<li>Orca paper（OSDI'22） — 必读</li>
+<li>vLLM paper §3（调度部分）</li>
+<li><strong>本质题</strong>：static batching 的"木桶效应"在 decode 阶段为何尤其致命？</li>
+<li><strong>对照源码</strong>：<code>nano-vllm/nanovllm/engine/scheduler.py</code></li>
+<li><strong>配套文章</strong>：《Orca 那篇论文做了什么 —— LLM 调度器的诞生》</li>
+</ul>
+<h3 id="m4-pagedattentionpytorch">M4 — PagedAttention（PyTorch 伪版）：显存当虚拟内存<a class="headerlink" href="#m4-pagedattentionpytorch" title="锚点">#</a></h3>
+<ul>
+<li>
+<p><strong>L 层覆盖</strong>：L2主（<code>PagedKVCache</code> block table） + L3（scheduler 意识到 block）</p>
+</li>
+<li>
+<p><strong>完成定义</strong>：长 prompt + 多并发显存利用率 ≥ 80%（GPU 上测），按 block 取 KV，支持 Copy-on-Write fork</p>
+</li>
+<li><strong>验证标准</strong>：<code>test_paged_logits.py</code>（分页前后 logits <code>allclose</code>）+ <code>test_block_invariant.py</code>（refcount 守恒、CoW 正确性）</li>
+<li><strong>硬件</strong>：功能在 Mac 可验；显存利用率指标必须 GPU</li>
+<li><strong>L 层覆盖</strong>：L2（核心）</li>
+<li><strong>关键概念</strong>：物理 block table、逻辑 block table、引用计数、CoW、为什么不需要 swap</li>
+<li><strong>关键裁剪</strong>：<strong>只写 PyTorch <code>index_select</code> 伪版</strong>，Triton kernel 推迟到 M8</li>
+<li><strong>必读</strong>：</li>
+<li>vLLM paper（SOSP'23 全文，特别是 §4） — 必读</li>
+<li>FlashAttention v2（对比 SRAM tiling vs HBM 分块）</li>
+<li><strong>本质题</strong>：PagedAttention 和 OS paging 唯一不同的一点是什么？</li>
+<li><strong>配套文章</strong>：《把显存当虚拟内存用 —— PagedAttention 的设计精髓》</li>
+</ul>
+<h3 id="m5-api-prefix-cache-benchmark">M5 — 服务化收口（API + Prefix Cache + Benchmark）<a class="headerlink" href="#m5-api-prefix-cache-benchmark" title="锚点">#</a></h3>
+<blockquote>
+<p>M5 拆分为三个 Phase 顺序推进，但作为一个 milestone 统一管理（与 M1 同思路）：
+- <strong>Phase 1（API + SSE）</strong>：把 EngineCore 包成可调用服务
+- <strong>Phase 2（Prefix + Reasoning）</strong>：复用能力，TTFT 优化
+- <strong>Phase 3（Benchmark + CI）</strong>：v1 收官 + 对照表</p>
+</blockquote>
+<ul>
+<li><strong>L 层覆盖</strong>：L2 + L3 + L4 全部覆盖</li>
+<li><strong>里程碑标志</strong>：仓库打 <code>v1.0</code> tag，代码量 ≈ 2000 行</li>
+<li><strong>配套文章</strong>：《2000 行实现一个 vLLM —— inferlite v1 总览》（<strong>核心宣传文</strong>）</li>
+</ul>
+<h4 id="phase-1-demo-openai-api-sse">Phase 1 — 服务化 demo：采样 + OpenAI API + SSE<a class="headerlink" href="#phase-1-demo-openai-api-sse" title="锚点">#</a></h4>
+<ul>
+<li><strong>完成定义</strong>：</li>
+<li><code>pip install -e .</code> + <code>inferlite serve qwen3-0.6b</code> 起服务</li>
+<li><code>curl http://localhost:8000/v1/chat/completions</code> 兼容 OpenAI（含 SSE）</li>
+<li>支持 greedy / temperature / top-k / top-p / repetition penalty</li>
+<li><strong>验证标准</strong>：<code>test_openai_api.py</code> 覆盖 curl 兼容性 + SSE 流式格式；sampler 单测覆盖 seed 可复现</li>
+<li><strong>硬件</strong>：Mac MPS 主开发</li>
+<li><strong>关键概念</strong>：logits processor 链、OpenAI 流式协议、请求参数到 sampler 的映射</li>
+</ul>
+<h4 id="phase-2-reasoning">Phase 2 — 复用能力：前缀缓存 + Reasoning 字段分流<a class="headerlink" href="#phase-2-reasoning" title="锚点">#</a></h4>
+<ul>
+<li><strong>完成定义</strong>：</li>
+<li>多轮对话第二轮 TTFT 比第一轮 ↓ 5×（prefix cache 命中）</li>
+<li>thinking 模式下 <code>reasoning_content</code> 字段分流</li>
+<li>前缀 block hash / refcount / eviction 策略可解释</li>
+<li><strong>验证标准</strong>：<code>test_prefix_invariant.py</code> 覆盖同前缀两请求 block_id 一致；reasoning SSE 格式有 e2e 测试</li>
+<li><strong>硬件</strong>：Mac 可验功能；性能收益最好上 GPU 复测</li>
+<li><strong>关键概念</strong>：RadixTree-Lite + block hash、prefix cache 命中率、reasoning 字段约定</li>
+</ul>
+<h4 id="phase-3-benchmark-ci-v1">Phase 3 — Benchmark + CI：核心 v1 收口<a class="headerlink" href="#phase-3-benchmark-ci-v1" title="锚点">#</a></h4>
+<ul>
+<li><strong>完成定义</strong>：</li>
+<li>Benchmark 表：inferlite vs transformers.generate vs vLLM 三栏 throughput / TTFT / ITL（见 §2.5.3 标准模板）</li>
+<li><code>bench/run_all.sh</code> 一键产出对照表，归档到 <code>bench/results/</code></li>
+<li>最小 CI 上线：<code>.github/workflows/ci.yml</code>，推送自动跑 CPU-only 的 L2+L3，依赖 tiny fake 模型，README 加绿勾 badge</li>
+<li><strong>硬件</strong>：benchmark 必须 GPU；CI 跑在 GitHub 免费 Ubuntu runner</li>
+<li><strong>关键概念</strong>：TTFT / ITL / throughput、warmup、seed 固定、硬件与精度一致性</li>
+<li><strong>必读</strong>：</li>
+<li>SGLang paper（RadixAttention）</li>
+<li>The Curious Case of Neural Text Degeneration（top-p 起源）</li>
+<li>OpenAI Chat Completions API spec</li>
+<li><strong>本质题</strong>：prefix cache 命中率在生产里被什么决定？</li>
+</ul>
+<!-- anchor:milestones-extension -->
+<h2 id="4-m6">4. 扩充里程碑 M6+（同仓库长期迭代，无截止）<a class="headerlink" href="#4-m6" title="锚点">#</a></h2>
+<blockquote>
+<p>M5 之后所有新能力都作为新 M 并入主仓库。优先级排序如下（可调整）：</p>
+</blockquote>
+<h3 id="m6-moe-for-loop">M6 — MoE 教学版（for-loop）<a class="headerlink" href="#m6-moe-for-loop" title="锚点">#</a></h3>
+<ul>
+<li><strong>L 层覆盖</strong>：L1主（二路模型架构） + Registry 首实现</li>
+<li><strong>完成定义</strong>：跑通 Qwen1.5-MoE-A2.7B 或 Qwen3-30B-A3B</li>
+<li><strong>验证</strong>：L1 logits 对齐 <code>transformers</code> MoE 实现</li>
+<li><strong>硬件</strong>：A2.7B 需 GPU（或 Mac 32GB+）</li>
+<li><strong>关键概念</strong>：router top-k softmax、per-expert for-loop dispatch、<code>[num_experts, hidden, ffn]</code> 权重布局</li>
+<li><strong>裁剪</strong>：不做 grouped GEMM、不做 EP（留 M9）</li>
+<li><strong>配套文章</strong>：《MoE 推理：从 router 到 dispatch》</li>
+</ul>
+<h3 id="m7-speculative-decodingn-gram-lookup">M7 — Speculative Decoding（n-gram lookup）<a class="headerlink" href="#m7-speculative-decodingn-gram-lookup" title="锚点">#</a></h3>
+<ul>
+<li><strong>L 层覆盖</strong>：L3主（<code>Drafter</code> Plugin + step() B 点 hook）</li>
+<li><strong>完成定义</strong>：长 prompt 续写场景 ≥ 1.5× 加速</li>
+<li><strong>验证</strong>：L3 不变式 —— 任何接受率下最终输出 == 不开 spec 的输出</li>
+<li><strong>硬件</strong>：Mac 即可</li>
+<li><strong>关键概念</strong>：n-gram 查表当 draft、verify 阶段一次性算 K+1 logits、接受率统计</li>
+<li><strong>裁剪</strong>：不训练 draft 模型，EAGLE 留 M10</li>
+<li><strong>配套文章</strong>：《零训练 spec decoding：n-gram lookup 也能涨吞吐》</li>
+</ul>
+<h3 id="m8-triton-pagedattention-kernel">M8 — Triton PagedAttention kernel<a class="headerlink" href="#m8-triton-pagedattention-kernel" title="锚点">#</a></h3>
+<ul>
+<li><strong>L 层覆盖</strong>：L1↔L2 边界（kernel 级，不动上层）</li>
+<li><strong>完成定义</strong>：替换 M4 的 PyTorch 伪版，性能逼近 vLLM 官方 kernel 的 50%</li>
+<li><strong>验证</strong>：L1 与 PyTorch 伪版 logits 完全一致；L3 与 vLLM kernel 抽样对照</li>
+<li><strong>硬件</strong>：<strong>必须 NVIDIA GPU</strong>（Triton 不支持 MPS）</li>
+<li><strong>关键概念</strong>：Triton block 编程模型、warp / tile 设计、HBM ↔ SRAM 数据流</li>
+<li><strong>配套文章</strong>：《手写第一个 Triton kernel —— PagedAttention 内部》</li>
+</ul>
+<h3 id="m9-moe-grouped-gemm">M9 — MoE 升级（grouped GEMM）<a class="headerlink" href="#m9-moe-grouped-gemm" title="锚点">#</a></h3>
+<ul>
+<li><strong>L 层覆盖</strong>：L1主</li>
+<li><strong>完成定义</strong>：M6 升级版，30B-A3B 吞吐 ≥ 5 tok/s</li>
+<li><strong>关键概念</strong>：token permutation、grouped GEMM、负载均衡观测</li>
+</ul>
+<h3 id="m10-speculative-decoding-eagle-1">M10 — Speculative Decoding 升级（EAGLE-1 简化版）<a class="headerlink" href="#m10-speculative-decoding-eagle-1" title="锚点">#</a></h3>
+<ul>
+<li><strong>L 层覆盖</strong>：L1（draft head） + L3主（verify/rollback）</li>
+<li><strong>完成定义</strong>：训一个 draft head，加速 ≥ 3×</li>
+<li><strong>关键概念</strong>：draft head 训练、tree verify、接受路径回滚</li>
+</ul>
+<h3 id="m11-chunked-prefill">M11 — Chunked Prefill<a class="headerlink" href="#m11-chunked-prefill" title="锚点">#</a></h3>
+<ul>
+<li><strong>L 层覆盖</strong>：L3主（<code>ChunkedPrefillScheduler</code>）</li>
+<li><strong>完成定义</strong>：超长 prompt（≥ 32K）分块预填，避免 prefill 阶段 OOM 或长尾阻塞</li>
+<li><strong>关键概念</strong>：prefill 切片、和 decode mix-batching 的优先级</li>
+<li><strong>顺序理由</strong>：长上下文先要"喂得进"再谈"算得对"，调度层是前置依赖</li>
+</ul>
+<h3 id="m12-long-contextyarn-ntk-rope">M12 — Long context（YaRN / NTK RoPE 缩放）<a class="headerlink" href="#m12-long-contextyarn-ntk-rope" title="锚点">#</a></h3>
+<ul>
+<li><strong>L 层覆盖</strong>：L1主（RoPE 重映射） + L2（KV 长度上限）</li>
+<li><strong>完成定义</strong>：Qwen3-0.6B 上下文从 32K 推到 128K</li>
+<li><strong>关键概念</strong>：RoPE 频率重映射、外推 vs 内插</li>
+</ul>
+<h3 id="m13-vlm">M13 — VLM 教学版（图→文）<a class="headerlink" href="#m13-vlm" title="锚点">#</a></h3>
+<ul>
+<li><strong>L 层覆盖</strong>：L1主（vision encoder + <code>inputs_embeds</code>） + L4（multipart 请求）</li>
+<li><strong>完成定义</strong>：接入一个小型 VLM（候选 Qwen-VL / Llava / native multimodal 小模型，M13 前再定），单图 + 文本对话能跑通</li>
+<li><strong>选型原则</strong>：优先选权重易下载、Mac/GPU 显存压力小、语言侧尽量复用 M1–M12 架构的模型；不要现在绑定具体未验证模型名</li>
+<li><strong>关键概念</strong>：Vision encoder（ViT/SigLIP）独立前向、image token embedding 注入（走 <code>inputs_embeds</code>）、变长 image token 数处理</li>
+<li><strong>裁剪</strong>：不做 image prefix cache、不做 encoder/LLM 异步、单 batch 单图（留 M14）</li>
+<li><strong>配套文章</strong>：《推理框架怎么吃下一张图 —— VLM 接入解剖》</li>
+</ul>
+<h3 id="m14-vlm">M14 — VLM 工程化<a class="headerlink" href="#m14-vlm" title="锚点">#</a></h3>
+<ul>
+<li><strong>L 层覆盖</strong>：L2主（image hash prefix cache） + L3（encoder/LLM 异步）</li>
+<li><strong>完成定义</strong>：多分辨率 + image content hash prefix cache + encoder/LLM 异步流水线</li>
+<li><strong>关键概念</strong>：图片内容哈希、EncoderCache、多模态 + 文本 batch 混排</li>
+</ul>
+<h3 id="m15">M15+ — 持续扩充候选池（无截止）<a class="headerlink" href="#m15" title="锚点">#</a></h3>
+<p><strong>核心计算 / 显存</strong>：
+- <strong>量化</strong>：GPTQ / AWQ / FP8 权重加载 + 自定义 matmul
+- <strong>KV cache 量化</strong>（FP8）：显存翻倍
+- <strong>MLA attention</strong>：DeepSeek-V2/V3 风格，KV cache 结构重写
+- <strong>Hybrid SSM</strong>（Jamba/Mamba2）：非 KV 范式</p>
+<p><strong>调度 / 解码</strong>：
+- <strong>CUDA Graph 捕获</strong>：降低 kernel launch 开销
+- <strong>Preemption 升级</strong>：swap-out vs recompute 切换策略
+- <strong>Async Scheduling</strong>：调度和 forward 重叠（vLLM 仍实验中）
+- <strong>Guided Decoding（FSM/grammar bitmask）</strong>：JSON / 正则约束输出，xgrammar 后端
+- <strong>LogProbs 完整支持</strong>：调试 / 评测必备</p>
+<p><strong>并行</strong>：
+- <strong>Tensor Parallel</strong>：单机多卡，切 head
+- <strong>Pipeline Parallel</strong>：跨机切 layer
+- <strong>Expert Parallel</strong>：MoE 专家分卡</p>
+<p><strong>Serving</strong>：
+- <strong>Disaggregated P/D</strong>：prefill / decode 拆机器，KV 通过 connector 转移
+- <strong>Prometheus <code>/metrics</code></strong>：QPS、p99、KV 利用率
+- <strong>LoRA 多 adapter 共服</strong>：一个底模 + N 个 LoRA</p>
+<p><strong>多模态扩展</strong>：
+- <strong>Audio 输入</strong>（Whisper / Qwen-Audio）：encoder 接入 + 长音频分块</p>
+<p><strong>暂不规划</strong>（成本/教学价值不划算）：
+- Omni 全双工（流式 audio in/out + 打断检测，工业框架都还没成熟）
+- Beam Search（少用）
+- Encoder-Decoder（T5/Whisper-T5 范式）
+- Embedding / Reranker 服务（不属于推理引擎核心）
+- Diffusion LLM（LLaDA / Mercury）
+- Data Parallel（直接起多个 inferlite 实例 + 外层 LB 即可）</p>
+<p><strong>节奏</strong>：每选 1 个就开 1 个 M，文章 + 代码 + Review 闭环。</p>
+<!-- anchor:model-matrix -->
+<h2 id="5">5. 模型类型矩阵与归属里程碑<a class="headerlink" href="#5" title="锚点">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>类型</th>
+<th>代表</th>
+<th>改动量</th>
+<th>归属</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Dense</td>
+<td>Qwen3-0.6B</td>
+<td>基线</td>
+<td>M1–M5</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Reasoning</td>
+<td>Qwen3-thinking, DeepSeek-R1</td>
+<td>极小</td>
+<td>M5</td>
+</tr>
+<tr>
+<td>3</td>
+<td>MoE</td>
+<td>Qwen3-30B-A3B, Mixtral</td>
+<td>中</td>
+<td>M6 / M9</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Speculative decoding</td>
+<td>n-gram, EAGLE, Medusa</td>
+<td>中</td>
+<td>M7 / M10</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Long context (YaRN)</td>
+<td>Qwen3-1M</td>
+<td>小</td>
+<td>M11</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Quantized</td>
+<td>GPTQ/AWQ/FP8</td>
+<td>中</td>
+<td>M15+</td>
+</tr>
+<tr>
+<td>7</td>
+<td>MLA attention</td>
+<td>DeepSeek-V2/V3</td>
+<td>中</td>
+<td>M15+</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Hybrid SSM</td>
+<td>Jamba, Mamba2</td>
+<td>大</td>
+<td>M15+</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Multimodal (VLM 图→文)</td>
+<td>Qwen-VL / Llava / native multimodal 小模型（M13 前再定）</td>
+<td>中（加 vision encoder + <code>inputs_embeds</code>）</td>
+<td>M13 / M14</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Audio 输入</td>
+<td>Whisper, Qwen-Audio</td>
+<td>中</td>
+<td>M15+</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Omni 全双工</td>
+<td>Qwen2.5-Omni, GPT-4o 类</td>
+<td>大（流式 in/out + 打断）</td>
+<td>暂不规划</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Diffusion LLM</td>
+<td>LLaDA, Mercury</td>
+<td>极大</td>
+<td>暂不规划</td>
+</tr>
+</tbody>
+</table>
+<!-- anchor:collab -->
+<h2 id="6-agent">6. Agent / 你 分工 + 文章工作流<a class="headerlink" href="#6-agent" title="锚点">#</a></h2>
+<h3 id="61">6.1 分工边界<a class="headerlink" href="#61" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>工作</th>
+<th>谁来做</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>里程碑定义、范围裁剪、依赖分析</td>
+<td>Agent</td>
+</tr>
+<tr>
+<td>论文导读、源码对照、概念讲解、伪代码、最小复现片段</td>
+<td>Agent</td>
+</tr>
+<tr>
+<td><strong>写 <code>inferlite/*.py</code> 任何业务代码</strong></td>
+<td><strong>你手敲</strong>（Agent 不主动改）</td>
+</tr>
+<tr>
+<td>卡壳时给"提示而非答案"</td>
+<td>Agent（先给思路，再要原理，最后才给代码片段）</td>
+</tr>
+<tr>
+<td>代码 Review（结构、命名、复杂度、文档字符串）</td>
+<td>Agent</td>
+</tr>
+<tr>
+<td>文章初稿（基于你的代码 + 笔记 + 卡片）</td>
+<td>Agent 起草，你定稿</td>
+</tr>
+<tr>
+<td>知乎发布（<code>to_zhihu_md.py</code> / <code>check_zhihu_format.py</code>）</td>
+<td>你</td>
+</tr>
+</tbody>
+</table>
+<p><strong>硬约束</strong>：Agent 不主动修改 <code>inferlite/*.py</code>，除非你显式说"帮我把这段写一下"。</p>
+<h3 id="62">6.2 单个里程碑的闭环<a class="headerlink" href="#62" title="锚点">#</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>M&lt;N&gt; 启动
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>   ↓
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>Agent 给&quot;里程碑 brief&quot;：完成定义 + 关键概念清单 + 必读资料 + 文件骨架建议
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>   ↓
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>你手敲代码（可随时问 Agent 原理 / 卡壳 / 设计选择）
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>   ↓
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>你跑通 → push → 仓库打 tag v0.&lt;N&gt;
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>   ↓
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>Agent Review：结构、命名、注释、是否偏离主线
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>   ↓
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>你写&quot;开工 + 收工&quot;笔记草稿（50–200 字关键洞察）
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>   ↓
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>Agent 扩成完整原理篇（卡片化、对照源码、引用论文）
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>   ↓
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>渲染 + 转知乎
+</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>   ↓
+</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>你发布 → PROGRESS.md 更新
+</span></code></pre></div>
+<h3 id="63-m">6.3 文章结构模板（每篇 M 文章固定章节）<a class="headerlink" href="#63-m" title="锚点">#</a></h3>
+<ol>
+<li><strong>一句话本质</strong>（开头 50 字内）</li>
+<li><strong>从一个问题出发</strong>（为什么需要这个能力 / 不做会怎样）</li>
+<li><strong>原理</strong>：论文核心思想 + 类比 + 公式（必要时）</li>
+<li><strong>代码精讲</strong>：贴你手敲的关键片段，逐行解释设计意图</li>
+<li><strong>对照实现</strong>：和 vLLM / nano-vllm 的差异，说明为什么这样简化</li>
+<li><strong>Benchmark / 现象</strong>：数字 + 截图</li>
+<li><strong>本质题 + 一句话压缩</strong>（呼应开头）</li>
+</ol>
+<!-- anchor:risks -->
+<h2 id="7">7. 风险与应对<a class="headerlink" href="#7" title="锚点">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>风险</th>
+<th>触发</th>
+<th>应对</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>动力中断</strong></td>
+<td>中间某周事多没推进</td>
+<td>里程碑越小越好；用 <code>docs/journal/</code> 周记保持手感</td>
+</tr>
+<tr>
+<td><strong>Agent 越界写代码</strong></td>
+<td>Agent 主动改 <code>inferlite/*.py</code></td>
+<td>你随时打断，要求改成"给思路 + 伪代码"</td>
+</tr>
+<tr>
+<td><strong>过早优化</strong></td>
+<td>在 M4 死磕 Triton 性能</td>
+<td>严守"M4 只 PyTorch 伪版，性能留 M8"原则</td>
+</tr>
+<tr>
+<td><strong>范围蔓延</strong></td>
+<td>想顺手加量化 / VLM</td>
+<td>一律新开 M，不并入 M1–M5</td>
+</tr>
+<tr>
+<td><strong>没 GPU 跑大模型</strong></td>
+<td>M6 之后需要更大显存</td>
+<td>按需租用云 GPU（Colab Pro / AutoDL / RunPod 等）</td>
+</tr>
+<tr>
+<td><strong>文章烂尾</strong></td>
+<td>代码跑通了但没发文</td>
+<td>文章发布作为里程碑硬性闭环，未发文不能开下一个 M</td>
+</tr>
+</tbody>
+</table>
+<!-- anchor:next-action -->
+<h2 id="8">8. 立刻可做的下一步<a class="headerlink" href="#8" title="锚点">#</a></h2>
+<ol>
+<li><strong>建项目骨架</strong>：<code>pyproject.toml</code> + <code>inferlite/{model,cache,scheduler,sampler,executor,server}/__init__.py</code> + 7 个 Protocol 空文件 + <code>tests/{unit,module,e2e,invariant}/</code></li>
+<li><strong>开 M1</strong>：Agent 给 M1 brief（完成定义 + 关键概念清单 + 必读 + 文件骨架建议），你手敲 <code>model/qwen3.py</code> 起步</li>
+</ol>
+<blockquote>
+<p>工作流约定：每开一个新 M，你说一声"开 M<N>"；Agent 不主动推进。</p>
+</blockquote>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  回到页面顶部
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="页脚" >
+        
+          
+          <a href="../.." class="md-footer__link md-footer__link--prev" aria-label="上一页: 首页">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                上一页
+              </span>
+              <div class="md-ellipsis">
+                首页
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../PROGRESS/" class="md-footer__link md-footer__link--next" aria-label="下一页: 进度 PROGRESS">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                下一页
+              </span>
+              <div class="md-ellipsis">
+                进度 PROGRESS
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 luhao &mdash; MIT &mdash; Built with <a href="https://squidfunk.github.io/mkdocs-material/">Material for MkDocs</a>
+
+    </div>
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/luhao-lab/inferlite" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.path", "navigation.indexes", "navigation.top", "navigation.footer", "navigation.tracking", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.code.select", "content.tabs.link", "content.tooltips", "toc.follow", "announce.dismiss"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../_assets/javascripts/extra.js"></script>
+      
+    
+  </body>
+</html>
