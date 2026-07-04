@@ -77,7 +77,7 @@ max_num_slots = 2
 ```text
 step 0: running [a, b]
 step 1: running [a, b]
-step 2: a finished, c admitted
+step 2: a finished, slot released, c admitted at next boundary
 step 3: running [b, c]
 ...
 ```
@@ -87,6 +87,8 @@ step 3: running [b, c]
 ```text
 短请求完成后立即释放 slot，等待请求在下一轮进入。
 ```
+
+这个 trace 是 M3 区分 static batching 的关键：不能只证明 `batch_size > 1`，还要证明 finished 请求不会锁住 wave，slot 可以跨请求复用。
 
 ### 3. slot 复用不串数据
 
@@ -108,6 +110,8 @@ assert req_c_output == serial_req_c_output
 | 6 | EOS 早停 | 输出停在 EOS 后 | 精确 |
 | 7 | waiting queue 大于 slots | 最终全部完成 | 精确 |
 | 8 | batch size trace | 每轮 running 数符合预期 | 精确 |
+| 9 | 非 static wave | finished 请求不锁住 batch wave | trace 精确 |
+| 10 | waiting 不占资源 | pending 请求未提前 allocate slot | 精确 |
 
 ## DoD
 
@@ -115,6 +119,8 @@ assert req_c_output == serial_req_c_output
 - [ ] E2E 测试覆盖可变 prompt 长度。
 - [ ] E2E 测试覆盖可变 output 长度。
 - [ ] trace 测试证明不是 static batching。
+- [ ] trace 测试证明 waiting 请求不提前占 KV slot。
+- [ ] trace 测试证明 finished 后 slot 可在下一轮跨请求复用。
 - [ ] slot 复用无 KV 污染测试通过。
 - [ ] `uv run pytest tests/e2e/test_batch_generate.py tests/e2e/test_continuous_batching_trace.py -q` 通过。
 - [ ] 全量 `uv run pytest` 通过。
