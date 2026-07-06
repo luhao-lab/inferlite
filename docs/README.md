@@ -46,7 +46,7 @@ make lint && make fmt && make typecheck
 | [tasks/M3-T1~T7](./tasks/) | 当前 M3 的 7 张任务卡，每卡含：算法核心、L0 测试清单、DoD、易踩坑 | 开始写某个模块前读对应任务卡 |
 | [tasks/_TEMPLATE.md](./tasks/_TEMPLATE.md) | 任务卡模板 | 新建任务卡时参考格式 |
 | [tasks/M1-archive/](./tasks/M1-archive/) | M1 全部已完成任务卡 | 想回顾 M1 某个模块的实现思路时 |
-| [tasks/M2-T1~T5](./tasks/) | M2 已完成任务卡 | 想回顾 M2 某个模块的实现思路时 |
+| [tasks/M2-archive/](./tasks/M2-archive/) | M2 全部已完成任务卡 | 想回顾 M2 某个模块的实现思路时 |
 
 ### knowledge/ — 知识沉淀（想查知识/设计/教训时读这里）
 
@@ -67,7 +67,7 @@ make lint && make fmt && make typecheck
 ### 里程碑生命周期
 
 ```
-1. /plan M<n>          AI 调研 + 产出设计文档 plan/m<n>-design.md + 任务卡骨架
+1. /plan M<n>          AI 调研 + 产出设计文档 knowledge/m<n>-design.md + 任务卡骨架
         ↓
 2. /work M<n>-T<x>     AI 输出作战简报（前置知识检查 + 接口签名 + 测试清单）
         ↓
@@ -91,7 +91,7 @@ make lint && make fmt && make typecheck
 | `plan/PLAN.md` | AI | 新开里程碑、调整路线时（/plan 命令） |
 | `plan/PROGRESS.md` | AI | 每张任务卡 ✅ 时（/archive 命令自动更新） |
 | `plan/M<n>.md` | AI | 新开里程碑时新建；里程碑归档时追加 Summary |
-| `plan/m<n>-design.md` | AI | 里程碑启动时创建，推进期持续完善（完成后移入 knowledge/） |
+| `knowledge/m<n>-design.md` | AI | 里程碑启动时创建，推进期持续完善 |
 | `tasks/M<n>-T<x>.md` | AI | /work 开卡时创建；/archive 时末尾追加完成总结 |
 | `knowledge/knowledge.md` | AI | 每次 /archive 后追加新知识卡片 |
 | `knowledge/lessons.md` | AI | 每次 /archive 后追加新教训 |
@@ -117,7 +117,8 @@ inferlite/
 ├── docs/                  # 本目录（spec + 知识库）
 │
 ├── inferlite/             # 主 Python 包（作者手写，AI 不写这里）
-│   ├── model/             # RMSNorm / Attention / RoPE / DecoderLayer / Qwen3
+│   ├── model/             # RMSNorm / Attention / RoPE / DecoderLayer / Qwen3 + KV Cache
+│   ├── scheduler/         # M3: FCFSScheduler + RequestState
 │   ├── engine/            # EngineCore / generate loop
 │   ├── sampler/           # GreedySampler
 │   └── cli.py
@@ -136,7 +137,7 @@ inferlite/
 
 ## 当前进度
 
-M1 Qwen3 单序列推理 🟡 → **M2 KV Cache ✅** → M3 Continuous Batching ⬜
+M1 Qwen3 单序列推理 ✅ → M2 KV Cache ✅ → **M3 Continuous Batching 🟡**
 
 详见 [plan/PROGRESS.md](./plan/PROGRESS.md)
 

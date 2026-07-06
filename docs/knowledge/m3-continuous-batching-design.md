@@ -280,7 +280,7 @@ T4 BatchEngine 执行 prefill / decode
 
 ## T2: BatchedKVCache + SlotManager
 
-> 状态：进行中
+> 状态：✅ 完成
 
 ### M2 vs M3 的 KV Cache 本质区别
 
@@ -312,6 +312,162 @@ M3 continuous batching：
 | 占用管理 | 无（整体 reset） | per-slot `occupied[S]` + SlotManager |
 
 注意：`BatchedLayerKVCache` 和 `LayerKVCache` 的**数据结构完全相同**（都是 `k: Tensor, v: Tensor`），本质区别在 `BatchedKVCache` 这一层（per-slot 元数据管理）。单独定义新类是为了语义清晰和独立演进。
+
+### max_num_slots 与 max_num_seqs 的关系
+
+这两个是**同一个值**，在不同层表达不同语义：
+
+```text
+max_num_seqs = max_num_slots = 同一个数（比如 4）
+
+Scheduler 层：max_num_seqs = 最多同时跑几个请求
+KV Cache 层：max_num_slots = 预分配了几个 cache slot
+```
+
+它们必须相等：每个 running 请求需要恰好一个 KV slot，Scheduler 保证 `len(running) ≤ max_num_seqs`，所以 allocate 次数不会超过 `max_num_slots`，SlotManager 永远不会触发 RuntimeError。
+
+```text
+Scheduler.max_num_seqs  ──约束──→  最多 admit 几个请求
+                                        ↓
+                                  每个请求 allocate 一个 slot
+                                        ↓
+KVCache.max_num_slots   ──保证──→  slot 够用
+```
+
+实际使用时从同一个 config 参数读取：
+
+```python
+max_concurrent = config.max_num_seqs
+scheduler = FCFSScheduler(max_num_seqs=max_concurrent)
+kv_cache = BatchedKVCache.from_config(config, max_num_slots=max_concurrent, ...)
+```
+
+### 为什么 max_num_slots / max_seq_len 不在 ModelConfig 里
+
+它们是**运行时参数**，不是模型参数：
+
+```text
+ModelConfig 描述模型架构（固定不变）：
+  num_hidden_layers=28, hidden_size=1024, num_kv_heads=8, head_dim=64
+
+max_num_slots / max_seq_len 描述推理配置（每次运行可变）：
+  同时跑几个请求？→ max_num_slots = 4 还是 8
+  最多生成多长序列？→ max_seq_len = 512 还是 1024
+```
+
+同一个 Qwen3-0.6B，不同场景可以用不同配置。和 M2 的 `KVCache.from_config()` 把 `batch_size` 和 `max_seq_len` 作为参数传入是同一设计。
+
+### __init__ 与 from_config 的分工（工厂模式）
+
+```python
+# from_config: 高层接口，用户用这个
+#   从 config 读模型参数 → 分配 tensor → 组装 layers → 调 __init__
+cache = BatchedKVCache.from_config(config, max_num_slots=4, max_seq_len=512, ...)
+
+# __init__: 低层接口，接收已构建的对象
+#   只做赋值，不分配 tensor（测试时手动构建小 tensor 用）
+cache = BatchedKVCache(layers=[...], max_seq_len=512, max_num_slots=4)
+```
+
+`__init__` 中的 `max_num_slots` 和 `max_seq_len` 也可以从 layers 推断（`layers[0].k.shape[0]` / `shape[2]`），显式传入更防御性，隐式推断更简洁。
+
+### @classmethod 中的 `cls(...)` 用法
+
+`from_config` 用 `@classmethod` 装饰，第一个参数 `cls` 是类本身（不是实例 `self`）。`cls(...)` 等价于调用该类的 `__init__` 构造实例：
+
+```python
+@classmethod
+def from_config(cls, config, ...):
+    # cls = BatchedKVCache（或子类）
+    # cls(layers, ...) = BatchedKVCache(layers, ...)
+    return cls(layers, max_seq_len, max_num_slots)
+```
+
+用 `cls` 而非硬编码类名是为了**支持继承**：子类调用 `from_config` 时返回子类实例而非父类实例。这是 Python 工厂方法的标准写法，M2 的 `KVCache.from_config()` 也用 `return cls(layers)`。
+
+### 最终实现
+
+**文件结构：**
+
+```text
+inferlite/model/
+├── __init__.py              # 导出 BatchedKVCache, BatchedLayerKVCache, SlotManager
+├── kv_cache.py              # M2（不动）
+└── batched_kv_cache.py      # M3 新增
+```
+
+**三个类的职责：**
+
+| 类 | 职责 | 核心字段 |
+|---|---|---|
+| `BatchedLayerKVCache` | 单层 KV 数据容器 | `k: Tensor [S, H_kv, L, D]`, `v: Tensor` |
+| `SlotManager` | slot 分配/释放 | `free_slots: deque`, `req_to_slot: dict` |
+| `BatchedKVCache` | 多层 cache + per-slot 元数据 | `layers`, `seq_lens`, `occupied`, `slot_manager` |
+
+**SlotManager 接口：**
+
+```python
+sm.allocate(request_id) -> slot_id    # 分配，失败抛 ValueError/RuntimeError
+sm.free(request_id) -> None           # 释放，失败抛 ValueError
+sm.is_free(slot_id) -> bool           # 查询
+```
+
+**BatchedKVCache 接口：**
+
+```python
+cache = BatchedKVCache.from_config(config, max_num_slots, max_seq_len, dtype, device)
+slot_id = cache.allocate_slot(request_id)   # 分配 + 设 occupied=True
+cache.free_slot(request_id)                 # 释放 + 清 seq_lens/occupied
+cache.reset_slots()                          # 全部清零（benchmark 用）
+```
+
+**seq_lens 的更新时机：**
+
+`seq_lens` 是被动数据，BatchedKVCache 只负责分配/清零，中间的递增由 BatchEngine（T4）在推理循环中直接写：
+
+```python
+# prefill 完成后
+cache.seq_lens[slot_id] = prompt_len
+
+# 每步 decode 后
+cache.seq_lens[slot_id] += 1
+```
+
+主流框架（vLLM, nano-vllm）也不包函数，直接在 Sequence 对象上追踪。
+
+### 设计决策总结
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| SlotManager 数据结构 | `deque` + `dict` | deque O(1) popleft/append；dict O(1) 查 req→slot |
+| 只保留 req_to_slot | 不要 slot_to_req | free() 传 request_id，不需要反查 |
+| free_slot 不清 tensor | 只清元数据 | 和 M2 reset() 一致，下次 prefill 会覆盖 |
+| 不继承 M2 KVCache | 独立类 | M2 是全局 cur_len，M3 是 per-slot seq_lens，语义不同 |
+| torch.empty vs zeros | `empty` | k/v 总是 prefill 时覆盖写入，不需要初始化 |
+| free_slot/allocate_slot 在 BatchedKVCache 上 | 对称封装 | 同时更新 SlotManager + occupied + seq_lens，调用方只调一个方法 |
+
+### 测试覆盖
+
+18 个单测覆盖 L0 全部 9 项：
+
+| L0 项 | 测试 |
+|---|---|
+| cache shape [S, H_kv, L, D] | `test_from_config_shape` |
+| dtype/device 一致 | `test_dtype_device` |
+| allocate 从低 slot id 开始 | `test_allocate_order` |
+| 超过容量抛 RuntimeError | `test_allocate_over_capacity` |
+| free 后可复用 | `test_free_and_reuse` |
+| duplicate request_id 抛 ValueError | `test_duplicate_request_id` |
+| free 不存在抛 ValueError | `test_free_not_found`, `test_free_slot_not_found` |
+| seq_lens 初始化/清零 | `test_seq_lens_init`, `test_free_slot_clears_metadata`, `test_reset_slots` |
+| occupied mask 一致 | `test_occupied_init`, `test_allocate_slot`, `test_reset_slots` |
+
+### T3 依赖
+
+T3（BatchedAttention）需要：
+- 从 `cache.seq_lens` 读取每个 slot 的有效长度，构造 attention mask
+- 直接读 `cache.layers[i].k/v` 的 `[:, :, :seq_len, :]` 切片做 attention
+- 写入新 KV 时用 `cache.layers[i].k[slot, :, pos, :] = new_k`（pos = seq_lens[slot]）
 
 ---
 
