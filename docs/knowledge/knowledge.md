@@ -2115,7 +2115,7 @@ CI 跑 `-m "not slow"` 跳过慢测试。matrix: ubuntu + macos, python 3.12。
 inferlite = 作者手撕 + AI 辅助 plan/review/doc 的学习项目。采用 spec-driven 工作流：
 - `docs/plan/` 作战地图（架构 / 总览 / 任务卡总表）
 - `docs/tasks/M{n}-T*.md` 任务卡（一卡一文件，PR 粒度）
-- `docs/kb/knowledge.md` 知识点 + `docs/kb/lessons.md` 教训（单文件多 H2 平面化）
+- `docs/knowledge/knowledge.md` 知识点 + `docs/knowledge/lessons.md` 教训（单文件多 H2 平面化）
 - `CLAUDE.md` 项目级 AI 常驻记忆 + `.claude/commands/` 5 个 slash 命令
 
 知识库与代码同仓（R1 重构决策）：代码改动与知识库改动同 commit，AI 一次 `read_file` 拉完所有原子卡，全文搜索 cmd+F 即可。

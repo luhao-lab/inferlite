@@ -36,23 +36,27 @@ make lint && make fmt && make typecheck
 | [plan/PLAN.md](./plan/PLAN.md) | 14 个里程碑路线图，每个 M 的目标范围、不做什么、参照项目 | 想了解整个项目要做什么、为什么这么规划 |
 | [plan/PROGRESS.md](./plan/PROGRESS.md) | 每个 M 的状态（⬜/🟡/✅）+ 每次任务完成的变更日志 | 每次开工先看：当前做到哪了，下一步是什么 |
 | [plan/M1.md](./plan/M1.md) | M1 作战地图：架构图、任务总表（T0~T12）、测试金字塔、完成定义 | M1 推进期开工前读；M1 完成后作为历史参考 |
-| [plan/m2-kv-cache-design.md](./plan/m2-kv-cache-design.md) | M2 技术设计：KV Cache 方案调研、ADR 决策、数据流、代码骨架 | M2 推进期开工前读；想理解 KV Cache 设计思路时 |
+| [plan/M2.md](./plan/M2.md) | M2 作战地图：KV Cache 方案、代码架构、实测性能 | M2 完成后回顾 |
+| [plan/M3.md](./plan/M3.md) | M3 作战地图：Continuous Batching 方案、任务分解 | M3 推进中参考 |
 
 ### tasks/ — 执行层（想看具体怎么做/做到哪了时读这里）
 
 | 文件 | 内容 | 什么时候读 |
 |------|------|-----------|
-| [tasks/M2-T1~T5](./tasks/) | 当前 M2 的 5 张活跃任务卡，每卡含：算法核心、L0 测试清单、DoD、易踩坑 | 开始写某个模块前读对应任务卡 |
-| [tasks/_TEMPLATE.md](./tasks/_TEMPLATE.md) | 任务卡 7 字段模板（`/work` 命令自动填充） | 新建任务卡时参考格式 |
-| [tasks/M1-archive/](./tasks/M1-archive/) | M1 全部 12 张已完成任务卡（T0~T12） | 想回顾 M1 某个模块的实现思路、踩坑记录时 |
+| [tasks/M3-T1~T7](./tasks/) | 当前 M3 的 7 张任务卡，每卡含：算法核心、L0 测试清单、DoD、易踩坑 | 开始写某个模块前读对应任务卡 |
+| [tasks/_TEMPLATE.md](./tasks/_TEMPLATE.md) | 任务卡模板 | 新建任务卡时参考格式 |
+| [tasks/M1-archive/](./tasks/M1-archive/) | M1 全部已完成任务卡 | 想回顾 M1 某个模块的实现思路时 |
+| [tasks/M2-T1~T5](./tasks/) | M2 已完成任务卡 | 想回顾 M2 某个模块的实现思路时 |
 
-### kb/ — 知识层（想查知识/防坑/理解模块时读这里）
+### knowledge/ — 知识沉淀（想查知识/设计/教训时读这里）
 
 | 文件 | 内容 | 什么时候读 |
 |------|------|-----------|
-| [kb/knowledge.md](./kb/knowledge.md) | 知识卡片库：Papers（论文）/ Libraries（框架 API）/ Concepts（核心概念）/ Tools（工程工具）/ ADR（架构决策）/ 参考资料 | 开始任务卡前查前置知识；调研新知识后追加 |
-| [kb/lessons.md](./kb/lessons.md) | 踩坑教训 L1~L4，叙事性，有现场感：现象 → 根因 → 解法 → 适用范围 | 遇到奇怪 bug 先来这里查；完成任务卡后追加新教训 |
-| [kb/blueprints.md](./kb/blueprints.md) | 模块契约卡片：每个模块的接口签名、设计意图、踩坑、跨 M 依赖关系 | 改某个模块前先看它的 blueprint；M 归档时更新 |
+| [knowledge/knowledge.md](./knowledge/knowledge.md) | 知识卡片库：Papers / Libraries / Concepts / Tools / ADR / 参考资料 | 开始任务卡前查前置知识；调研新知识后追加 |
+| [knowledge/lessons.md](./knowledge/lessons.md) | 踩坑教训 L1~L4，叙事性：现象 → 根因 → 解法 → 适用范围 | 遇到奇怪 bug 先来这里查；完成任务卡后追加新教训 |
+| [knowledge/blueprints.md](./knowledge/blueprints.md) | 模块契约卡片：接口签名、设计意图、踩坑、跨 M 依赖 | 改某个模块前先看 blueprint；M 归档时更新 |
+| [knowledge/m2-kv-cache-design.md](./knowledge/m2-kv-cache-design.md) | M2 技术设计：KV Cache 方案调研、ADR 决策、数据流 | M2 完成后回顾；想理解 KV Cache 设计思路时 |
+| [knowledge/m3-continuous-batching-design.md](./knowledge/m3-continuous-batching-design.md) | M3 技术总结（累积中）：设计决策、踩坑、框架对比 | M3 进行中实时记录；完成后回顾 |
 
 ---
 
@@ -73,7 +77,7 @@ make lint && make fmt && make typecheck
         ↓
 5. /review M<n>-T<x>   AI review 代码质量 → 建议修改
         ↓
-6. /archive task T<x>  AI 沉淀：更新 kb/lessons.md + kb/knowledge.md + kb/blueprints.md
+6. /archive task T<x>  AI 沉淀：更新 knowledge/lessons.md + knowledge/knowledge.md + knowledge/blueprints.md
         ↓               更新 plan/PROGRESS.md 勾选任务 → commit
 7. （重复 2-6 直到本 M 所有任务卡完成）
         ↓
@@ -87,11 +91,11 @@ make lint && make fmt && make typecheck
 | `plan/PLAN.md` | AI | 新开里程碑、调整路线时（/plan 命令） |
 | `plan/PROGRESS.md` | AI | 每张任务卡 ✅ 时（/archive 命令自动更新） |
 | `plan/M<n>.md` | AI | 新开里程碑时新建；里程碑归档时追加 Summary |
-| `plan/m<n>-design.md` | AI | 里程碑启动时创建，推进期持续完善 |
+| `plan/m<n>-design.md` | AI | 里程碑启动时创建，推进期持续完善（完成后移入 knowledge/） |
 | `tasks/M<n>-T<x>.md` | AI | /work 开卡时创建；/archive 时末尾追加完成总结 |
-| `kb/knowledge.md` | AI | 每次 /archive 后追加新知识卡片 |
-| `kb/lessons.md` | AI | 每次 /archive 后追加新教训 |
-| `kb/blueprints.md` | AI | 每次 /archive 后更新相关模块的契约 |
+| `knowledge/knowledge.md` | AI | 每次 /archive 后追加新知识卡片 |
+| `knowledge/lessons.md` | AI | 每次 /archive 后追加新教训 |
+| `knowledge/blueprints.md` | AI | 每次 /archive 后更新相关模块的契约 |
 
 ### PROGRESS.md vs M\<n\>.md 的区别
 

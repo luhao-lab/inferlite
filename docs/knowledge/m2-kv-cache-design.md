@@ -637,7 +637,7 @@ for i, layer in enumerate(self.layers):
 
 | 文件 | 说明 |
 |------|------|
-| `docs/plan/m2-kv-cache-design.md` | 本设计文档 |
+| `docs/knowledge/m2-kv-cache-design.md` | 本设计文档 |
 | `scripts/bench_kv_cache.py` | M1 vs M2 性能对比 benchmark 脚本 |
 | `bench/results/2026-06-29-m2-kv-cache-mps-bf16.md` | 实测结果归档 |
 | `docs/plan/m2-kv-cache-article.md`（待写） | 对外文章（知乎发布版） |

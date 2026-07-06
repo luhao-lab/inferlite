@@ -280,7 +280,38 @@ T4 BatchEngine 执行 prefill / decode
 
 ## T2: BatchedKVCache + SlotManager
 
-> 待完成
+> 状态：进行中
+
+### M2 vs M3 的 KV Cache 本质区别
+
+M2 的 `LayerKVCache` 第一维是 `batch_size`，理论上 B>1 也能放多个请求。但它只有一个全局 `cur_len`，所以所有请求必须**锁步同步**（static batching）：
+
+```text
+M2 static batching：
+  - 所有请求同时 prefill
+  - 所有请求同时 decode（共享 cur_len）
+  - 所有请求同时结束（短的 padding 等长的）
+  - 不可能一个请求 seq_len=128，另一个 seq_len=64
+```
+
+M3 的 `BatchedLayerKVCache` 第一维从 batch 变成 slot，配合 per-slot 的 `seq_lens[S]`，每个请求独立进退（continuous batching）：
+
+```text
+M3 continuous batching：
+  - 请求可以不同时 prefill（逐条进入）
+  - 请求可以不同时结束（有的先到 EOS 先退出）
+  - 退出后 slot 被新请求复用
+  - 每个 slot 有独立的 seq_lens[s]
+```
+
+| | M2 KVCache | M3 BatchedKVCache |
+|---|---|---|
+| 第一维含义 | batch（同步组） | slot（独立请求） |
+| 长度管理 | 全局 `cur_len`（int） | per-slot `seq_lens[S]`（tensor） |
+| 请求独立性 | 锁步同步 | 独立进退 |
+| 占用管理 | 无（整体 reset） | per-slot `occupied[S]` + SlotManager |
+
+注意：`BatchedLayerKVCache` 和 `LayerKVCache` 的**数据结构完全相同**（都是 `k: Tensor, v: Tensor`），本质区别在 `BatchedKVCache` 这一层（per-slot 元数据管理）。单独定义新类是为了语义清晰和独立演进。
 
 ---
 
