@@ -5,7 +5,7 @@
 ## 元信息
 - **任务 ID**: M3-T3
 - **里程碑**: M3 — Continuous Batching
-- **状态**: ⬜ pending
+- **状态**: 🟡 in_progress
 - **前置**: M3-T2
 - **估时**: 4h
 
@@ -51,9 +51,18 @@ logits = model(next_tokens, position_ids=cache_positions[:, None], kv_cache=batc
 
 ## 产出文件
 
-- `inferlite/model/attention.py` 中新增或扩展 batched decode 分支
-- `inferlite/model/model.py` / `inferlite/model/layers.py` 必要参数透传
+- `inferlite/model/attention.py` — 扩展 forward + 3 个私有方法
+- `inferlite/model/qwen3.py` — DecoderLayer / Qwen3Model forward 参数透传
 - `tests/unit/test_batched_attention.py`
+
+## 设计决策
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| 扩展 vs 新建类 | 扩展现有 GQAAttention | q_proj/k_proj/o_proj 等权重共享，不需要重复 |
+| cache 逻辑组织 | 私有方法抽取 | 保持 forward 主流程可读 |
+| M3 prefill 路径 | 复用 `_batched_cache_rw`（B=1） | M3 cache 第一维是 slot，不能走 M2 的 `_single_cache_rw` |
+| per-row mask | `_build_batched_mask` 独立方法 | 与 M2 causal mask 逻辑不同，分开清晰 |
 
 ## 算法核心
 
@@ -135,6 +144,32 @@ q_t attends to k_0 ... k_t
 - [ ] `uv run pytest tests/unit/test_batched_attention.py -q` 通过。
 - [ ] 现有 M2 generate 测试不回归。
 - [ ] commit `feat(attention): support fixed-slot batched decode attention (M3-T3 done)`。
+
+## 实现步骤
+
+### Step 1: attention.py — 私有方法 + forward 改造
+
+1. 新增 `_single_cache_rw(cache, k, v, cache_position, seq_len)` — 提取现有 M2 cache 逻辑
+2. 新增 `_batched_cache_rw(cache, k, v, cache_slots, cache_positions)` — per-slot 写入 + gather
+3. 新增 `_build_batched_mask(cache_positions, max_len, device, dtype)` — per-row mask
+4. 修改 `forward()` 签名：加 `cache_slots`, `cache_positions` 参数
+5. 修改 `forward()` 内部：cache 分支用 `isinstance` 分派；mask 分支加 per-row mask
+6. 注意 import `BatchedLayerKVCache`
+
+### Step 2: qwen3.py — 参数透传
+
+1. `DecoderLayer.forward()` 加 `cache_slots`, `cache_positions`，传给 `self.self_attn`
+2. `Qwen3Model.forward()` 加 `cache_slots`, `cache_positions`，传给每层 `DecoderLayer`
+3. 注意 M2 generate loop 不传这些参数（默认 None），不受影响
+
+### Step 3: 测试
+
+1. 先写 cache slot 写入位置测试（L0-2）
+2. 写不同 row 不串 KV 测试（L0-3）
+3. 写 per-row mask 测试（L0-4, L0-5）
+4. 写 B=1 与 M2 decode 等价性测试（L0-6）
+5. 写多 slot 混合 decode 等价性测试（L0-7）
+6. 跑全量回归确保 M2 不受影响
 
 ## 坑（按概率排序）
 

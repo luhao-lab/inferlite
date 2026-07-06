@@ -473,7 +473,88 @@ T3（BatchedAttention）需要：
 
 ## T3: BatchedAttention
 
-> 待完成
+> 状态：进行中
+
+### 核心问题
+
+M2 attention 的 cache 读写用全局 `cur_len`（所有请求同步）：
+
+```python
+# M2: 所有 batch row 写同一个 cache_position，读同一段历史
+cache.k[:, :, cache_position : cache_position + seq_len, :] = k
+k = cache.k[:, :, : cache_position + seq_len, :]
+```
+
+M3 需要 per-slot 独立位置：
+
+```python
+# M3: 每个 batch row 写自己 slot 的 position，从自己 slot gather 历史
+for i in range(B):
+    cache.k[slot_i, :, pos_i : pos_i + 1, :] = k[i]
+k = cache.k[cache_slots, :, :max_len, :]  # gather
+# + per-row mask（每个请求可见长度不同）
+```
+
+### 方案选择：扩展现有 GQAAttention vs 新建类
+
+| 方案 | 做法 | 优点 | 缺点 |
+|---|---|---|---|
+| A: 扩展现有 forward | `isinstance` 分派 | 共享 q_proj/k_proj/o_proj 等权重 | forward 变长 |
+| B: 新建 BatchedGQAAttention | 独立类 | 职责清晰 | 重复所有 projection 权重 |
+
+**选择方案 A**：q_proj/k_proj/v_proj/o_proj/q_norm/k_norm/rotary_emb 全部相同，只是 cache 读写分支不同。用私有方法抽取 cache 逻辑保持可读性。
+
+### 实现结构
+
+forward 主流程不变（6 步），cache 读写按类型分派到私有方法：
+
+```python
+def forward(self, ..., layer_kv_cache=None,
+            cache_position=0,              # M2
+            cache_slots=None,              # M3: [B]
+            cache_positions=None):         # M3: [B]
+    # 1-3. projection + norm + RoPE（M1/M2/M3 通用）
+    # 4. Cache 读写：
+    if isinstance(layer_kv_cache, BatchedLayerKVCache):
+        k, v = self._batched_cache_rw(...)
+    elif layer_kv_cache is not None:
+        k, v = self._single_cache_rw(...)
+    # 5. repeat_kv + attention + mask
+    if isinstance(layer_kv_cache, BatchedLayerKVCache):
+        mask = self._build_batched_mask(...)
+    # 6. o_proj
+```
+
+三个私有方法：
+
+| 方法 | 职责 |
+|---|---|
+| `_single_cache_rw` | M2: 全局 cache_position 写入 + 切片读取 |
+| `_batched_cache_rw` | M3: per-slot 写入 + gather |
+| `_build_batched_mask` | M3: per-row visible mask |
+
+### M3 prefill 策略
+
+任务卡说"不做 prefill batching"。M3 prefill 仍然一条一条处理，**复用 `_batched_cache_rw`**（B=1 的特殊情况）。不能用 `_single_cache_rw`，因为 M3 cache 第一维是 slot 不是 batch。
+
+### 与主流框架对比
+
+| | inferlite M3 | nano-vllm | vLLM / SGLang |
+|---|---|---|---|
+| KV 读取 | Python gather | PyTorch index_select | CUDA kernel 内部 gather |
+| mask | Python tensor | PyTorch mask | kernel 内按 context_len 裁切 |
+| 性能 | O(B × max_len) materialize | 同上 | O(B × avg_len)，不 materialize |
+
+我们的 gather + per-row mask 是教学版标准做法（nano-vllm 同），生产框架把 gather + mask 下沉到 CUDA kernel 优化。M4 PagedAttention 会进一步优化。
+
+### 改动范围
+
+| 文件 | 改什么 |
+|---|---|
+| `attention.py` | 加 3 个私有方法 + 修改 forward 参数和 cache/mask 分支 |
+| `qwen3.py` DecoderLayer | forward 加 `cache_slots`/`cache_positions`，透传 |
+| `qwen3.py` Qwen3Model | forward 加参数，透传 |
+| `test_batched_attention.py` | 8 个 L0 测试 |
 
 ---
 
