@@ -547,6 +547,45 @@ def forward(self, ..., layer_kv_cache=None,
 
 我们的 gather + per-row mask 是教学版标准做法（nano-vllm 同），生产框架把 gather + mask 下沉到 CUDA kernel 优化。M4 PagedAttention 会进一步优化。
 
+### M2 vs M3 的 "batch" 含义
+
+M2 attention 张量本身也支持 `B>1`（`q: [B, n_heads, T, D]`），但 batch 维是**同步组**：
+
+```text
+M2: cache.k[:, :, cache_position:..., :] = k    ← 所有 B 行写同一个位置
+    cache.k[:, :, :cur_len, :]                   ← 所有 B 行读同一段历史
+    → B 个请求必须锁步：同一时刻进入、同一 prompt 长度、同一生成步数
+
+M3: cache.k[slot_i, :, pos_i:..., :] = k[i]      ← 每行写自己的 slot + position
+    cache.k[cache_slots, :, :max_len, :]          ← 每行从自己 slot gather
+    → B 个请求独立：不同时刻进入、不同长度、不同生成步数
+```
+
+**T3 的核心不是"让 attention 支持 batch"（M2 已经支持），而是"让 batch 中每行独立访问自己的 KV 历史"。**
+
+### gather 临时张量的内存浪费
+
+M3 gather 需要创建固定大小的临时张量：
+
+```python
+max_len = int(cache_positions.max()) + 1   # 取所有请求中的最大位置
+k = cache.k[cache_slots, :, :max_len, :]   # [B, H_kv, max_len, D]
+```
+
+假设 3 个请求位置分别是 128、64、300：
+
+```text
+gather 后：[3, H_kv, 301, D]
+
+request 0 (pos=128): 有效 129 个 KV，后 172 个位置是垃圾数据（被 mask 掉）
+request 1 (pos=64):  有效  65 个 KV，后 236 个位置是垃圾数据
+request 2 (pos=300): 有效 301 个 KV，全部有效
+
+浪费率 = (3×301 - 495) / (3×301) ≈ 45%
+```
+
+**位置差异越大，浪费越大。** 生产框架用自定义 kernel 避免这个问题（kernel 内部按 block_table 逐个 gather，不 materialize 整个 dense tensor）。教学版语义等价但多浪费临时内存。
+
 ### 改动范围
 
 | 文件 | 改什么 |
