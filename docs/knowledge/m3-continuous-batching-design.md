@@ -473,7 +473,7 @@ T3（BatchedAttention）需要：
 
 ## T3: BatchedAttention
 
-> 状态：进行中
+> 状态：✅ done
 
 ### 核心问题
 
@@ -593,7 +593,58 @@ request 2 (pos=300): 有效 301 个 KV，全部有效
 | `attention.py` | 加 3 个私有方法 + 修改 forward 参数和 cache/mask 分支 |
 | `qwen3.py` DecoderLayer | forward 加 `cache_slots`/`cache_positions`，透传 |
 | `qwen3.py` Qwen3Model | forward 加参数，透传 |
-| `test_batched_attention.py` | 8 个 L0 测试 |
+| `test_batched_attention.py` | 10 个测试（8 个 L0 + 2 个 Model 级） |
+
+### 最终实现
+
+**attention.py** — 3 个私有方法 + forward 改造：
+
+| 方法 | 职责 | 类型 |
+|---|---|---|
+| `_single_cache_rw` | M2：全局 cache_position 写入 + 切片读取（view） | `LayerKVCache → (k, v)` |
+| `_batched_cache_rw` | M3：per-slot 写入 + gather 到 `[B, H_kv, max_len, D]` | `BatchedLayerKVCache → (k, v)` |
+| `_build_batched_mask` | M3：per-row visible mask，padding 位置填 dtype min | `(scores, positions) → scores` |
+
+forward 主流程 6 步不变，cache 读写和 mask 按 `isinstance` 分派。
+
+**qwen3.py** — 参数透传：
+
+- `DecoderLayer.forward()` 加 `cache_slots`/`cache_positions`，透传给 `self_attn`
+- `Qwen3Model.forward()` 加 `cache_slots`/`cache_positions`，透传给每层
+- `cache_position` 用 `isinstance(kv_cache, KVCache)` 判断，M3 时传 0（不使用）
+
+### 设计决策
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| 扩展 vs 新建类 | 扩展现有 GQAAttention | q/k/v/o_proj 权重共享，不需要重复 |
+| cache 逻辑组织 | 私有方法抽取 | forward 主流程保持可读 |
+| M3 prefill 路径 | 复用 `_batched_cache_rw`（B=1） | M3 cache 第一维是 slot，不能走 M2 的 `_single_cache_rw` |
+| per-row mask 位置 | forward 内独立 `if` 分支 | 不依赖 `seq_len > 1`（M3 decode seq_len=1 也需执行） |
+| cache 写入方式 | Python for 循环 | B=4~8 开销远小于矩阵乘，nano-vllm 同做法 |
+| M3 `cache_position` 处理 | `isinstance(kv_cache, KVCache)` 判断 | `BatchedKVCache` 无 `cur_len` 属性 |
+
+### 测试覆盖
+
+| L0 项 | 测试名 | 验证内容 |
+|---|---|---|
+| 1 | `test_batched_decode_output_shape` | `[B, 1, 32]` shape 正确 |
+| 2 | `test_cache_slot_write_position` | 只写 slot_i 的 pos_i，其他位置/slot 为零 |
+| 3 | `test_no_cross_slot_attention` | 单条 vs 合批输出一致（atol=1e-5） |
+| 4 | `test_mask_preserves_current_position` | 输出非全零，attend 到了自己 |
+| 5 | `test_padding_positions_masked` | 输出无 NaN/Inf |
+| 6 | `test_b1_equivalent_to_m2_decode` | B=1 batched ≈ M2 single（atol=1e-4） |
+| 7 | `test_mixed_positions_equivalent_to_sequential` | 混合 batch ≈ 逐条 decode（atol=1e-4） |
+| 8 | `test_gqa_repeat_kv_shape` | GQA heads 对齐无报错 |
+| - | `test_model_batched_decode_shape` | Model 级 `[B, 1, 32]` shape |
+| - | `test_model_m2_not_broken` | M2 KVCache 路径不受影响 |
+
+### T4 依赖
+
+T4 BatchEngine 需要：
+1. 维护 `cache_slots`/`cache_positions` 并在每轮 decode 时传入 `model()`
+2. 调用 `BatchedKVCache.allocate_slot`/`free_slot` 管理槽位
+3. 递增 `BatchedKVCache.seq_lens` 更新每个请求的有效长度
 
 ---
 

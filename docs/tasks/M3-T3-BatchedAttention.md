@@ -5,7 +5,7 @@
 ## 元信息
 - **任务 ID**: M3-T3
 - **里程碑**: M3 — Continuous Batching
-- **状态**: 🟡 in_progress
+- **状态**: ✅ done
 - **前置**: M3-T2
 - **估时**: 4h
 
@@ -181,4 +181,24 @@ q_t attends to k_0 ... k_t
 
 ## 完成总结
 
-待完成后补：batched decode attention 的接口、mask 语义、和逐条 decode 等价性结果。
+### 接口
+
+```python
+# attention.py — GQAAttention.forward 新增参数
+def forward(self, ..., layer_kv_cache, cache_position=0,
+            cache_slots=None, cache_positions=None)
+
+# qwen3.py — DecoderLayer/Qwen3Model forward 透传
+def forward(self, ..., cache_slots=None, cache_positions=None)
+```
+
+### mask 语义
+
+- M2 causal mask：`seq_len > 1` 时构建，防止看到未来
+- M3 per-row mask：`isinstance(BatchedLayerKVCache)` 时构建，每行只看自己有效 KV
+
+### 等价性验证
+
+- B=1 batched decode ≈ M2 single decode（atol=1e-4）
+- 混合 batch decode ≈ 逐条 sequential decode（atol=1e-4）
+- 165/165 全量回归通过，M2 路径不受影响

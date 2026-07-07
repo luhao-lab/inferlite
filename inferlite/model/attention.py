@@ -38,6 +38,7 @@ import torch
 import torch.nn as nn
 
 from inferlite.config import ModelConfig
+from inferlite.model import BatchedLayerKVCache
 from inferlite.model.kv_cache import LayerKVCache
 from inferlite.model.layers import RMSNorm, RotaryEmbedding, apply_rotary_pos_emb
 
@@ -155,8 +156,10 @@ class GQAAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_ids: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        layer_kv_cache: LayerKVCache | None = None,
+        layer_kv_cache: LayerKVCache | BatchedLayerKVCache | None = None,
         cache_position: int = 0,
+        cache_slots: torch.Tensor | None = None,
+        cache_positions: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """执行 causal self-attention，支持 M1（无 cache）和 M2（有 cache）两路。
 
@@ -186,11 +189,13 @@ class GQAAttention(nn.Module):
             position_embeddings: (cos, sin)，M2 路径专用，与 position_ids 二选一。
                 由 Qwen3Model.forward 统一计算后传入；shape: [B, T, head_dim]。
             layer_kv_cache: 当前层的 KV Cache 容器。
-                不为 None 时启用 M2 路径：RoPE 后写入当前 K/V，读出完整历史 K/V。
+                LayerKVCache 时走 M2 路径（单序列 cache）。
+                BatchedLayerKVCache 时走 M3 路径（多请求 batched cache）。
                 None 时走 M1 兼容路径，行为与原始实现完全相同。
-            cache_position: 当前 token(s) 写入 cache 的起始槽位 = kv_cache.cur_len。
+            cache_position: M2 路径专用。当前 token(s) 写入 cache 的起始槽位 = kv_cache.cur_len。
                 prefill 时为 0；decode 第 i 步时为 prompt_len + i。
-                由 generate loop 维护并传入，Attention 内部不修改它。
+            cache_slots: M3 路径专用。[B] 每个请求对应的 slot id。
+            cache_positions: M3 路径专用。[B] 每个请求当前 token 的写入位置。
 
         Returns:
             [B, T, hidden_size]，T 与输入 hidden_states 的 seq_len 相同。
@@ -258,12 +263,10 @@ class GQAAttention(nn.Module):
         #
         # M1 兼容路径（layer_kv_cache=None）：跳过，k/v 直接用当前输入的。
         if layer_kv_cache is not None:
-            # 写：当前 token(s) 的 k/v → [cache_position : cache_position + seq_len]
-            layer_kv_cache.k[:, :, cache_position : cache_position + seq_len, :] = k
-            layer_kv_cache.v[:, :, cache_position : cache_position + seq_len, :] = v
-            # 读：完整有效历史 k/v，T_k >= seq_len
-            k = layer_kv_cache.k[:, :, : cache_position + seq_len, :]
-            v = layer_kv_cache.v[:, :, : cache_position + seq_len, :]
+            if isinstance(layer_kv_cache, BatchedLayerKVCache):
+                k, v = self._batched_cache_rw(layer_kv_cache, k, v, cache_slots, cache_positions)
+            else:
+                k, v = self._single_cache_rw(layer_kv_cache, k, v, cache_position, seq_len)
 
         # 4. GQA repeat_kv：把 KV heads 扩展到 Query heads 数量，才能一一对应做 attention。
         # cache 存的是 n_kv 维度；repeat 之后 k/v 变成 n_q 维度。
@@ -295,6 +298,10 @@ class GQAAttention(nn.Module):
                 causal_mask,
                 torch.finfo(attn_weights.dtype).min,
             )
+        # M3 per-row mask（batched decode，每行可见长度不同）
+        if isinstance(layer_kv_cache, BatchedLayerKVCache):
+            attn_weights = self._build_batched_mask(attn_weights, cache_positions)
+
         # 与 transformers eager attention 对齐：softmax 用 fp32 做，再 cast 回 q dtype。
         attn_weights = torch.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q.dtype)
 
@@ -314,3 +321,63 @@ class GQAAttention(nn.Module):
         )
         # o_proj 回到 hidden_size，输出将进入 DecoderLayer 的 residual add。
         return self.o_proj(attn_output)
+
+    def _single_cache_rw(
+        self,
+        cache: LayerKVCache,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        cache_position: int,
+        seq_len: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """M2 路径：全局 cache_position 写入 + 切片读取。
+
+        写：当前 token(s) 的 k/v → cache[cache_position : cache_position + seq_len]
+        读：完整有效历史 k/v → cache[:cache_position + seq_len]（view，零拷贝）。
+        """
+        cache.k[:, :, cache_position : cache_position + seq_len, :] = k
+        cache.v[:, :, cache_position : cache_position + seq_len, :] = v
+        k = cache.k[:, :, : cache_position + seq_len, :]
+        v = cache.v[:, :, : cache_position + seq_len, :]
+        return k, v
+
+    def _batched_cache_rw(
+        self,
+        cache: BatchedLayerKVCache,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        cache_slots: torch.Tensor,
+        cache_positions: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """M3 路径：per-slot 写入 + gather 读取。
+
+        写：每个请求的当前 token k/v 写入自己 slot 的 position（for 循环，B 很小）。
+        读：从各 slot gather 到 [B, H_kv, max_len, D]，短请求的尾部是垃圾数据（需 per-row mask）。
+        """
+        for i, slot in enumerate(cache_slots.tolist()):
+            pos = int(cache_positions[i])
+            cache.k[slot, :, pos : pos + 1, :] = k[i]
+            cache.v[slot, :, pos : pos + 1, :] = v[i]
+
+        max_len = int(cache_positions.max().item()) + 1
+        k = cache.k[cache_slots, :, :max_len, :]
+        v = cache.v[cache_slots, :, :max_len, :]
+        return k, v
+
+    def _build_batched_mask(
+        self,
+        scores: torch.Tensor,
+        cache_positions: torch.Tensor,
+    ) -> torch.Tensor:
+        """M3 per-row visible mask：每行只能 attend 到自己的有效 KV。
+
+        cache_positions[i] + 1 = 请求 i 的有效 KV 长度。
+        超出部分填 dtype min，softmax 后概率 ≈ 0。
+        """
+        max_len = int(cache_positions.max().item()) + 1
+        valid_lens = cache_positions + 1  # [B]
+        positions = torch.arange(max_len, device=scores.device)  # [max_len]
+        visible = positions[None, :] < valid_lens[:, None]  # [B, max_len]
+        # 扩到 [B, 1, 1, max_len] 广播到 [B, n_heads, T, max_len]
+        scores = scores.masked_fill(~visible[:, None, None, :], torch.finfo(scores.dtype).min)
+        return scores

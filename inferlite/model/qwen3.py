@@ -95,6 +95,8 @@ class DecoderLayer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         layer_kv_cache: LayerKVCache | None = None,
         cache_position: int = 0,
+        cache_slots: torch.Tensor | None = None,
+        cache_positions: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """执行一个 Qwen3 decoder block：self-attention + MLP。
 
@@ -131,6 +133,8 @@ class DecoderLayer(nn.Module):
             position_embeddings,
             layer_kv_cache=layer_kv_cache,
             cache_position=cache_position,
+            cache_slots=cache_slots,
+            cache_positions=cache_positions,
         )
         # residual add：把 attention 增量加回主干。
         hidden_states = residual + hidden_states
@@ -209,6 +213,8 @@ class Qwen3Model(nn.Module):
         input_ids: torch.Tensor,
         position_ids: torch.Tensor | None = None,
         kv_cache: KVCache | None = None,
+        cache_slots: torch.Tensor | None = None,
+        cache_positions: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Qwen3 backbone 前向，返回最后一层 hidden states。
 
@@ -250,7 +256,9 @@ class Qwen3Model(nn.Module):
                 position_ids,
                 position_embeddings=position_embeddings,
                 layer_kv_cache=kv_cache.layers[i] if kv_cache is not None else None,
-                cache_position=kv_cache.cur_len if kv_cache is not None else 0,
+                cache_position=kv_cache.cur_len if isinstance(kv_cache, KVCache) else 0,
+                cache_slots=cache_slots,
+                cache_positions=cache_positions,
             )
 
         # Step 3: final RMSNorm。
