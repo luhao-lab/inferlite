@@ -65,7 +65,6 @@ assert len(outputs) == 3
 
 ## 产出文件
 
-- `inferlite/engine/batch_core.py::BatchEngine`
 - `inferlite/engine/batch_core.py::batch_generate`
 - `inferlite/model/qwen3.py` — `Qwen3ForCausalLM.forward()` 加 `cache_slots`/`cache_positions` 透传
 - `tests/unit/test_batch_engine.py`
@@ -74,7 +73,7 @@ assert len(outputs) == 3
 
 | 决策 | 选择 | 理由 |
 |---|---|---|
-| BatchEngine vs 复用 EngineCore | 直接持有 model + sampler | EngineCore.step() 不传 kv_cache/position_ids/cache_slots，复用无意义；nano-vllm/vLLM 也是 engine 直接持有 model + scheduler |
+| BatchEngine vs 复用 EngineCore | 纯函数 `batch_generate` | EngineCore.step() 不传 kv_cache/position_ids/cache_slots，复用无意义；纯函数和 M2 generate() 对称 |
 | seq_len 语义 | 下一个写入位置 | 和 M2 cur_len 一致；nano-vllm 也这么做 |
 | prefill 后 seq_len | = prompt_len | prefill 写 KV[0..prompt_len-1]，下一步写 prompt_len |
 | batch_generate 位置 | `engine/batch_core.py` | 和 `engine/core.py` 对称 |
@@ -88,10 +87,10 @@ assert len(outputs) == 3
 1. `forward()` 签名加 `cache_slots`, `cache_positions`
 2. 透传到 `self.model()`
 
-### Step 2: batch_core.py — BatchEngine + batch_generate
+### Step 2: batch_core.py — batch_generate
 
-1. `BatchEngine.__init__(model, sampler, config)` — 持有模型和采样器
-2. `batch_generate()` 主循环：
+1. `batch_generate(model, sampler, prompts, max_new_tokens, max_num_slots, ...)` 主循环：
+   - 内部创建 `FCFSScheduler` + `BatchedKVCache`
    - `while scheduler.has_unfinished():`
    - finish done requests + free slots
    - admit waiting + prefill one by one
@@ -100,7 +99,7 @@ assert len(outputs) == 3
 
 ### Step 3: engine/__init__.py — 导出
 
-1. 加 `BatchEngine`, `batch_generate` 到 `__all__`
+1. 加 `batch_generate` 到 `__all__`
 
 ### Step 4: 测试
 
@@ -127,36 +126,37 @@ finished / cancelled 请求必须释放 slot
 M3 先逐条 prefill：
 
 ```python
-while scheduler.has_waiting() and cache.has_free_slot():
-    req = scheduler.pop_waiting()
-    slot = cache.allocate(req.request_id)
+admitted = scheduler.admit_until_full()
+for req in admitted:
+    slot = cache.allocate_slot(req.request_id)
     req.slot_id = slot
 
-    logits = engine.model(
-        req.prompt_ids[None, :],
-        position_ids=torch.arange(prompt_len)[None, :],
+    prompt_len = req.prompt_ids.shape[1]
+    position_ids = torch.arange(prompt_len, device=device).unsqueeze(0)
+    logits = model(
+        req.prompt_ids,
+        position_ids=position_ids,
         kv_cache=cache,
         cache_slots=torch.tensor([slot]),
     )
 
     req.seq_len = prompt_len
     req.last_token = sampler(logits[:, -1, :])
-    req.generated_ids.append(req.last_token)
+    req.generated_tokens.append(req.last_token)
     req.num_generated = 1
     cache.seq_lens[slot] = prompt_len
-    scheduler.mark_running(req)
 ```
 
 ### 2. 每轮 decode 重新组 batch
 
 ```python
-running = scheduler.get_running_requests()
+running = list(scheduler.running.values())
 cache_slots = torch.tensor([r.slot_id for r in running])
 cache_positions = torch.tensor([r.seq_len for r in running])
 next_tokens = torch.cat([r.last_token for r in running], dim=0)
 
-logits = engine.model(
-    next_tokens[:, None],
+logits = model(
+    next_tokens,
     position_ids=cache_positions[:, None],
     kv_cache=cache,
     cache_slots=cache_slots,
@@ -169,15 +169,15 @@ logits = engine.model(
 ```python
 sampled = sampler(logits[:, -1, :])
 for req, tok in zip(running, sampled):
-    req.generated_ids.append(tok)
+    req.generated_tokens.append(tok)
     req.last_token = tok
     req.seq_len += 1
     req.num_generated += 1
     cache.seq_lens[req.slot_id] = req.seq_len
 
     if is_finished(req, tok):
-        scheduler.mark_finished(req.request_id)
-        cache.free(req.slot_id)
+        scheduler.mark_finished(req)
+        cache.free_slot(req.request_id)
 ```
 
 ### 4. continuous batching 入口点
@@ -208,7 +208,7 @@ admit_waiting_requests_with_prefill()
 
 ## DoD
 
-- [ ] `BatchEngine` 能提交并执行多个请求。
+- [ ] `batch_generate` 能提交并执行多个请求。
 - [ ] prefill 逐条执行，decode 按 running batch 执行。
 - [ ] 每轮 decode 结束后支持 finished 离开、waiting 进入。
 - [ ] waiting 请求不占 KV slot，running 请求才占 slot。

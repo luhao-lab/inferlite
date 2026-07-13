@@ -724,8 +724,8 @@ while scheduler.has_unfinished():
 | 文件 | 改什么 |
 |---|---|
 | `qwen3.py` Qwen3ForCausalLM | forward 加 `cache_slots`/`cache_positions`，透传到 model |
-| `engine/batch_core.py` | 新建 BatchEngine + batch_generate |
-| `engine/__init__.py` | 导出 BatchEngine, batch_generate |
+| `engine/batch_core.py` | 新建 `batch_generate` 函数 |
+| `engine/__init__.py` | 导出 batch_generate |
 | `test_batch_engine.py` | 10 个 L0 测试 |
 
 ---
