@@ -1,71 +1,157 @@
+"""M3 Continuous Batching generate。
+
+`batch_generate()` 是 M3 的核心入口，串起 scheduler + BatchedKVCache + batched attention，
+实现 continuous batching 的最小执行流。
+
+与 M2 `generate()` 的关系：
+  - M2 `generate()`：单请求，prefill + decode 两阶段
+  - M3 `batch_generate()`：多请求，continuous batching
+
+调用示例：
+    outputs = batch_generate(
+        model, sampler,
+        prompts=[ids_a, ids_b, ids_c],
+        max_new_tokens=16,
+        max_num_slots=2,
+        config=config,
+        max_seq_len=512,
+    )
+"""
+
 import torch
 
+from inferlite.config import ModelConfig
 from inferlite.engine.protocol import LLMModel
 from inferlite.model import BatchedKVCache
 from inferlite.sampler.greedy import GreedySampler
+from inferlite.scheduler.fcfs import FCFSScheduler
+from inferlite.scheduler.request import RequestState
 
 
 def batch_generate(
     model: LLMModel,
     sampler: GreedySampler,
-    input_ids: torch.Tensor,
+    prompts: list[torch.Tensor],
     max_new_tokens: int,
+    max_num_slots: int,
+    config: ModelConfig,
+    max_seq_len: int,
     eos_token_id: int | None = None,
-    kv_cache: BatchedKVCache | None = None,
-) -> torch.Tensor:
-    """用 `EngineCore.step` 做最小 greedy generate loop，支持 EOS 提前停止。
+    device: str | torch.device = "cpu",
+    dtype: torch.dtype = torch.float32,
+) -> list[torch.Tensor]:
+    """M3 continuous batching generate。
 
     Args:
-        engine: 已经组装好 model + sampler 的单步推理引擎。
-        input_ids: prompt token ids，shape 为 [B, T]。
-        max_new_tokens: 最多生成多少个新 token（硬上限）。
-        eos_token_id: EOS token 的 id。当生成的 token 等于 eos_token_id 时提前停止。
-            设为 None 时不做 EOS 检查，严格跑满 max_new_tokens 步（向后兼容）。
-        kv_cache: 全模型 KVCache。
-            None：走 M1 full forward，每步重跑完整序列（向后兼容）。
-            非 None：走 M2 两阶段——
-                Prefill：一次性处理整个 prompt，KV 写入 cache。
-                Decode：每步只传 1 个 token，历史 KV 从 cache 读取。
+        model: 推理模型（Qwen3ForCausalLM 或符合 LLMModel 协议的对象）。
+        sampler: 采样器。
+        prompts: 多个 prompt，每个 shape 为 [1, T_i]。
+        max_new_tokens: 每个请求最多生成的新 token 数。
+        max_num_slots: KV cache 的最大槽位数（= 最大并发请求数）。
+        config: 模型配置，用于创建 BatchedKVCache。
+        max_seq_len: 每个请求的最大序列长度。
+        eos_token_id: EOS token id，生成到时提前停止。
+        device: 计算设备。
+        dtype: 数据类型。
 
     Returns:
-        output_ids: prompt + generated token ids，shape 为 [B, T + n]，
-            其中 n <= max_new_tokens。若提前遇到 EOS，n 可能小于 max_new_tokens。
-
-    调用方应在 `torch.no_grad()` 上下文里使用此函数，避免构建不必要的梯度图。
-    这个函数只负责 token id 级别的循环，不负责 tokenizer encode/decode。
-    CLI 会在外层完成文本与 token id 的转换。
+        每个请求的生成结果列表（按 request_id 排序），
+        每个元素为 prompt + generated token ids，shape [1, T_i + n_i]。
     """
+    # ── 初始化 scheduler：所有请求先进 waiting 队列 ──
+    # waiting 请求不占 KV slot，只有 admit 到 running 后才分配 slot。
+    scheduler = FCFSScheduler(max_num_seqs=max_num_slots)
+    for i, prompt_ids in enumerate(prompts):
+        req = RequestState(
+            request_id=str(i),
+            prompt_ids=prompt_ids,
+            max_new_tokens=max_new_tokens,
+            eos_token_id=eos_token_id,
+        )
+        scheduler.submit(req)
 
-    # 这里可能会有非None的情况吗？
-    if kv_cache is not None:
-        kv_cache.reset_slots()
+    # ── 创建 BatchedKVCache：固定 S 个 slot，每个 slot 存 max_seq_len 个 token ──
+    cache = BatchedKVCache.from_config(
+        config=config,
+        max_num_slots=max_num_slots,
+        max_seq_len=max_seq_len,
+        dtype=dtype,
+        device=device,
+    )
 
-    # ----- Prefill -----
-    # 一次性把整个 prompt 跑完，所有层的 K/V 写入 cache。
-    # position_ids 从 0 开始连续编号，与训练时 full-sequence 前向一致。
-    T_p = input_ids.shape[1]
-    position_ids = torch.arange(T_p, device=input_ids.device).unsqueeze(0)  # [1, T_p]
-    logits = model(input_ids, position_ids=position_ids, kv_cache=kv_cache)
-    # 显式更新 cur_len：prefill 写入了 T_p 个 token 的 KV，下一步 decode 从 T_p 位置开始。
-    # cur_len 在 generate loop 里维护，不在 model 内部更新（ADR-02：避免模型内部隐式状态）。
-    kv_cache.cur_len = T_p
+    # ── 主循环：iteration-level scheduling ──
+    # 每轮迭代：admit 新请求 → prefill → batched decode → 更新状态
+    # finished 请求在 step 3 释放 slot，下一轮 admit 时新请求自动进入。
+    while scheduler.has_unfinished():
+        # ── 1. admit + prefill ──
+        # admit_until_full() 只返回本轮新 admit 的请求（之前已在 running 的不会重复返回）。
+        # 逐条 prefill：每个请求独立跑一次 full forward，KV 写入对应的 slot。
+        admitted = scheduler.admit_until_full()
+        for request in admitted:
+            slot = cache.allocate_slot(request.request_id)
+            request.slot_id = slot
 
-    # 采样 prefill 最后一个位置的 token，作为 decode 第一步的输入。
-    next_token = sampler(logits[:, -1, :])
-    input_ids = torch.cat([input_ids, next_token], dim=1)
+            prompt_len = request.prompt_ids.shape[1]
+            position_ids = torch.arange(prompt_len, device=device).unsqueeze(0)  # [1, T_p]
+            # prefill：整条 prompt 一次前向，KV 写入 cache slot
+            # cache_slots=[slot]：告诉 attention 层写入哪个 slot（B=1）
+            logits = model(
+                request.prompt_ids,
+                position_ids=position_ids,
+                kv_cache=cache,
+                cache_slots=torch.tensor([slot]),
+            )
 
-    # ----- Decode Loop -----
-    for _ in range(max_new_tokens - 1):
-        # EOS 检查放在 loop 开头：检查上一步（prefill 采样或上一 decode 步）生成的 token。
-        # 这样既不漏掉 EOS，也不会在 EOS 之后多生成一步。
-        if eos_token_id is not None and (next_token == eos_token_id).all():
+            # prefill 后采样第一个 token（作为 decode 第一步的输入）
+            request.seq_len = prompt_len
+            request.last_token = sampler(logits[:, -1, :])  # [1, 1]
+            request.generated_tokens.append(request.last_token)
+            request.num_generated = 1
+            cache.seq_lens[slot] = prompt_len
+
+        # ── 2. batched decode one step ──
+        # 把所有 running 请求组成一个 batch，并行执行一步 decode。
+        # 每个请求的 cache_position 独立（= 该请求的 seq_len），
+        # attention 层通过 cache_slots + cache_positions 分别读写各自的 KV。
+        if not scheduler.running:
             break
-        # position_ids 必须是绝对位置（cur_len），不能从 0 重新计数。
-        # 用 [[0]] 是沉默 bug：RoPE 认为每步都在位置 0，输出质量下降但不报错（ADR-04）。
-        pos = torch.tensor([[kv_cache.cur_len]], device=input_ids.device)  # [1, 1] 绝对位置
-        logits = model(next_token, position_ids=pos, kv_cache=kv_cache)
-        kv_cache.cur_len += 1
-        next_token = sampler(logits[:, -1, :])
-        input_ids = torch.cat([input_ids, next_token], dim=1)
+        running = list(scheduler.running.values())
+        cache_slots = torch.tensor([req.slot_id for req in running])
+        # cache_positions: [B, 1]，每个请求当前的写入位置（= seq_len）
+        cache_positions = cache.seq_lens[cache_slots].unsqueeze(1)
+        # next_tokens: [B, 1]，拼接每个请求上一步的 last_token
+        next_tokens = torch.cat(
+            [req.last_token for req in running if req.last_token is not None], dim=0
+        )
+        logits = model(
+            next_tokens,
+            position_ids=cache_positions,
+            kv_cache=cache,
+            cache_slots=cache_slots,
+            cache_positions=cache_positions,
+        )
 
-    return input_ids
+        # ── 3. sample + update state + finish ──
+        sampled = sampler(logits[:, -1, :])
+        for request, next_token in zip(running, sampled, strict=False):
+            # next_token: [1]（1D），unsqueeze 为 [1, 1] 保持与 prefill 阶段一致
+            request.last_token = next_token.unsqueeze(0)
+            request.generated_tokens.append(next_token.unsqueeze(0))
+            request.num_generated += 1
+            request.seq_len += 1
+            cache.seq_lens[request.slot_id] = request.seq_len
+
+            # 完成条件：max_new_tokens 到达 或 EOS
+            is_max = request.num_generated >= request.max_new_tokens
+            is_eos = eos_token_id is not None and next_token.item() == eos_token_id
+            if is_max or is_eos:
+                scheduler.mark_finished(request)
+                # 释放 slot：下一轮循环 admit_until_full 就能看到空闲 slot
+                cache.free_slot(request.request_id)
+
+    # ── 收集结果（按 request_id 排序，保证与输入 prompts 顺序一致）──
+    results = []
+    for req_id in sorted(scheduler.finished.keys(), key=int):
+        req = scheduler.finished[req_id]
+        results.append(torch.cat([req.prompt_ids] + req.generated_tokens, dim=1))
+    return results

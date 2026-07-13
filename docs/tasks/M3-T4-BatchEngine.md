@@ -5,7 +5,7 @@
 ## 元信息
 - **任务 ID**: M3-T4
 - **里程碑**: M3 — Continuous Batching
-- **状态**: 🟡 in_progress
+- **状态**: ✅ done
 - **前置**: M3-T1, M3-T2, M3-T3
 - **估时**: 5h
 
@@ -229,4 +229,31 @@ admit_waiting_requests_with_prefill()
 
 ## 完成总结
 
-待完成后补：BatchEngine 执行流、关键状态不变量、和 continuous batching trace 示例。
+### 最终实现
+
+`batch_generate()` 纯函数，内部创建 `FCFSScheduler` + `BatchedKVCache`，主循环结构：
+
+1. **admit + prefill**：`admit_until_full()` 返回新请求，逐条 prefill（B=1 forward）
+2. **batched decode**：所有 running 请求组 batch，并行一步 decode
+3. **update + finish**：采样、更新状态、检查 max_new_tokens / EOS，finished 释放 slot
+
+### 关键设计决策
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| 纯函数 vs 类 | 纯函数 | 简单，和 M2 generate 对称 |
+| seq_len 语义 | next write position | 和 M2 cur_len 对齐，和 nano-vllm 一致 |
+| 复用 EngineCore | 不复用 | step() 不支持 kv_cache/cache_slots，直接持有 model+sampler |
+| prefill batching | 不做 | 教学范围限制，留 M4/M5 |
+
+### 修改文件
+
+| 文件 | 改动 |
+|---|---|
+| `engine/batch_core.py` | 新建 `batch_generate()` 函数 |
+| `engine/protocol.py` | `LLMModel` 协议加 `cache_slots`/`cache_positions` 参数 |
+| `test_batch_engine.py` | 10 个 L0 测试 |
+
+### 测试覆盖
+
+10/10 通过，全量回归 176/176 通过。
