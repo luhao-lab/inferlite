@@ -74,10 +74,11 @@ assert len(outputs) == 3
 
 | 决策 | 选择 | 理由 |
 |---|---|---|
-| BatchEngine vs 复用 EngineCore | 独立类 | EngineCore.step() 假设 B=1 + M2 KVCache，M3 逻辑完全不同 |
+| BatchEngine vs 复用 EngineCore | 直接持有 model + sampler | EngineCore.step() 不传 kv_cache/position_ids/cache_slots，复用无意义；nano-vllm/vLLM 也是 engine 直接持有 model + scheduler |
 | seq_len 语义 | 下一个写入位置 | 和 M2 cur_len 一致；nano-vllm 也这么做 |
 | prefill 后 seq_len | = prompt_len | prefill 写 KV[0..prompt_len-1]，下一步写 prompt_len |
 | batch_generate 位置 | `engine/batch_core.py` | 和 `engine/core.py` 对称 |
+| batch_generate 参数 | 直接调 `model()` + `sampler()` | EngineCore.step() 不支持 M3 参数，主流框架也是 engine 直接持有 model |
 | 主循环结构 | finish → admit → decode | iteration-level scheduling，不做 prefill batching |
 
 ## 实现步骤

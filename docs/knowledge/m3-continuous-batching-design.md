@@ -672,6 +672,18 @@ submit requests → prefill one by one → admit to running slots
 
 nano-vllm 的 `prepare_decode` 用 `positions.append(len(seq) - 1)` 也是同样的"下一个写入位置"语义。
 
+### BatchEngine 架构：直接持有 model + sampler
+
+`batch_generate()` 直接持有 `model` + `sampler`，不复用 `EngineCore`：
+
+| | EngineCore (M1/M2) | batch_generate (M3) |
+|---|---|---|
+| 持有 | model + sampler | model + sampler |
+| step 逻辑 | `model(ids, logits_to_keep=1)` → sampler | 每次不同参数：kv_cache, cache_slots, cache_positions |
+| 编排 | `generate()` 函数 | `batch_generate()` 函数 |
+
+`EngineCore.step()` 不传 kv_cache/position_ids/cache_slots，在 batch_generate 里用不上。主流框架（nano-vllm、vLLM）也是 engine 直接持有 model + scheduler，没有中间层。
+
 ### 主循环结构
 
 ```python
