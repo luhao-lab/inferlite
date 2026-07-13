@@ -5,7 +5,7 @@
 ## 元信息
 - **任务 ID**: M3-T4
 - **里程碑**: M3 — Continuous Batching
-- **状态**: ⬜ pending
+- **状态**: 🟡 in_progress
 - **前置**: M3-T1, M3-T2, M3-T3
 - **估时**: 5h
 
@@ -67,7 +67,43 @@ assert len(outputs) == 3
 
 - `inferlite/engine/batch_core.py::BatchEngine`
 - `inferlite/engine/batch_core.py::batch_generate`
+- `inferlite/model/qwen3.py` — `Qwen3ForCausalLM.forward()` 加 `cache_slots`/`cache_positions` 透传
 - `tests/unit/test_batch_engine.py`
+
+## 设计决策
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| BatchEngine vs 复用 EngineCore | 独立类 | EngineCore.step() 假设 B=1 + M2 KVCache，M3 逻辑完全不同 |
+| seq_len 语义 | 下一个写入位置 | 和 M2 cur_len 一致；nano-vllm 也这么做 |
+| prefill 后 seq_len | = prompt_len | prefill 写 KV[0..prompt_len-1]，下一步写 prompt_len |
+| batch_generate 位置 | `engine/batch_core.py` | 和 `engine/core.py` 对称 |
+| 主循环结构 | finish → admit → decode | iteration-level scheduling，不做 prefill batching |
+
+## 实现步骤
+
+### Step 1: qwen3.py — Qwen3ForCausalLM.forward 加参数
+
+1. `forward()` 签名加 `cache_slots`, `cache_positions`
+2. 透传到 `self.model()`
+
+### Step 2: batch_core.py — BatchEngine + batch_generate
+
+1. `BatchEngine.__init__(model, sampler, config)` — 持有模型和采样器
+2. `batch_generate()` 主循环：
+   - `while scheduler.has_unfinished():`
+   - finish done requests + free slots
+   - admit waiting + prefill one by one
+   - batched decode one step
+   - sample + update per-request state
+
+### Step 3: engine/__init__.py — 导出
+
+1. 加 `BatchEngine`, `batch_generate` 到 `__all__`
+
+### Step 4: 测试
+
+1. 10 个 L0 测试
 
 ## 算法核心
 

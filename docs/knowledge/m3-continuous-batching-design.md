@@ -650,7 +650,71 @@ T4 BatchEngine 需要：
 
 ## T4: BatchEngine
 
-> 待完成
+> 状态：进行中
+
+### 核心问题
+
+T1/T2/T3 分别解决了 scheduler、slot cache、batched attention。T4 要把它们串成 continuous batching 执行流：
+
+```text
+submit requests → prefill one by one → admit to running slots
+→ batched decode one token → finished leave, waiting enter → loop
+```
+
+### seq_len 语义：与 M2 cur_len 和 nano-vllm 对齐
+
+| 阶段 | seq_len | cache_positions | 含义 |
+|---|---|---|---|
+| prefill 前 | 0 | — | 无历史 |
+| prefill 后 | prompt_len | — | KV[0..P-1] 已写入，下一步写 P |
+| decode step 1 | prompt_len | prompt_len | 写 KV[P]，采样后 seq_len=P+1 |
+| decode step N | prompt_len + N - 1 | prompt_len + N - 1 | 写 KV[P+N-1]，采样后 seq_len=P+N |
+
+nano-vllm 的 `prepare_decode` 用 `positions.append(len(seq) - 1)` 也是同样的"下一个写入位置"语义。
+
+### 主循环结构
+
+```python
+while scheduler.has_unfinished():
+    # 1. finish done + free slots
+    for req in get_finished_in_decode():
+        scheduler.mark_finished(req)
+        cache.free_slot(req.request_id)
+
+    # 2. admit waiting + prefill one by one
+    admitted = scheduler.admit_until_full()
+    for req in admitted:
+        slot = cache.allocate_slot(req.request_id)
+        req.slot_id = slot
+        prefill_one(req, slot)
+
+    # 3. batched decode one step
+    if not scheduler.running:
+        break
+    running = list(scheduler.running.values())
+    cache_slots = [r.slot_id for r in running]
+    cache_positions = [r.seq_len for r in running]
+    logits = model(next_tokens, kv_cache=cache,
+                   cache_slots=cache_slots, cache_positions=cache_positions)
+    sampled = sampler(logits)
+
+    # 4. update state
+    for req, tok in zip(running, sampled):
+        req.seq_len += 1
+        req.generated_tokens.append(tok)
+        cache.seq_lens[req.slot_id] = req.seq_len
+        if is_finished(req, tok):
+            mark_for_finish(req)
+```
+
+### 改动范围
+
+| 文件 | 改什么 |
+|---|---|
+| `qwen3.py` Qwen3ForCausalLM | forward 加 `cache_slots`/`cache_positions`，透传到 model |
+| `engine/batch_core.py` | 新建 BatchEngine + batch_generate |
+| `engine/__init__.py` | 导出 BatchEngine, batch_generate |
+| `test_batch_engine.py` | 10 个 L0 测试 |
 
 ---
 
