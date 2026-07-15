@@ -237,6 +237,9 @@ class Qwen3Model(nn.Module):
             position_ids = (
                 torch.arange(seq_len, device=input_ids.device).unsqueeze(0).expand(batch_size, -1)
             )
+        elif position_ids.dim() == 1:
+            # M3 batched decode: position_ids [B] -> [B, 1]
+            position_ids = position_ids.unsqueeze(1)
 
         # Step 1: token id -> token embedding。
         # hidden_states 是后续所有 decoder layers 传递的 residual stream。

@@ -117,15 +117,16 @@ def batch_generate(
             break
         running = list(scheduler.running.values())
         cache_slots = torch.tensor([req.slot_id for req in running])
-        # cache_positions: [B, 1]，每个请求当前的写入位置（= seq_len）
-        cache_positions = cache.seq_lens[cache_slots].unsqueeze(1)
+        # cache_positions，每个请求当前的写入位置（= seq_len）
+        cache_positions = cache.seq_lens[cache_slots]  # [B]
+        position_ids = cache_positions.unsqueeze(1)  # [B, 1]
         # next_tokens: [B, 1]，拼接每个请求上一步的 last_token
         next_tokens = torch.cat(
             [req.last_token for req in running if req.last_token is not None], dim=0
         )
         logits = model(
             next_tokens,
-            position_ids=cache_positions,
+            position_ids=position_ids,
             kv_cache=cache,
             cache_slots=cache_slots,
             cache_positions=cache_positions,

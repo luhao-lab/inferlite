@@ -264,7 +264,13 @@ class GQAAttention(nn.Module):
         # M1 兼容路径（layer_kv_cache=None）：跳过，k/v 直接用当前输入的。
         if layer_kv_cache is not None:
             if isinstance(layer_kv_cache, BatchedLayerKVCache):
-                k, v = self._batched_cache_rw(layer_kv_cache, k, v, cache_slots, cache_positions)
+                assert cache_slots is not None
+                if cache_positions is not None:
+                    k, v = self._batched_cache_rw(
+                        layer_kv_cache, k, v, cache_slots, cache_positions
+                    )
+                else:
+                    k, v = self._batched_prefill_rw(layer_kv_cache, k, v, cache_slots, seq_len)
             else:
                 k, v = self._single_cache_rw(layer_kv_cache, k, v, cache_position, seq_len)
 
@@ -299,7 +305,8 @@ class GQAAttention(nn.Module):
                 torch.finfo(attn_weights.dtype).min,
             )
         # M3 per-row mask（batched decode，每行可见长度不同）
-        if isinstance(layer_kv_cache, BatchedLayerKVCache):
+        # prefill 阶段 cache_positions=None，走标准 causal mask，不需 per-row mask
+        if isinstance(layer_kv_cache, BatchedLayerKVCache) and cache_positions is not None:
             attn_weights = self._build_batched_mask(attn_weights, cache_positions)
 
         # 与 transformers eager attention 对齐：softmax 用 fp32 做，再 cast 回 q dtype。
@@ -362,6 +369,33 @@ class GQAAttention(nn.Module):
         max_len = int(cache_positions.max().item()) + 1
         k = cache.k[cache_slots, :, :max_len, :]
         v = cache.v[cache_slots, :, :max_len, :]
+        return k, v
+
+    def _batched_prefill_rw(
+        self,
+        cache: BatchedLayerKVCache,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        cache_slots: torch.Tensor,
+        seq_len: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """M3 prefill 路径：B=1，将整个 prompt 的 KV 写入单个 slot。
+
+        与 _batched_cache_rw（decode）的区别：
+          - decode: 每 slot 写 1 个 token，需 cache_positions 定位
+          - prefill: 单 slot 从位置 0 连续写 seq_len 个 token，不需 cache_positions
+
+        为什么不复用 _single_cache_rw？
+          - _single_cache_rw 服务 M2 的 KVCache（第 0 维是 batch，固定 1）
+          - _batched_prefill_rw 服务 M3 的 BatchedKVCache（第 0 维是 slot，多请求复用）
+          - 两者 shape 都是 [?, H, L, D]，但第 0 维索引方式不同：M2 用 [:]，M3 用 [slot]
+          - 类型不同（LayerKVCache vs BatchedLayerKVCache），硬合并需要改签名，不如分开清晰
+        """
+        slot = int(cache_slots[0])
+        cache.k[slot, :, :seq_len, :] = k[0]
+        cache.v[slot, :, :seq_len, :] = v[0]
+        k = cache.k[slot : slot + 1, :, :seq_len, :]
+        v = cache.v[slot : slot + 1, :, :seq_len, :]
         return k, v
 
     def _build_batched_mask(

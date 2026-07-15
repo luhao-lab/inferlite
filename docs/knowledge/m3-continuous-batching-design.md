@@ -732,7 +732,44 @@ while scheduler.has_unfinished():
 
 ## T5: E2E Correctness
 
-> 待完成
+### 目标
+
+证明 continuous batching 没有改变每个请求的生成语义：
+
+```text
+同一组请求逐条串行 generate 的结果
+是否等价于 batch_generate continuous batching 的结果？
+```
+
+### 测试结构
+
+**`test_batch_generate.py`** — 串行 vs batch 语义等价：
+- `DeterministicModel`（不依赖浮点矩阵乘）：max_num_slots=1/2/4 三档
+- 真实 `Qwen3ForCausalLM`：3 个不同长度 prompt，token 级 `torch.equal`
+- 变长 prompt、EOS 早停、waiting>slots 全部完成
+
+**`test_continuous_batching_trace.py`** — trace 证明非 static batching：
+- 不同 output 长度、slot 复用无 KV 污染
+- batch size trace、非 static wave、waiting 不占 slot
+- EOS trace 验证 batch size 变化
+
+### 关键发现
+
+真实模型测试证明 M3 的所有改动（BatchedKVCache + prefill/decode 分派 + per-row mask + gather）**只有性能变化，语义完全不变**——serial generate 和 batch_generate 在 token 级别 `torch.equal`。
+
+### 修改文件
+
+| 文件 | 改动 |
+|---|---|
+| `tests/e2e/test_batch_generate.py` | 串行 vs batch 等价测试（含真实模型） |
+| `tests/e2e/test_continuous_batching_trace.py` | continuous batching trace 测试 |
+| `inferlite/model/attention.py` | prefill 分派 + `_batched_prefill_rw` 方法 |
+| `inferlite/model/qwen3.py` | `Qwen3Model.forward` 加 `position_ids.dim()==1` 分支 |
+| `inferlite/engine/batch_core.py` | `cache_positions` 用 `[B]`，`position_ids` 单独 unsqueeze |
+
+### 测试结果
+
+190/190 全量回归通过（含 12 个 E2E + 178 个已有单测）。
 
 ---
 
