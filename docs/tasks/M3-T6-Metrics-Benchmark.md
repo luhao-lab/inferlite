@@ -66,11 +66,13 @@ slot_utilization: ...
 
 ## 产出文件
 
-- `inferlite/engine/metrics.py::RequestMetrics`
-- `inferlite/engine/metrics.py::StepMetrics`
-- `inferlite/engine/metrics.py::MetricsCollector`
-- `benchmarks/bench_continuous_batching.py`
-- `tests/unit/test_metrics.py`
+- `inferlite/engine/metrics.py::RequestMetrics`  （作者手写）
+- `inferlite/engine/metrics.py::StepMetrics`  （作者手写）
+- `inferlite/engine/metrics.py::MetricsCollector`  （作者手写）
+- `inferlite/engine/batch_core.py`  加 `metrics` 可选参数 + 各阶段埋点（作者手写）
+- `scripts/bench_continuous_batching.py`  （AI 写，工程脚本）
+- `tests/unit/test_metrics.py`  （AI 写，验证用）
+- `bench/results/2026-xx-m3-continuous-batching-*.md`  （AI 写，结果归档）
 
 ## 算法核心
 
@@ -139,6 +141,154 @@ B. continuous batching: max_num_slots=4 or 8
 
 可选再加一组用于说明 static batching 问题的模拟 trace，但不需要实现完整 static batching engine。
 
+## 接口契约（作者手写 spec）
+
+### `inferlite/engine/metrics.py` 公开 API
+
+```python
+@dataclass
+class RequestMetrics:
+    """请求级时间戳 + 派生指标。所有时间戳用 time.perf_counter()，单位秒。"""
+
+    request_id: str
+    arrival_ts: float                       # submit 时记录
+    scheduled_ts: float | None = None       # admit 到 running 时
+    prefill_start_ts: float | None = None   # prefill forward 前
+    prefill_end_ts: float | None = None      # prefill forward 后
+    first_token_ts: float | None = None      # 第一个 token 采样后（只记一次）
+    finished_ts: float | None = None         # 请求 finished
+
+    prompt_tokens: int = 0
+    output_tokens: int = 0
+
+    @property
+    def queue_ms(self) -> float:
+        """scheduled - arrival，未调度返回 0。"""
+    @property
+    def prefill_ms(self) -> float:
+        """prefill_end - prefill_start。"""
+    @property
+    def ttft_ms(self) -> float:
+        """first_token - arrival（包含 queue + prefill + 首 token 采样）。"""
+    @property
+    def decode_ms(self) -> float:
+        """finished - first_token（decode 阶段总耗时）。"""
+    @property
+    def e2e_ms(self) -> float:
+        """finished - arrival。"""
+    @property
+    def itl_ms(self) -> float:
+        """decode_ms / (output_tokens - 1)，相邻 token 平均间隔。
+        output_tokens <= 1 时返回 0（第一个 token 已计入 TTFT）。"""
+
+
+@dataclass
+class StepMetrics:
+    """单个 decode step 的指标快照。"""
+    step_idx: int
+    batch_size: int          # 本轮 running 数（= forward 的 batch 维）
+    max_seq_len: int         # 本轮最大 seq_len（cache_positions.max() + 1）
+    decode_ms: float         # 本轮 decode forward wall clock
+    output_tokens: int       # 本轮产出的 token 数（= batch_size）
+    running_count: int      # = batch_size
+    waiting_count: int      # 本轮 waiting 队列长度
+    occupied_slots: int     # = running_count
+
+
+@dataclass
+class MetricsCollector:
+    """采集 + 聚合。"""
+    request_metrics: dict[str, RequestMetrics] = field(default_factory=dict)
+    step_metrics: list[StepMetrics] = field(default_factory=list)
+    max_num_slots: int = 0
+
+    # ── 请求级采集（在 batch_generate 各阶段调用）──
+    def record_arrival(self, request_id: str) -> None: ...
+    def record_scheduled(self, request_id: str) -> None: ...
+    def record_prefill_start(self, request_id: str) -> None: ...
+    def record_prefill_end(self, request_id: str) -> None: ...
+    def record_first_token(self, request_id: str) -> None:
+        """只记一次：first_token_ts is None 才写。"""
+    def record_finished(self, request_id: str) -> None: ...
+    def record_prompt_tokens(self, request_id: str, n: int) -> None: ...
+    def record_output_tokens(self, request_id: str, n: int) -> None: ...
+
+    # ── 步级采集 ──
+    def record_step(
+        self,
+        step_idx: int, batch_size: int, max_seq_len: int, decode_ms: float,
+        output_tokens: int, running_count: int, waiting_count: int, occupied_slots: int,
+    ) -> None: ...
+
+    # ── 汇总（@property，延迟计算）──
+    @property
+    def avg_batch_size(self) -> float: ...          # mean(step.batch_size)
+    @property
+    def slot_utilization(self) -> float: ...        # mean(occupied_slots / max_num_slots)
+    @property
+    def total_decode_ms(self) -> float: ...         # sum(step.decode_ms)
+    @property
+    def total_output_tokens(self) -> int: ...       # sum(step.output_tokens)
+    @property
+    def output_tokens_per_s(self) -> float: ...    # total_output_tokens / (total_decode_ms/1000)
+    @property
+    def tpot_ms(self) -> float: ...                 # total_decode_ms / total_output_tokens
+    @property
+    def ttft_ms_p50(self) -> float: ...             # mean of all requests' ttft_ms（教学版用 mean 代替 p50）
+    @property
+    def itl_ms_p50(self) -> float: ...              # mean of all requests' itl_ms
+    @property
+    def prefill_ms_p50(self) -> float: ...          # mean of all requests' prefill_ms
+
+    def summary(self) -> dict[str, float]:
+        """返回所有汇总指标，benchmark 脚本用来输出。"""
+```
+
+### `batch_generate` 埋点位置
+
+```python
+def batch_generate(..., metrics: MetricsCollector | None = None) -> list[torch.Tensor]:
+    # 提交阶段
+    for i, prompt_ids in enumerate(prompts):
+        req = RequestState(...)
+        scheduler.submit(req)
+        if metrics: metrics.record_arrival(req.request_id)
+        if metrics: metrics.record_prompt_tokens(req.request_id, prompt_ids.shape[1])
+
+    while scheduler.has_unfinished():
+        # prefill 阶段
+        admitted = scheduler.admit_until_full()
+        for req in admitted:
+            if metrics: metrics.record_scheduled(req.request_id)
+            if metrics: metrics.record_prefill_start(req.request_id)
+            logits = model(...)                    # prefill forward
+            req.last_token = sampler(...)
+            if metrics: metrics.record_prefill_end(req.request_id)
+            if metrics: metrics.record_first_token(req.request_id)   # 只记一次
+
+        # decode 阶段
+        decode_start = time.perf_counter()
+        logits = model(...)                         # batched decode forward
+        decode_ms = (time.perf_counter() - decode_start) * 1000
+        sampled = sampler(...)
+        # 更新状态 + finish
+        for req, tok in zip(running, sampled):
+            ...
+            if is_finished:
+                if metrics: metrics.record_output_tokens(req.request_id, req.num_generated)
+                if metrics: metrics.record_finished(req.request_id)
+        # 记录本 step 指标
+        if metrics: metrics.record_step(step_idx=..., batch_size=len(running), ...)
+```
+
+### 关键设计点
+
+1. **时间戳用 `time.perf_counter()`**：单调递增、纳秒精度，不挡 MPS/CUDA 同步（教学版不做）。
+2. **`record_first_token` 只记一次**：用 `if first_token_ts is None` 保护，后续调用不覆盖。
+3. **`itl_ms` 分母是 `output_tokens - 1`**：第一个 token 已计入 TTFT，decode 阶段只产出 `n-1` 个间隔。
+4. **`tpot_ms` vs `itl_ms`**：`tpot_ms = total_decode_ms / total_output_tokens`（整体每 token 成本），`itl_ms` 是请求内相邻 token 间隔（请求级）。
+5. **p50 用 mean 代替**：教学版不引入 numpy/statistics 的 percentile，用 `fmean` 即可。
+
 ## L0 测试清单
 
 | # | 测什么 | Ground truth | 容差 |
@@ -159,7 +309,7 @@ B. continuous batching: max_num_slots=4 or 8
 - [ ] benchmark 脚本支持串行 baseline 和 M3 continuous batching 对比。
 - [ ] benchmark 输出字段足以解释 M3 收益来源。
 - [ ] `uv run pytest tests/unit/test_metrics.py -q` 通过。
-- [ ] `uv run python benchmarks/bench_continuous_batching.py --num-requests 4 --max-num-slots 2` 可运行。
+- [ ] `uv run python scripts/bench_continuous_batching.py --num-requests 4 --max-num-slots 2` 可运行。
 - [ ] commit `bench(engine): add continuous batching metrics and benchmark (M3-T6 done)`。
 
 ## 坑（按概率排序）
