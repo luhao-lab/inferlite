@@ -833,11 +833,13 @@ while scheduler.has_unfinished():
 | 框架 | for 循环写 | gather | .item() 同步 | 是否有此问题 |
 |------|-----------|--------|--------------|--------------|
 | M2 inferlite | 否（切片） | 否（view） | 否 | 否（只支持单请求） |
-| M3 inferlite | ✅ 63% | ✅ 22% | ✅ 15% | 是（纯 PyTorch） |
-| nano-vllm | ✅ | ✅ | ✅ | 是（和我们一样） |
+| M3 inferlite | ✅ 63% | ✅ 22% | ✅ 15% | 是（纯 PyTorch，不调 kernel） |
+| nano-vllm | **否（Triton kernel）** | **否（Flash Attention）** | 否 | **否**（≈ vLLM 性能） |
 | vLLM / SGLang | 否（kernel 内） | 否 | 否 | 否（自定义 kernel） |
 
-**教学版（inferlite M3 / nano-vllm）都有此限制**，直到 M4/M8 用 kernel 才解决。
+**关键认知修正**：nano-vllm **没有此限制**。它的 1200 行 Python 调用的是 **Triton kernel**（`store_kvcache_kernel`）和 **Flash Attention 库**（`flash_attn_with_kvcache`），不是纯 PyTorch。官方 benchmark 显示 nano-vllm ≈ vLLM（1434 vs 1362 tok/s）。
+
+**inferlite M3 的性能限制是"纯 PyTorch + 不调 kernel"的路线选择，不是教学版固有代价**。
 
 ### M3 的教学目标定位
 

@@ -381,7 +381,8 @@ pytest tests                         # 全量
 - **硬件**：Mac MPS 可跑功能，性能数最好上 GPU
 - **L 层覆盖**：L3
 - **关键概念**：`waiting / running / finished` 三队列、变长 attention mask、EOS 立即出队、新请求立即入队
-- **性能预期（重要）**：纯 PyTorch 教学版在 MPS 上 batch_generate 比 M2 serial **慢**（实测 0.38~0.44x）。主因是 for 循环写 cache（63%）+ fancy index gather（22%）+ `.item()` 同步（15%），是 batched decode 的固有 Python 开销，nano-vllm 同样有。**性能收益要到 M4（部分缓解）和 M8 Triton kernel（彻底解决）才体现**。M3 的价值是 continuous batching 语义（请求进退 + slot 复用），不是性能。
+- **性能预期（重要）**：纯 PyTorch 教学版在 MPS 上 batch_generate 比 M2 serial **慢**（实测 0.38~0.44x）。**瓶颈在 cache 读写路径**（for 循环写 cache 63% + fancy index gather 22% + `.item()` 同步 15%），**不在 attention 计算**（M2/M3 的 attention 完全一样）。这是"纯 PyTorch + 不调 kernel"的路线选择，**不是教学版固有代价**——nano-vllm 用 Triton kernel + Flash Attention 避免，性能 ≈ vLLM（1434 tok/s）。**性能收益要到 M4（部分缓解）和 M8 Triton kernel（彻底解决）才体现**。M3 的价值是 continuous batching 语义（请求进退 + slot 复用），不是性能。
+- **Mac 用户的加速路径**：M3（纯 PyTorch）→ M4（paged gather 部分缓解）→ M4 + torch.compile（编译融合）→ M8 需 NVIDIA GPU（Triton/Flash Attention 不支持 MPS）。
 - **必读**：
   - Orca paper（OSDI'22） — 必读
   - vLLM paper §3（调度部分）
@@ -488,12 +489,26 @@ pytest tests                         # 全量
 - **L 层覆盖**：L1↔L2 边界（kernel 级，不动上层）
 - **完成定义**：替换 M4 的 PyTorch 伪版，性能逼近 vLLM 官方 kernel 的 50%
 - **验证**：L1 与 PyTorch 伪版 logits 完全一致；L3 与 vLLM kernel 抽样对照
-- **硬件**：**必须 NVIDIA GPU**（Triton 不支持 MPS）
+- **硬件**：**必须 NVIDIA GPU**（Triton 不支持 MPS，Flash Attention 也只支持 CUDA）
 - **关键概念**：Triton block 编程模型、warp / tile 设计、HBM ↔ SRAM 数据流
+- **对应瓶颈**：解决 M3 的三个性能瓶颈（for 循环写 cache 63% + gather 22% + .item() 同步 15%）。Triton `store_kvcache_kernel` 替代 Python for 循环，Flash Attention `flash_attn_with_kvcache` 替代 PyTorch gather + per-row mask。参考 nano-vllm 实测：用这两个 kernel 后 ≈ vLLM 性能（1434 vs 1362 tok/s）。
 - **Mac 用户替代路径**：M8 需要 NVIDIA GPU，Mac 用户做完 M7 后可选：
   - **方案 A**：跳过 M8，转做 M10（EAGLE）/ M11（Chunked Prefill）/ M12（Long context）/ M13（VLM），这些不需要 GPU
   - **方案 B**：M8-lite —— 用 `torch.compile` + `flex_attention` 做 Mac 友好的半优化版本，性能介于 PyTorch 伪版和 Triton 之间（教学价值有限，仅作过渡）
   - **方案 C**：等有 GPU 环境再回头做 M8
+- **Mac 加速方案对比**：
+
+  | 方案 | Mac 可用 | 性能 | 教学价值 | 何时引入 |
+  |------|---------|------|---------|---------|
+  | M3 纯 PyTorch | ✅ | 基线（慢） | 高（完全透明） | M3 |
+  | M4 PagedAttention（PyTorch） | ✅ | 部分缓解（少 padding） | 高（block_table 概念） | M4 |
+  | + torch.compile | ✅ | 中等（编译融合省 Python 开销） | 中（black box） | M4 附加 |
+  | + flex_attention | ✅（PyTorch 2.5+） | 中等（支持 paged） | 中 | M4 附加 |
+  | Triton kernel | ❌ | 高（≈ vLLM） | 高（手写 kernel） | M8（需 GPU） |
+  | Flash Attention | ❌ | 高（kernel 内 paged） | 中（调库） | M8（需 GPU） |
+  | MLX（Apple 官方） | ✅ | 高（针对 Apple Silicon） | 低（另起炉灶） | 不推荐 |
+  | Metal kernel（手写） | ✅ | 高（直接调 GPU） | 高（学 GPU 编程） | 不推荐（生态小） |
+
 - **配套文章**：《手写第一个 Triton kernel —— PagedAttention 内部》
 
 ### M9 — MoE 升级（grouped GEMM）
