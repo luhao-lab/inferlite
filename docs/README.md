@@ -37,13 +37,15 @@ make lint && make fmt && make typecheck
 | [plan/PROGRESS.md](./plan/PROGRESS.md) | 每个 M 的状态（⬜/🟡/✅）+ 每次任务完成的变更日志 | 每次开工先看：当前做到哪了，下一步是什么 |
 | [plan/M1.md](./plan/M1.md) | M1 作战地图：架构图、任务总表（T0~T12）、测试金字塔、完成定义 | M1 推进期开工前读；M1 完成后作为历史参考 |
 | [plan/M2.md](./plan/M2.md) | M2 作战地图：KV Cache 方案、代码架构、实测性能 | M2 完成后回顾 |
-| [plan/M3.md](./plan/M3.md) | M3 作战地图：Continuous Batching 方案、任务分解 | M3 推进中参考 |
+| [plan/M3.md](./plan/M3.md) | M3 作战地图：Continuous Batching 方案、任务分解 | M3 完成后回顾 |
+| [plan/M4.md](./plan/M4.md) | M4 作战地图：PagedAttention 方案、任务分解、测试策略 | M4 推进中参考 |
 
 ### tasks/ — 执行层（想看具体怎么做/做到哪了时读这里）
 
 | 文件 | 内容 | 什么时候读 |
 |------|------|-----------|
 | [tasks/M3-archive/](./tasks/M3-archive/) | M3 全部 7 张已完成任务卡（T1~T7），含完成总结 | 想回顾 M3 某个模块的实现思路时 |
+| [tasks/M4-archive/](./tasks/M4-archive/) | M4 7 张任务卡（T1~T7）：BlockManager / BlockTable / PagedKVCache / PagedAttention / 集成 / Benchmark / Docs | M4 开工或回顾具体任务时 |
 | [tasks/_TEMPLATE.md](./tasks/_TEMPLATE.md) | 任务卡模板 | 新建任务卡时参考格式 |
 | [tasks/M1-archive/](./tasks/M1-archive/) | M1 全部已完成任务卡 | 想回顾 M1 某个模块的实现思路时 |
 | [tasks/M2-archive/](./tasks/M2-archive/) | M2 全部已完成任务卡 | 想回顾 M2 某个模块的实现思路时 |
@@ -57,6 +59,7 @@ make lint && make fmt && make typecheck
 | [knowledge/blueprints.md](./knowledge/blueprints.md) | 模块契约卡片：接口签名、设计意图、踩坑、跨 M 依赖 | 改某个模块前先看 blueprint；M 归档时更新 |
 | [knowledge/m2-kv-cache-design.md](./knowledge/m2-kv-cache-design.md) | M2 技术设计：KV Cache 方案调研、ADR 决策、数据流 | M2 完成后回顾；想理解 KV Cache 设计思路时 |
 | [knowledge/m3-continuous-batching.md](./knowledge/m3-continuous-batching.md) | M3 技术总结：设计决策、踩坑、框架对比、benchmark、局限性 | M3 完成后回顾；想理解 continuous batching 设计思路时 |
+| [knowledge/m4-paged-attention.md](./knowledge/m4-paged-attention.md) | M4 技术设计：PagedAttention 调研、ADR、数据流、踩坑预案 | M4 推进中参考；想理解 PagedAttention 设计思路时 |
 
 ---
 
@@ -67,7 +70,7 @@ make lint && make fmt && make typecheck
 ### 里程碑生命周期
 
 ```
-1. /plan M<n>          AI 调研 + 产出设计文档 knowledge/m<n>-design.md + 任务卡骨架
+1. /plan M<n>          AI 调研 + 产出设计文档 knowledge/m<n>-*.md + tasks/M<n>-archive/ 任务卡骨架
         ↓
 2. /work M<n>-T<x>     AI 输出作战简报（前置知识检查 + 接口签名 + 测试清单）
         ↓
@@ -91,8 +94,8 @@ make lint && make fmt && make typecheck
 | `plan/PLAN.md` | AI | 新开里程碑、调整路线时（/plan 命令） |
 | `plan/PROGRESS.md` | AI | 每张任务卡 ✅ 时（/archive 命令自动更新） |
 | `plan/M<n>.md` | AI | 新开里程碑时新建；里程碑归档时追加 Summary |
-| `knowledge/m<n>-design.md` | AI | 里程碑启动时创建，推进期持续完善 |
-| `tasks/M<n>-T<x>.md` | AI | /work 开卡时创建；/archive 时末尾追加完成总结 |
+| `knowledge/m<n>-*.md` | AI | 里程碑启动时创建，推进期持续完善；里程碑归档时补充总结 |
+| `tasks/M<n>-archive/M<n>-T<x>.md` | AI | /work 开卡时创建；/archive 时末尾追加完成总结 |
 | `knowledge/knowledge.md` | AI | 每次 /archive 后追加新知识卡片 |
 | `knowledge/lessons.md` | AI | 每次 /archive 后追加新教训 |
 | `knowledge/blueprints.md` | AI | 每次 /archive 后更新相关模块的契约 |
@@ -137,7 +140,7 @@ inferlite/
 
 ## 当前进度
 
-M1 Qwen3 单序列推理 ✅ → M2 KV Cache ✅ → M3 Continuous Batching ✅ → **M4 PagedAttention ⬜**
+M1 Qwen3 单序列推理 ✅ → M2 KV Cache ✅ → M3 Continuous Batching ✅ → **M4 PagedAttention 🟡**
 
 详见 [plan/PROGRESS.md](./plan/PROGRESS.md)
 

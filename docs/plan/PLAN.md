@@ -53,8 +53,8 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 | M1·P1 | 已完成 | 跑通基础模型 | L1 Model | - | 手写 Qwen3，logits 对齐 transformers |
 | M1·P2 | 已完成 | 最小生成能力 | L1 + L3 | M1·P1 | CLI 能出字，最小 Engine/Sampler |
 | M2 | 已完成 | 单请求加速 | L2 Memory | M1 | 单序列 decode 不重算历史 |
-| M3 | 进行中 | 多请求并发 | L3 Scheduler | M2 | 多请求三队列调度，slot 复用 |
-| M4 | 未开始 | 显存分页管理 | L2 Memory | M3 | KV 按 block 管，支持 CoW/refcount |
+| M3 | 已完成 | 多请求并发 | L3 Scheduler | M2 | 多请求三队列调度，slot 复用 |
+| M4 | 进行中 | 显存分页管理 | L2 Memory | M3 | KV 按 block 管，支持 CoW/refcount |
 | M5 | 未开始 | 前缀复用 | L2 Memory | M4 | 相同前缀复用 KV，reasoning 字段可解释 |
 | M6 | 未开始 | 服务化输出 | L4 Server | M3（建议 M5 后） | `inferlite serve` + curl 流式输出 |
 | Release | 未开始 | 工程发布 | 工程发布 | M3-M6 | 对照表、CI、README badge、`v1.0` tag |
@@ -78,7 +78,7 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 <!-- anchor:current-mainline -->
 ## 3. 当前主线：M3–M6
 
-> 主线顺序建议：**M3 收尾 → M4 → M5 → M6 → Release**。M6 技术上可在 M3 后启动，但服务层最好暴露完整的调度 + 内存复用能力，所以建议放在 M5 后收口。
+> 主线顺序建议：**M4 → M5 → M6 → Release**。M6 技术上可在 M3 后启动，但服务层最好暴露完整的调度 + 内存复用能力，所以建议放在 M5 后收口。
 
 ### M3 — Continuous Batching：调度器的诞生
 
