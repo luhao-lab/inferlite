@@ -18,9 +18,12 @@
     )
 """
 
+import time
+
 import torch
 
 from inferlite.config import ModelConfig
+from inferlite.engine.metrics import MetricsCollector
 from inferlite.engine.protocol import LLMModel
 from inferlite.model import BatchedKVCache
 from inferlite.sampler.greedy import GreedySampler
@@ -39,6 +42,7 @@ def batch_generate(
     eos_token_id: int | None = None,
     device: str | torch.device = "cpu",
     dtype: torch.dtype = torch.float32,
+    metrics: MetricsCollector | None = None,
 ) -> list[torch.Tensor]:
     """M3 continuous batching generate。
 
@@ -53,6 +57,7 @@ def batch_generate(
         eos_token_id: EOS token id，生成到时提前停止。
         device: 计算设备。
         dtype: 数据类型。
+        metrics: 可选的 MetricsCollector，传入则在执行过程中记录请求级和步级指标。
 
     Returns:
         每个请求的生成结果列表（按 request_id 排序），
@@ -69,6 +74,9 @@ def batch_generate(
             eos_token_id=eos_token_id,
         )
         scheduler.submit(req)
+        if metrics:
+            metrics.record_arrival(req.request_id)
+            metrics.record_prompt_tokens(req.request_id, prompt_ids.shape[1])
 
     # ── 创建 BatchedKVCache：固定 S 个 slot，每个 slot 存 max_seq_len 个 token ──
     cache = BatchedKVCache.from_config(
@@ -88,11 +96,17 @@ def batch_generate(
         # 逐条 prefill：每个请求独立跑一次 full forward，KV 写入对应的 slot。
         admitted = scheduler.admit_until_full()
         for request in admitted:
+            if metrics:
+                metrics.record_scheduled(request.request_id)
+
             slot = cache.allocate_slot(request.request_id)
             request.slot_id = slot
 
             prompt_len = request.prompt_ids.shape[1]
             position_ids = torch.arange(prompt_len, device=device).unsqueeze(0)  # [1, T_p]
+
+            if metrics:
+                metrics.record_prefill_start(request.request_id)
             # prefill：整条 prompt 一次前向，KV 写入 cache slot
             # cache_slots=[slot]：告诉 attention 层写入哪个 slot（B=1）
             logits = model(
@@ -108,6 +122,10 @@ def batch_generate(
             request.generated_tokens.append(request.last_token)
             request.num_generated = 1
             cache.seq_lens[slot] = prompt_len
+            if metrics:
+                metrics.record_prefill_end(request.request_id)
+            if metrics:
+                metrics.record_first_token(request.request_id)  # 只记一次
 
         # ── 2. batched decode one step ──
         # 把所有 running 请求组成一个 batch，并行执行一步 decode。
@@ -124,6 +142,7 @@ def batch_generate(
         next_tokens = torch.cat(
             [req.last_token for req in running if req.last_token is not None], dim=0
         )
+        decode_start = time.perf_counter()
         logits = model(
             next_tokens,
             position_ids=position_ids,
@@ -131,7 +150,7 @@ def batch_generate(
             cache_slots=cache_slots,
             cache_positions=cache_positions,
         )
-
+        decode_ms = (time.perf_counter() - decode_start) * 1000
         # ── 3. sample + update state + finish ──
         sampled = sampler(logits[:, -1, :])
         for request, next_token in zip(running, sampled, strict=False):
@@ -149,6 +168,25 @@ def batch_generate(
                 scheduler.mark_finished(request)
                 # 释放 slot：下一轮循环 admit_until_full 就能看到空闲 slot
                 cache.free_slot(request.request_id)
+
+                if metrics:
+                    metrics.record_output_tokens(request.request_id, request.num_generated)
+                if metrics:
+                    metrics.record_finished(request.request_id)
+        # 记录本 step 指标
+        if metrics:
+            step_idx = len(metrics.step_metrics)
+            max_seq_len_step = int(cache_positions.max().item()) + 1
+            metrics.record_step(
+                step_idx=step_idx,
+                batch_size=len(running),
+                max_seq_len=max_seq_len_step,
+                decode_ms=decode_ms,
+                output_tokens=len(running),
+                running_count=len(scheduler.running),
+                waiting_count=len(scheduler.waiting),
+                occupied_slots=len(scheduler.running),
+            )
 
     # ── 收集结果（按 request_id 排序，保证与输入 prompts 顺序一致）──
     results = []

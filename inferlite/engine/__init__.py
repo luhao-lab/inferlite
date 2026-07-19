@@ -11,6 +11,7 @@
 """
 
 from inferlite.engine.core import EngineCore, generate
+from inferlite.engine.metrics import MetricsCollector
 from inferlite.engine.protocol import LLMModel
 
-__all__ = ["EngineCore", "LLMModel", "generate"]
+__all__ = ["EngineCore", "LLMModel", "generate", "MetricsCollector"]

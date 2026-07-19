@@ -317,7 +317,10 @@ def test_real_qwen3_batch_matches_serial():
 
     验证 BatchedKVCache 路径与 KVCache 路径在 token 级别等价，
     证明 M3 的改动只有性能变化，没有语义变化。
+
+    固定 torch.manual_seed 让模型权重确定，避免浮点边界偶发分歧导致 flaky。
     """
+    torch.manual_seed(42)
     config = _tiny_config()
     model = Qwen3ForCausalLM(config)
     model.eval()
@@ -348,7 +351,11 @@ def test_real_qwen3_batch_matches_serial():
 
 
 def test_real_qwen3_batch_matches_serial_multi_slots():
-    """真实 Qwen3：max_num_slots=2 时 batch_generate 仍与串行一致。"""
+    """真实 Qwen3：max_num_slots=2 时 batch_generate 仍与串行一致。
+
+    固定 torch.manual_seed 让模型权重确定，避免浮点边界偶发分歧导致 flaky。
+    """
+    torch.manual_seed(42)
     config = _tiny_config()
     model = Qwen3ForCausalLM(config)
     model.eval()

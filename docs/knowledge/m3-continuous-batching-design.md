@@ -775,7 +775,86 @@ while scheduler.has_unfinished():
 
 ## T6: Metrics & Benchmark
 
-> 待完成
+### 目标
+
+拆解 prefill/decode/TTFT/ITL/throughput 等指标，证明 M3 的收益来自 decode batching。
+
+### 实现
+
+**`inferlite/engine/metrics.py`**：
+- `RequestMetrics`：请求级时间戳 + 派生指标（queue_ms/prefill_ms/ttft_ms/decode_ms/itl_ms/total_ms）
+- `StepMetrics`：步级指标（batch_size/decode_ms/occupied_slots）
+- `MetricsCollector`：采集 + 聚合（avg_batch_size/slot_utilization/output_tokens_per_s/tpot_ms/ttft_ms_p50/itl_ms_p50）
+
+**`inferlite/engine/batch_core.py`**：
+- 加 `metrics` 可选参数，各阶段埋点采集指标
+
+**`scripts/bench_continuous_batching.py`**：
+- 对比 serial baseline 和 M3 continuous batching（真实 Qwen3-0.6B）
+- 支持 `--max-num-slots-list` 扫描不同 slot 数
+
+**`bench/results/2026-07-18-m3-continuous-batching-mps-bf16.md`**：
+- 完整 benchmark 结果 + 性能瓶颈定位
+
+### Benchmark 结果（Qwen3-0.6B, MPS bf16, 4 请求, 16 tokens, prompt_len=32）
+
+| 场景 | serial tpot | batch tpot | speedup |
+|------|-------------|------------|---------|
+| B=1 | 28.25 ms | 75.12 ms | 0.38x |
+| B=2 | 28.55 ms | 65.40 ms | 0.44x |
+
+**M3 在纯 PyTorch + MPS 上比 M2 serial 慢**（0.38~0.44x）。
+
+### 性能瓶颈定位（分段计时 micro-benchmark）
+
+| 段 | 代码 | 占比 |
+|------|------|------|
+| **write** | `for i: cache.k[slot, :, pos, :] = k[i]` | **63%（主因）** |
+| gather | `cache.k[cache_slots, :, :max_len]` | 22% |
+| max_item | `cache_positions.max().item()` | 15% |
+| tolist | `cache_slots.tolist()` | 0.1% |
+
+**主因不是 gather（22%），是 for 循环写 cache（63%）**。28 层 × 60 步 = 1680 次循环调用，每次写 slice + MPS kernel launch。
+
+### M2 vs M3：结构同构，访问方式不同
+
+| | M2 LayerKVCache | M3 BatchedLayerKVCache |
+|---|---|---|
+| cache tensor shape | `[1, H_kv, L, D]` | `[S, H_kv, L, D]` |
+| 第 0 维语义 | batch（固定 1） | slot（多请求复用） |
+| 写第 0 维 | `[:, :, ...]` 切片 | `[slot, :, ...]` 指定 slot |
+| 写 T 维 | `[:, :, pos:pos+T, :]` 一次性 | `for i: [slot, :, pos, :] = k[i]` 循环 |
+| 读 T 维 | `[:, :, :len]` view（零拷贝） | `[cache_slots, :, :max_len]` fancy index copy |
+
+**核心矛盾**：continuous batching 要求 per-row 独立位置（不同 slot、不同 pos），M2 的切片路径无法表达这种语义，必须用循环 + gather。这是 batched 的固有代价。
+
+### 与主流框架对比
+
+| 框架 | for 循环写 | gather | .item() 同步 | 是否有此问题 |
+|------|-----------|--------|--------------|--------------|
+| M2 inferlite | 否（切片） | 否（view） | 否 | 否（只支持单请求） |
+| M3 inferlite | ✅ 63% | ✅ 22% | ✅ 15% | 是（纯 PyTorch） |
+| nano-vllm | ✅ | ✅ | ✅ | 是（和我们一样） |
+| vLLM / SGLang | 否（kernel 内） | 否 | 否 | 否（自定义 kernel） |
+
+**教学版（inferlite M3 / nano-vllm）都有此限制**，直到 M4/M8 用 kernel 才解决。
+
+### M3 的教学目标定位
+
+M3 的核心收益是 **continuous batching 语义**（请求进退 + slot 复用），不是性能：
+
+- ✅ 短请求完成后释放 slot，等待请求下一轮进入（L0-9 非 static wave 测试通过）
+- ✅ 不同长度请求并发 decode（L0-4 测试通过）
+- ✅ slot 复用无 KV 污染（L0-5 测试通过）
+- ✅ serial vs batch 语义等价（token 级 torch.equal）
+
+性能优化路径：
+- **M4 PagedAttention**：block_table + 按需 gather，但 for 循环 + Python 开销还在
+- **M8 Triton kernel**：把 for 循环 + gather + mask 下沉到 kernel 内部，彻底解决
+
+### 测试
+
+21 个单测（`test_metrics.py`）覆盖所有 L0 项，211/211 全量回归通过（1 个真实模型测试因浮点边界偶发 flaky）。
 
 ---
 

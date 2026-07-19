@@ -376,11 +376,12 @@ pytest tests                         # 全量
 ### M3 — Continuous Batching：调度器的诞生
 - **L 层覆盖**：L3主（`FCFSScheduler` + 三队列）
 
-- **完成定义**：8 并发请求聚合吞吐 ≥ 串行 ×4，每 step 重新组 batch，无 head-of-line blocking
-- **验证标准**：`test_scheduler_invariant.py`（三队列守恒、EOS 立即出队）+ `test_batch_e2e.py`（8 并发结果与单条串行完全一致）
+- **完成定义**：8 并发请求每 step 重新组 batch，无 head-of-line blocking；serial vs batch 输出 token 级等价
+- **验证标准**：`test_scheduler_invariant.py`（三队列守恒、EOS 立即出队）+ `test_batch_e2e.py`（8 并发结果与单条串行 token 级 `torch.equal`）
 - **硬件**：Mac MPS 可跑功能，性能数最好上 GPU
 - **L 层覆盖**：L3
 - **关键概念**：`waiting / running / finished` 三队列、变长 attention mask、EOS 立即出队、新请求立即入队
+- **性能预期（重要）**：纯 PyTorch 教学版在 MPS 上 batch_generate 比 M2 serial **慢**（实测 0.38~0.44x）。主因是 for 循环写 cache（63%）+ fancy index gather（22%）+ `.item()` 同步（15%），是 batched decode 的固有 Python 开销，nano-vllm 同样有。**性能收益要到 M4（部分缓解）和 M8 Triton kernel（彻底解决）才体现**。M3 的价值是 continuous batching 语义（请求进退 + slot 复用），不是性能。
 - **必读**：
   - Orca paper（OSDI'22） — 必读
   - vLLM paper §3（调度部分）
@@ -397,6 +398,7 @@ pytest tests                         # 全量
 - **L 层覆盖**：L2（核心）
 - **关键概念**：物理 block table、逻辑 block table、引用计数、CoW、为什么不需要 swap
 - **关键裁剪**：**只写 PyTorch `index_select` 伪版**，Triton kernel 推迟到 M8
+- **前置关系**：M4 是 **M5·P2 Prefix Cache 的硬前置**（prefix cache 依赖 block 级管理才能复用前缀 KV）。M5·P1（API+SSE）不依赖 M4，可先做 P1 再补 M4。
 - **必读**：
   - vLLM paper（SOSP'23 全文，特别是 §4） — 必读
   - FlashAttention v2（对比 SRAM tiling vs HBM 分块）
@@ -412,6 +414,7 @@ pytest tests                         # 全量
 
 - **L 层覆盖**：L2 + L3 + L4 全部覆盖
 - **里程碑标志**：仓库打 `v1.0` tag，代码量 ≈ 2000 行
+- **演示价值**：**高**（P1 流式输出可做 demo 视频，curl 看到流式 token 很直观）
 - **配套文章**：《2000 行实现一个 vLLM —— inferlite v1 总览》（**核心宣传文**）
 
 #### Phase 1 — 服务化 demo：采样 + OpenAI API + SSE
@@ -448,7 +451,19 @@ pytest tests                         # 全量
 <!-- anchor:milestones-extension -->
 ## 4. 扩充里程碑 M6+（同仓库长期迭代，无截止）
 
-> M5 之后所有新能力都作为新 M 并入主仓库。优先级排序如下（可调整）：
+> M5 之后所有新能力都作为新 M 并入主仓库。排序按三个维度权衡：
+> - **教学价值**：该概念对理解 LLM 推理引擎的核心程度
+> - **硬件可用性**：Mac MPS 能做 vs 必须 NVIDIA GPU
+> - **演示价值**：是否适合做 demo / 文章（流式、spec、VLM 演示效果好）
+
+**排序逻辑**：
+- M6 MoE / M7 Spec 是"能力扩充"（新模型/新算法），Mac 可做，先做
+- M8 Triton / M9 grouped GEMM 是"性能优化"，必须 GPU，Mac 用户可跳过
+- M10 EAGLE / M11 Chunked / M12 Long context 是"能力升级"，Mac 可做
+- M13 / M14 VLM 是"场景扩充"，演示价值高，Mac 可做
+
+**Mac 用户的推荐路径**：M6 → M7 → M10 → M11 → M12 → M13 → M14（跳过 M8/M9）
+**GPU 用户的推荐路径**：按 M6-M14 顺序，或按兴趣跳
 
 ### M6 — MoE 教学版（for-loop）
 - **L 层覆盖**：L1主（二路模型架构） + Registry 首实现
@@ -464,6 +479,7 @@ pytest tests                         # 全量
 - **完成定义**：长 prompt 续写场景 ≥ 1.5× 加速
 - **验证**：L3 不变式 —— 任何接受率下最终输出 == 不开 spec 的输出
 - **硬件**：Mac 即可
+- **演示价值**：**高**（有/无 spec 的速度对比很直观）
 - **关键概念**：n-gram 查表当 draft、verify 阶段一次性算 K+1 logits、接受率统计
 - **裁剪**：不训练 draft 模型，EAGLE 留 M10
 - **配套文章**：《零训练 spec decoding：n-gram lookup 也能涨吞吐》
@@ -474,6 +490,10 @@ pytest tests                         # 全量
 - **验证**：L1 与 PyTorch 伪版 logits 完全一致；L3 与 vLLM kernel 抽样对照
 - **硬件**：**必须 NVIDIA GPU**（Triton 不支持 MPS）
 - **关键概念**：Triton block 编程模型、warp / tile 设计、HBM ↔ SRAM 数据流
+- **Mac 用户替代路径**：M8 需要 NVIDIA GPU，Mac 用户做完 M7 后可选：
+  - **方案 A**：跳过 M8，转做 M10（EAGLE）/ M11（Chunked Prefill）/ M12（Long context）/ M13（VLM），这些不需要 GPU
+  - **方案 B**：M8-lite —— 用 `torch.compile` + `flex_attention` 做 Mac 友好的半优化版本，性能介于 PyTorch 伪版和 Triton 之间（教学价值有限，仅作过渡）
+  - **方案 C**：等有 GPU 环境再回头做 M8
 - **配套文章**：《手写第一个 Triton kernel —— PagedAttention 内部》
 
 ### M9 — MoE 升级（grouped GEMM）
@@ -500,6 +520,7 @@ pytest tests                         # 全量
 ### M13 — VLM 教学版（图→文）
 - **L 层覆盖**：L1主（vision encoder + `inputs_embeds`） + L4（multipart 请求）
 - **完成定义**：接入一个小型 VLM（候选 Qwen-VL / Llava / native multimodal 小模型，M13 前再定），单图 + 文本对话能跑通
+- **演示价值**：**高**（图文对话吸睛，适合做 demo）
 - **选型原则**：优先选权重易下载、Mac/GPU 显存压力小、语言侧尽量复用 M1–M12 架构的模型；不要现在绑定具体未验证模型名
 - **关键概念**：Vision encoder（ViT/SigLIP）独立前向、image token embedding 注入（走 `inputs_embeds`）、变长 image token 数处理
 - **裁剪**：不做 image prefix cache、不做 encoder/LLM 异步、单 batch 单图（留 M14）

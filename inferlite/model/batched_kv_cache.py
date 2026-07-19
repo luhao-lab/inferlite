@@ -92,15 +92,15 @@ class BatchedKVCache:
     """
 
     def __init__(
-        self, layers: list[BatchedLayerKVCache], max_seq_len: int, max_num_slots: int
+        self, layers: list[BatchedLayerKVCache], max_seq_len: int, max_num_slots: int, device=None
     ) -> None:
         self.layers = layers
         self.max_seq_len = max_seq_len
         self.max_num_slots = max_num_slots
         # seq_lens: 每个 slot 的当前有效长度（= prompt_len + num_generated）
-        self.seq_lens = torch.zeros(max_num_slots, dtype=torch.long)
+        self.seq_lens = torch.zeros(max_num_slots, dtype=torch.long, device=device)
         # occupied: 每个 slot 是否被占用（和 SlotManager.req_to_slot 对应）
-        self.occupied = torch.zeros(max_num_slots, dtype=torch.bool)
+        self.occupied = torch.zeros(max_num_slots, dtype=torch.bool, device=device)
         self.slot_manager = SlotManager(max_num_slots)
 
     @classmethod
@@ -132,7 +132,7 @@ class BatchedKVCache:
                 device=device,
             )
             layers.append(BatchedLayerKVCache(k=k, v=v))
-        return cls(layers, max_seq_len, max_num_slots)
+        return cls(layers, max_seq_len, max_num_slots, device=device)
 
     def reset_slots(self) -> None:
         """重置所有 slot 为可用状态。"""
