@@ -43,7 +43,7 @@ make lint && make fmt && make typecheck
 
 | 文件 | 内容 | 什么时候读 |
 |------|------|-----------|
-| [tasks/M3-T1~T7](./tasks/) | 当前 M3 的 7 张任务卡，每卡含：算法核心、L0 测试清单、DoD、易踩坑 | 开始写某个模块前读对应任务卡 |
+| [tasks/M3-archive/](./tasks/M3-archive/) | M3 全部 7 张已完成任务卡（T1~T7），含完成总结 | 想回顾 M3 某个模块的实现思路时 |
 | [tasks/_TEMPLATE.md](./tasks/_TEMPLATE.md) | 任务卡模板 | 新建任务卡时参考格式 |
 | [tasks/M1-archive/](./tasks/M1-archive/) | M1 全部已完成任务卡 | 想回顾 M1 某个模块的实现思路时 |
 | [tasks/M2-archive/](./tasks/M2-archive/) | M2 全部已完成任务卡 | 想回顾 M2 某个模块的实现思路时 |
