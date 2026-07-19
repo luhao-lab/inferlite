@@ -56,7 +56,7 @@ make lint && make fmt && make typecheck
 | [knowledge/lessons.md](./knowledge/lessons.md) | 踩坑教训 L1~L4，叙事性：现象 → 根因 → 解法 → 适用范围 | 遇到奇怪 bug 先来这里查；完成任务卡后追加新教训 |
 | [knowledge/blueprints.md](./knowledge/blueprints.md) | 模块契约卡片：接口签名、设计意图、踩坑、跨 M 依赖 | 改某个模块前先看 blueprint；M 归档时更新 |
 | [knowledge/m2-kv-cache-design.md](./knowledge/m2-kv-cache-design.md) | M2 技术设计：KV Cache 方案调研、ADR 决策、数据流 | M2 完成后回顾；想理解 KV Cache 设计思路时 |
-| [knowledge/m3-continuous-batching-design.md](./knowledge/m3-continuous-batching-design.md) | M3 技术总结（累积中）：设计决策、踩坑、框架对比 | M3 进行中实时记录；完成后回顾 |
+| [knowledge/m3-continuous-batching.md](./knowledge/m3-continuous-batching.md) | M3 技术总结：设计决策、踩坑、框架对比、benchmark、局限性 | M3 完成后回顾；想理解 continuous batching 设计思路时 |
 
 ---
 
@@ -137,7 +137,7 @@ inferlite/
 
 ## 当前进度
 
-M1 Qwen3 单序列推理 ✅ → M2 KV Cache ✅ → **M3 Continuous Batching 🟡**
+M1 Qwen3 单序列推理 ✅ → M2 KV Cache ✅ → M3 Continuous Batching ✅ → **M4 PagedAttention ⬜**
 
 详见 [plan/PROGRESS.md](./plan/PROGRESS.md)
 
