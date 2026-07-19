@@ -75,7 +75,8 @@ flowchart LR
   - 95 个单测全绿，Qwen3-0.6B e2e 与 transformers 精确对齐
 - ✅ **M2** KV Cache（tag: `m2-complete`，2026-06-29）
   - T1~T5 全部完成，新增 28 个单测，M1/M2 端到端 bench 实测加速 7.36×
-- 🟡 **M3** Continuous Batching（进行中）
+- ✅ **M3** Continuous Batching（tag: `m3/continuous-batching`，2026-07-19）
+  - T1~T7 全部完成，fixed-slot continuous batching + metrics/benchmark，E2E 与 serial generate 等价
 - ⬜ M4 PagedAttention · M5 API+SSE
 - ⬜ M6+ MoE / Spec Decoding / Triton / VLM …
 

@@ -129,4 +129,12 @@ M3 连续批处理完成
 
 ## 完成总结
 
-待完成后补：M3 最终能力边界、benchmark 数字、tag 信息和后续 M4 入口。
+本卡完成 M3 的文档与里程碑收口：
+
+- 任务卡总结：补齐 T1 / T2 / T7 的 `## 完成总结`，记录调度状态机、固定槽位 KV Cache 和本文档闭环的最终结论。
+- 技术结论：M3 实现教学版 continuous batching，固定槽位 KV Cache，decode 每 iteration 重组 batch；PagedAttention / Prefix Cache / Chunked Prefill 明确留给 M4/M5/M10。
+- Benchmark 结果：归档至 `bench/results/2026-07-18-m3-continuous-batching-mps-bf16.md`，并在 `docs/plan/M3.md` 中给出主对比、消融、瓶颈拆解和与 nano-vllm 的差异说明。
+- 进度与入口：`docs/plan/PROGRESS.md` 与 `README.md` 同步 M3 完成状态，后续 M4 入口在 PLAN/M3 中明确说明。
+- Tag：创建 annotated tag `m3/continuous-batching`，message 概括 M3 的 scheduler / cache / attention / engine / metrics 落地点。
+
+待全部收口后回填：最终 commit、tag 创建时间、PROGRESS/README 中使用的具体日期与链接。

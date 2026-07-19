@@ -5,7 +5,7 @@
 ## 元信息
 - **任务 ID**: M3-T1
 - **里程碑**: M3 — Continuous Batching
-- **状态**: ⬜ pending
+- **状态**: ✅ done
 - **前置**: M2 完成；`docs/plan/M3.md` 已确认 continuous batching 技术选型
 - **估时**: 2h
 
@@ -145,4 +145,24 @@ class FCFSScheduler:
 
 ## 完成总结
 
-待完成后补：本卡对 continuous batching 状态机的抽象、踩坑和后续 T2 依赖。
+本卡完成了 M3 的纯 Python 调度状态机：
+
+- `RequestState`：封装 `request_id / prompt_ids / max_new_tokens / status / slot_id / seq_len / num_generated / last_token`。
+- `RequestStatus`：`waiting / running / finished / cancelled` 四态。
+- `FCFSScheduler`：维护四个集合，提供 `submit / admit_until_full / mark_finished / cancel`。
+
+关键设计结论：
+
+- `running` 用 `dict[str, RequestState]`，方便按 `request_id` 快速查找和移除。
+- `admit_until_full()` 严格按 FCFS 顺序，把 `waiting` 中请求转入 `running`，直到 `len(running) == max_num_seqs`。
+- 任何请求同一时刻只属于 `waiting / running / finished / cancelled` 之一，三/四队列守恒由单测守护。
+
+已知限制：
+
+- 不做优先级、抢占、超时、batching window、SLO-aware 策略。
+- 不做 HTTP server 或异步队列，只支持进程内同步调用。
+
+对后续任务的接口关系：
+
+- T2 的 `SlotManager.allocate(req.request_id)` 与 `free(req.request_id)` 直接复用本卡定义的 `request_id` 语义。
+- T4 的 `batch_generate` 以 `scheduler.admit_until_full()` 返回的 running 列表作为当前 decode batch 来源。
