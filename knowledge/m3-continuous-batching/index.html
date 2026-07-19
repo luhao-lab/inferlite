@@ -1,0 +1,4463 @@
+
+<!doctype html>
+<html lang="zh" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="从零手撕的 LLM 推理引擎学习项目 · L0-aligned with transformers">
+      
+      
+      
+        <link rel="canonical" href="https://luhao-lab.github.io/inferlite/knowledge/m3-continuous-batching/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>inferlite M3 总结文档：Continuous Batching - inferlite</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+  
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+  
+  <style>:root{--md-admonition-icon--note:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M0%208a8%208%200%201%201%2016%200A8%208%200%200%201%200%208m8-6.5a6.5%206.5%200%201%200%200%2013%206.5%206.5%200%200%200%200-13M6.5%207.75A.75.75%200%200%201%207.25%207h1a.75.75%200%200%201%20.75.75v2.75h.25a.75.75%200%200%201%200%201.5h-2a.75.75%200%200%201%200-1.5h.25v-2h-.25a.75.75%200%200%201-.75-.75M8%206a1%201%200%201%201%200-2%201%201%200%200%201%200%202%22/%3E%3C/svg%3E');--md-admonition-icon--abstract:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2.5%201.75v11.5c0%20.138.112.25.25.25h3.17a.75.75%200%200%201%200%201.5H2.75A1.75%201.75%200%200%201%201%2013.25V1.75C1%20.784%201.784%200%202.75%200h8.5C12.216%200%2013%20.784%2013%201.75v7.736a.75.75%200%200%201-1.5%200V1.75a.25.25%200%200%200-.25-.25h-8.5a.25.25%200%200%200-.25.25m13.274%209.537zl-4.557%204.45a.75.75%200%200%201-1.055-.008l-1.943-1.95a.75.75%200%200%201%201.062-1.058l1.419%201.425%204.026-3.932a.75.75%200%201%201%201.048%201.074M4.75%204h4.5a.75.75%200%200%201%200%201.5h-4.5a.75.75%200%200%201%200-1.5M4%207.75A.75.75%200%200%201%204.75%207h2a.75.75%200%200%201%200%201.5h-2A.75.75%200%200%201%204%207.75%22/%3E%3C/svg%3E');--md-admonition-icon--info:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M0%208a8%208%200%201%201%2016%200A8%208%200%200%201%200%208m8-6.5a6.5%206.5%200%201%200%200%2013%206.5%206.5%200%200%200%200-13M6.5%207.75A.75.75%200%200%201%207.25%207h1a.75.75%200%200%201%20.75.75v2.75h.25a.75.75%200%200%201%200%201.5h-2a.75.75%200%200%201%200-1.5h.25v-2h-.25a.75.75%200%200%201-.75-.75M8%206a1%201%200%201%201%200-2%201%201%200%200%201%200%202%22/%3E%3C/svg%3E');--md-admonition-icon--tip:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M8%201.5c-2.363%200-4%201.69-4%203.75%200%20.984.424%201.625.984%202.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621%201.49a.75.75%200%200%201-1.484.211c-.04-.282-.163-.547-.37-.847a9%209%200%200%200-.542-.68q-.126-.149-.268-.32C3.201%207.75%202.5%206.766%202.5%205.25%202.5%202.31%204.863%200%208%200s5.5%202.31%205.5%205.25c0%201.516-.701%202.5-1.328%203.259q-.142.172-.268.319c-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751%200%200%201-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848q.113-.133.213-.253c.561-.679.985-1.32.985-2.304%200-2.06-1.637-3.75-4-3.75M5.75%2012h4.5a.75.75%200%200%201%200%201.5h-4.5a.75.75%200%200%201%200-1.5M6%2015.25a.75.75%200%200%201%20.75-.75h2.5a.75.75%200%200%201%200%201.5h-2.5a.75.75%200%200%201-.75-.75%22/%3E%3C/svg%3E');--md-admonition-icon--success:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M0%208a8%208%200%201%201%2016%200A8%208%200%200%201%200%208m1.5%200a6.5%206.5%200%201%200%2013%200%206.5%206.5%200%200%200-13%200m10.28-1.72-4.5%204.5a.75.75%200%200%201-1.06%200l-2-2a.75.75%200%200%201%20.018-1.042.75.75%200%200%201%201.042-.018l1.47%201.47%203.97-3.97a.75.75%200%200%201%201.042.018.75.75%200%200%201%20.018%201.042%22/%3E%3C/svg%3E');--md-admonition-icon--question:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M0%208a8%208%200%201%201%2016%200A8%208%200%200%201%200%208m8-6.5a6.5%206.5%200%201%200%200%2013%206.5%206.5%200%200%200%200-13M6.92%206.085h.001a.749.749%200%201%201-1.342-.67c.169-.339.436-.701.849-.977C6.845%204.16%207.369%204%208%204a2.76%202.76%200%200%201%201.637.525c.503.377.863.965.863%201.725%200%20.448-.115.83-.329%201.15-.205.307-.47.513-.692.662-.109.072-.22.138-.313.195l-.006.004a6%206%200%200%200-.26.16%201%201%200%200%200-.276.245.75.75%200%200%201-1.248-.832c.184-.264.42-.489.692-.661q.154-.1.313-.195l.007-.004c.1-.061.182-.11.258-.161a1%201%200%200%200%20.277-.245C8.96%206.514%209%206.427%209%206.25a.61.61%200%200%200-.262-.525A1.27%201.27%200%200%200%208%205.5c-.369%200-.595.09-.74.187a1%201%200%200%200-.34.398M9%2011a1%201%200%201%201-2%200%201%201%200%200%201%202%200%22/%3E%3C/svg%3E');--md-admonition-icon--warning:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M6.457%201.047c.659-1.234%202.427-1.234%203.086%200l6.082%2011.378A1.75%201.75%200%200%201%2014.082%2015H1.918a1.75%201.75%200%200%201-1.543-2.575Zm1.763.707a.25.25%200%200%200-.44%200L1.698%2013.132a.25.25%200%200%200%20.22.368h12.164a.25.25%200%200%200%20.22-.368Zm.53%203.996v2.5a.75.75%200%200%201-1.5%200v-2.5a.75.75%200%200%201%201.5%200M9%2011a1%201%200%201%201-2%200%201%201%200%200%201%202%200%22/%3E%3C/svg%3E');--md-admonition-icon--failure:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2.344%202.343za8%208%200%200%201%2011.314%2011.314A8.002%208.002%200%200%201%20.234%2010.089a8%208%200%200%201%202.11-7.746m1.06%2010.253a6.5%206.5%200%201%200%209.108-9.275%206.5%206.5%200%200%200-9.108%209.275M6.03%204.97%208%206.94l1.97-1.97a.749.749%200%200%201%201.275.326.75.75%200%200%201-.215.734L9.06%208l1.97%201.97a.749.749%200%200%201-.326%201.275.75.75%200%200%201-.734-.215L8%209.06l-1.97%201.97a.749.749%200%200%201-1.275-.326.75.75%200%200%201%20.215-.734L6.94%208%204.97%206.03a.75.75%200%200%201%20.018-1.042.75.75%200%200%201%201.042-.018%22/%3E%3C/svg%3E');--md-admonition-icon--danger:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.504.43a1.516%201.516%200%200%201%202.437%201.713L10.415%205.5h2.123c1.57%200%202.346%201.909%201.22%203.004l-7.34%207.142a1.25%201.25%200%200%201-.871.354h-.302a1.25%201.25%200%200%201-1.157-1.723L5.633%2010.5H3.462c-1.57%200-2.346-1.909-1.22-3.004zm1.047%201.074L3.286%208.571A.25.25%200%200%200%203.462%209H6.75a.75.75%200%200%201%20.694%201.034l-1.713%204.188%206.982-6.793A.25.25%200%200%200%2012.538%207H9.25a.75.75%200%200%201-.683-1.06l2.008-4.418.003-.006-.004-.009-.006-.006-.008-.001q-.005%200-.009.004%22/%3E%3C/svg%3E');--md-admonition-icon--bug:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M4.72.22a.75.75%200%200%201%201.06%200l1%20.999a3.5%203.5%200%200%201%202.441%200l.999-1a.748.748%200%200%201%201.265.332.75.75%200%200%201-.205.729l-.775.776c.616.63.995%201.493.995%202.444v.327q0%20.15-.025.292c.408.14.764.392%201.029.722l1.968-.787a.75.75%200%200%201%20.556%201.392L13%207.258V9h2.25a.75.75%200%200%201%200%201.5H13v.5q-.002.615-.141%201.186l2.17.868a.75.75%200%200%201-.557%201.392l-2.184-.873A5%205%200%200%201%208%2016a5%205%200%200%201-4.288-2.427l-2.183.873a.75.75%200%200%201-.558-1.392l2.17-.868A5%205%200%200%201%203%2011v-.5H.75a.75.75%200%200%201%200-1.5H3V7.258L.971%206.446a.75.75%200%200%201%20.558-1.392l1.967.787c.265-.33.62-.583%201.03-.722a1.7%201.7%200%200%201-.026-.292V4.5c0-.951.38-1.814.995-2.444L4.72%201.28a.75.75%200%200%201%200-1.06m.53%206.28a.75.75%200%200%200-.75.75V11a3.5%203.5%200%201%200%207%200V7.25a.75.75%200%200%200-.75-.75ZM6.173%205h3.654A.17.17%200%200%200%2010%204.827V4.5a2%202%200%201%200-4%200v.327c0%20.096.077.173.173.173%22/%3E%3C/svg%3E');--md-admonition-icon--example:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M5%205.782V2.5h-.25a.75.75%200%200%201%200-1.5h6.5a.75.75%200%200%201%200%201.5H11v3.282l3.666%205.76C15.619%2013.04%2014.543%2015%2012.767%2015H3.233c-1.776%200-2.852-1.96-1.899-3.458Zm-2.4%206.565a.75.75%200%200%200%20.633%201.153h9.534a.75.75%200%200%200%20.633-1.153L12.225%2010.5h-8.45ZM9.5%202.5h-3V6c0%20.143-.04.283-.117.403L4.73%209h6.54L9.617%206.403A.75.75%200%200%201%209.5%206Z%22/%3E%3C/svg%3E');--md-admonition-icon--quote:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M1.75%202.5h10.5a.75.75%200%200%201%200%201.5H1.75a.75.75%200%200%201%200-1.5m4%205h8.5a.75.75%200%200%201%200%201.5h-8.5a.75.75%200%200%201%200-1.5m0%205h8.5a.75.75%200%200%201%200%201.5h-8.5a.75.75%200%200%201%200-1.5M2.5%207.75v6a.75.75%200%200%201-1.5%200v-6a.75.75%200%200%201%201.5%200%22/%3E%3C/svg%3E');}</style>
+
+
+  
+  
+  
+  
+  <style>:root{--md-annotation-icon:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M17%2013h-4v4h-2v-4H7v-2h4V7h2v4h4m-5-9A10%2010%200%200%200%202%2012a10%2010%200%200%200%2010%2010%2010%2010%200%200%200%2010-10A10%2010%200%200%200%2012%202%22/%3E%3C/svg%3E');}</style>
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../_assets/stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#inferlite-m3-continuous-batching" class="md-skip">
+          跳转至
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="页眉">
+    <a href="../.." title="inferlite" class="md-header__button md-logo" aria-label="inferlite" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M6.5.75V2h3V.75a.75.75 0 0 1 1.5 0V2h1.25c.966 0 1.75.784 1.75 1.75V5h1.25a.75.75 0 0 1 0 1.5H14v3h1.25a.75.75 0 0 1 0 1.5H14v1.25A1.75 1.75 0 0 1 12.25 14H11v1.25a.75.75 0 0 1-1.5 0V14h-3v1.25a.75.75 0 0 1-1.5 0V14H3.75A1.75 1.75 0 0 1 2 12.25V11H.75a.75.75 0 0 1 0-1.5H2v-3H.75a.75.75 0 0 1 0-1.5H2V3.75C2 2.784 2.784 2 3.75 2H5V.75a.75.75 0 0 1 1.5 0m5.75 11.75a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25ZM5.75 5h4.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-4.5a.75.75 0 0 1-.75-.75v-4.5A.75.75 0 0 1 5.75 5m.75 4.5h3v-3h-3Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            inferlite
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              inferlite M3 总结文档：Continuous Batching
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="cyan"  aria-label="Switch to light"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="black" data-md-color-accent="teal"  aria-label="Switch to dark"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="查找">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="分享" aria-label="分享" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜索引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/luhao-lab/inferlite" title="前往仓库" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    luhao-lab/inferlite
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="标签" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  首页
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../plan/PLAN/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  规划
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tasks/M2-T1-KVCache-DataStructure.md" class="md-tabs__link">
+          
+  
+  
+    
+  
+  任务卡 (M2 活跃)
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tasks/M1-archive/M1-T0-ModelConfig/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  任务卡 (M1 归档)
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../kb/knowledge.md" class="md-tabs__link">
+          
+  
+  
+    
+  
+  知识库
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  首页
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="导航栏" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="inferlite" class="md-nav__button md-logo" aria-label="inferlite" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M6.5.75V2h3V.75a.75.75 0 0 1 1.5 0V2h1.25c.966 0 1.75.784 1.75 1.75V5h1.25a.75.75 0 0 1 0 1.5H14v3h1.25a.75.75 0 0 1 0 1.5H14v1.25A1.75 1.75 0 0 1 12.25 14H11v1.25a.75.75 0 0 1-1.5 0V14h-3v1.25a.75.75 0 0 1-1.5 0V14H3.75A1.75 1.75 0 0 1 2 12.25V11H.75a.75.75 0 0 1 0-1.5H2v-3H.75a.75.75 0 0 1 0-1.5H2V3.75C2 2.784 2.784 2 3.75 2H5V.75a.75.75 0 0 1 1.5 0m5.75 11.75a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25ZM5.75 5h4.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-4.5a.75.75 0 0 1-.75-.75v-4.5A.75.75 0 0 1 5.75 5m.75 4.5h3v-3h-3Z"/></svg>
+
+    </a>
+    inferlite
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/luhao-lab/inferlite" title="前往仓库" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    luhao-lab/inferlite
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    规划
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    规划
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../plan/PLAN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    路线图 PLAN
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../plan/PROGRESS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    进度 PROGRESS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../plan/M1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M1 作战地图
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../plan/m2-kv-cache-design.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2 KV Cache 设计
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    任务卡 (M2 活跃)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    任务卡 (M2 活跃)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M2-T1-KVCache-DataStructure.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T1 KVCache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M2-T2-Attention-KVCache.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T2 Attention KV
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M2-T3-Model-Passthrough.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T3 Model 透传
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M2-T4-Generate-Loop.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T4 Generate Loop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M2-T5-CLI-Device-Dtype.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T5 CLI 设备
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    任务卡 (M1 归档)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    任务卡 (M1 归档)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T0-ModelConfig/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T0 ModelConfig
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T1-RMSNorm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T1 RMSNorm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T2-SwiGLU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T2 SwiGLU
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T3-RoPE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T3 RoPE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T4-GQA-Attention/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T4 GQA Attention
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T5-DecoderLayer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T5 DecoderLayer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T6-Qwen3Model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T6 Qwen3Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T7-WeightMap-load-from-hf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T7 WeightLoader
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T8-L1-logits-alignment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T8 Logits 对齐
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T9-LLMModel-GreedySampler/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T9 LLMModel+Sampler
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T10-EngineCore-step/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T10 EngineCore
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T11-CLI-L2-e2e/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T11 CLI e2e
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tasks/M1-archive/M1-T12-smoke-test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T12 smoke test
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    知识库
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    知识库
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kb/knowledge.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    knowledge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kb/lessons.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    lessons
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kb/blueprints.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    blueprints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        摘要
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        符号说明
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-m2-m3-continuous-batching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. 从 M2 到 M3：为什么需要 continuous batching
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. 从 M2 到 M3：为什么需要 continuous batching">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-m2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 M2 的调度方式
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-m3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 M3 要解决的问题
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 模块职责拆分
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-continuous-batching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. 调研：主流框架的 continuous batching
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. 调研：主流框架的 continuous batching">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-orca-iteration-level-scheduling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 Orca：提出 iteration-level scheduling
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-friendliaiiteration-batching-continuous-batching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 FriendliAI：iteration batching / continuous batching
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-vllmcontinuous-batching-pagedattention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 vLLM：continuous batching + PagedAttention
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-sglangcontinuous-batching-prefixradix-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 SGLang：continuous batching + prefix/radix cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#25-nano-vllm-vllm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5 nano-vLLM：教学版 vLLM
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#26" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.6 对比总览
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. 方案宏观拆解
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. 方案宏观拆解">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-m3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 M3 = 四个子系统的组合
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 依赖关系与实施顺序
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 整体数据流
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 每个子系统影响的文件
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-m3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. M3 目标与边界
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. M3 目标与边界">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 目标
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 边界（不做）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 关键设计决策
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-t1-requeststate-fcfsscheduler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. T1: RequestState + FCFSScheduler
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. T1: RequestState + FCFSScheduler">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 核心数据结构
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 设计决策
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 与主流框架对比：status 管理
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 踩坑记录
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5 测试覆盖
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#36" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.6 在推理链路中的位置
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-t2-batchedkvcache-slotmanager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. T2: BatchedKVCache + SlotManager
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. T2: BatchedKVCache + SlotManager">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#m2-vs-m3-kv-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M2 vs M3 的 KV Cache 本质区别
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#max_num_slots-max_num_seqs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        max_num_slots 与 max_num_seqs 的关系
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#max_num_slots-max_seq_len-modelconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        为什么 max_num_slots / max_seq_len 不在 ModelConfig 里
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#init-from_config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        init 与 from_config 的分工（工厂模式）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#classmethod-cls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        @classmethod 中的 cls(...) 用法
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        最终实现
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        设计决策总结
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        测试覆盖
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#t3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        T3 依赖
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-t3-batchedattention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. T3: BatchedAttention
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. T3: BatchedAttention">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        核心问题
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gqaattention-vs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        方案选择：扩展现有 GQAAttention vs 新建类
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实现结构
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m3-prefill" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M3 prefill 策略
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        与主流框架对比
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m2-vs-m3-batch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M2 vs M3 的 "batch" 含义
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gather" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gather 临时张量的内存浪费
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        改动范围
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        最终实现
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        设计决策
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        测试覆盖
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#t4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        T4 依赖
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-t4-batchengine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. T4: BatchEngine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. T4: BatchEngine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_14" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        核心问题
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#seq_len-m2-cur_len-nano-vllm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        seq_len 语义：与 M2 cur_len 和 nano-vllm 对齐
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#batchengine-model-sampler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BatchEngine 架构：直接持有 model + sampler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        主循环结构
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        改动范围
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-t5-e2e-correctness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. T5: E2E Correctness
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. T5: E2E Correctness">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_17" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        目标
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_18" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        测试结构
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_19" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        关键发现
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_20" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        修改文件
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        测试结果
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-t6-metrics-benchmark" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. T6: Metrics &amp; Benchmark
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="10. T6: Metrics &amp; Benchmark">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        目标
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实现
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#benchmark-qwen3-06b-mps-bf16-4-16-tokens-prompt_len32" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Benchmark 结果（Qwen3-0.6B, MPS bf16, 4 请求, 16 tokens, prompt_len=32）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#micro-benchmark" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        性能瓶颈定位（分段计时 micro-benchmark）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m2-vs-m3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M2 vs M3：结构同构，访问方式不同
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_24" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        与主流框架对比
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#m3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        M3 的教学目标定位
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        测试
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-t7-docs-tag" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. T7: Docs &amp; Tag
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="11. T7: Docs &amp; Tag">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#111" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.1 交付物
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#112" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.2 文档拆分
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#113" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.3 局限性映射
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. 踩坑与教训
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#13_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13. 测试覆盖总览
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#14" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        14. 文件清单
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#15-benchmark" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        15. Benchmark 结果
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        16. 已知局限性及后续解决路径
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#17-m4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        17. 后续 M4 入口
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="inferlite-m3-continuous-batching">inferlite M3 总结文档：Continuous Batching<a class="headerlink" href="#inferlite-m3-continuous-batching" title="锚点">#</a></h1>
+<blockquote>
+<p><strong>状态</strong>：✅ 已完成（2026-07-19）
+<strong>作者</strong>：luhao
+<strong>基于</strong>：M2 tag <code>m2/static-kv-cache</code>（28 单测全通过，bench 7.36× at T=512）
+<strong>设计文档</strong>：<a href="../../plan/M3/">M3.md</a>
+<strong>实测结果归档</strong>：<a href="../../bench/results/2026-07-18-m3-continuous-batching-mps-bf16.md">bench/results/2026-07-18-m3-continuous-batching-mps-bf16.md</a></p>
+</blockquote>
+<hr />
+<h2 id="_1">摘要<a class="headerlink" href="#_1" title="锚点">#</a></h2>
+<p>M2 支持单请求的 KV Cache 加速，但一次只能处理一个请求。M3 引入 continuous batching，支持多请求共享 KV Cache，在 decode iteration 边界动态调度：finished 请求释放 slot，waiting 请求被 admit，实现资源的持续复用。</p>
+<p>本文档记录 M3 的完整设计决策、实现细节和总结回顾。前半部分（§1–§3）覆盖背景、调研和宏观拆解；中间部分（§4–§11）按任务卡记录设计决策和代码细节；后半部分（§12–§17）汇总踩坑教训、测试覆盖、benchmark 结果、局限性分析和后续路径。</p>
+<hr />
+<h2 id="_2">符号说明<a class="headerlink" href="#_2" title="锚点">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+<th>M3 典型值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>max_num_seqs</td>
+<td>最大并发请求数（running 集合容量上限）</td>
+<td>2~8</td>
+</tr>
+<tr>
+<td>max_num_slots</td>
+<td>KV Cache 的 slot 总数（= max_num_seqs）</td>
+<td>2~8</td>
+</tr>
+<tr>
+<td>slot_id</td>
+<td>请求在 KV Cache 中的位置编号</td>
+<td>0..max_num_slots-1</td>
+</tr>
+<tr>
+<td>seq_len</td>
+<td>请求当前已写入的 KV 长度（= prefill 长度 + 已 decode 步数）</td>
+<td>≤ max_seq_len</td>
+</tr>
+<tr>
+<td>seq_lens</td>
+<td><code>BatchedKVCache</code> 中的 <code>[max_num_slots]</code> tensor，记录每个 slot 的有效长度</td>
+<td>—</td>
+</tr>
+<tr>
+<td>cache_slots</td>
+<td>当前 decode step 参与 batch 的 slot id 列表，shape <code>[B]</code></td>
+<td><code>[0, 1]</code> 等</td>
+</tr>
+<tr>
+<td>cache_positions</td>
+<td>每个 slot 的当前写入位置，= <code>seq_lens[cache_slots]</code>，shape <code>[B]</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>B</td>
+<td>当前 decode batch 大小（= running 请求数）</td>
+<td>1~max_num_slots</td>
+</tr>
+<tr>
+<td>T_p</td>
+<td>prompt 长度（prefill 阶段 token 数）</td>
+<td>变化</td>
+</tr>
+<tr>
+<td>N</td>
+<td>max_new_tokens，最大生成 token 数</td>
+<td>16~128</td>
+</tr>
+<tr>
+<td>max_seq_len</td>
+<td>KV Cache 每个 slot 的最大序列长度</td>
+<td>1024（默认）</td>
+</tr>
+<tr>
+<td>L</td>
+<td>num_hidden_layers，Transformer 层数</td>
+<td>28</td>
+</tr>
+<tr>
+<td>H_kv</td>
+<td>num_key_value_heads（GQA）</td>
+<td>8</td>
+</tr>
+<tr>
+<td>D</td>
+<td>head_dim</td>
+<td>64</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1-m2-m3-continuous-batching">1. 从 M2 到 M3：为什么需要 continuous batching<a class="headerlink" href="#1-m2-m3-continuous-batching" title="锚点">#</a></h2>
+<h3 id="11-m2">1.1 M2 的调度方式<a class="headerlink" href="#11-m2" title="锚点">#</a></h3>
+<p>M2 没有 scheduler 模块。<code>engine/core.py</code> 里的 <code>generate()</code> 函数就是全部调度逻辑：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># M2 的 generate：单请求，串行处理</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">input_ids</span><span class="p">,</span> <span class="n">max_new_tokens</span><span class="p">,</span> <span class="n">kv_cache</span><span class="p">):</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">kv_cache</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>                          <span class="c1"># 清空 cache</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">logits</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">input_ids</span><span class="p">,</span> <span class="n">kv_cache</span><span class="o">=</span><span class="n">cache</span><span class="p">)</span> <span class="c1"># prefill：处理整个 prompt</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">next_token</span> <span class="o">=</span> <span class="n">sampler</span><span class="p">(</span><span class="n">logits</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:])</span>    <span class="c1"># 采样第一个 token</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_new_tokens</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>       <span class="c1"># decode loop</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="k">if</span> <span class="n">next_token</span> <span class="o">==</span> <span class="n">eos</span><span class="p">:</span> <span class="k">break</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        <span class="n">logits</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">next_token</span><span class="p">,</span> <span class="n">kv_cache</span><span class="o">=</span><span class="n">cache</span><span class="p">)</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        <span class="n">next_token</span> <span class="o">=</span> <span class="n">sampler</span><span class="p">(</span><span class="n">logits</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:])</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="k">return</span> <span class="n">input_ids</span>  <span class="c1"># 返回完整序列</span>
+</span></code></pre></div>
+<p>M2 处理多个请求只能完全串行：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># M2：三个请求依次执行，没有 overlap</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">output_a</span> <span class="o">=</span> <span class="n">generate</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">prompt_a</span><span class="p">,</span> <span class="n">kv_cache</span><span class="p">)</span>   <span class="c1"># cache reset → 跑完 → 返回</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">output_b</span> <span class="o">=</span> <span class="n">generate</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">prompt_b</span><span class="p">,</span> <span class="n">kv_cache</span><span class="p">)</span>   <span class="c1"># cache reset → 跑完 → 返回</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">output_c</span> <span class="o">=</span> <span class="n">generate</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">prompt_c</span><span class="p">,</span> <span class="n">kv_cache</span><span class="p">)</span>   <span class="c1"># cache reset → 跑完 → 返回</span>
+</span></code></pre></div>
+<p>请求 A 只跑了 2 步就 EOS 结束，但 B 和 C 必须等 A 完全退出才能开始。GPU 在 A 结束到 B 开始之间是空闲的。</p>
+<h3 id="12-m3">1.2 M3 要解决的问题<a class="headerlink" href="#12-m3" title="锚点">#</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>请求 A 跑了 2 步就 EOS → 它的 KV slot 应该立刻释放
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>请求 C 在排队 → 应该立刻进入 A 腾出的 slot 开始跑
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>请求 B 还在跑 → B 和 C 应该共享同一个 batch 做 decode
+</span></code></pre></div>
+<p>这就是 continuous batching：在 decode iteration 边界，finished 请求退出释放资源，waiting 请求进入复用资源，running 集合动态变化。</p>
+<h3 id="13">1.3 模块职责拆分<a class="headerlink" href="#13" title="锚点">#</a></h3>
+<p>M2 的 <code>generate()</code> 把三件事混在一起。M3 拆开：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>scheduler/  →  &quot;谁该跑&quot;       →  纯状态机，不碰模型
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>engine/     →  &quot;怎么跑&quot;       →  模型 forward + 采样
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>model/      →  &quot;计算细节&quot;     →  attention + KV cache + 网络层
+</span></code></pre></div>
+<p><code>scheduler/</code> 是 M3 新增的模块，负责管理请求集合（waiting/running/finished）、状态迁移、容量控制和调度策略。</p>
+<hr />
+<h2 id="2-continuous-batching">2. 调研：主流框架的 continuous batching<a class="headerlink" href="#2-continuous-batching" title="锚点">#</a></h2>
+<h3 id="21-orca-iteration-level-scheduling">2.1 Orca：提出 iteration-level scheduling<a class="headerlink" href="#21-orca-iteration-level-scheduling" title="锚点">#</a></h3>
+<p>Orca (OSDI'22) 指出传统 inference serving 不适合自回归生成：当前 batch 不能动态改变，早完成请求不能及时返回。Orca 提出 iteration-level scheduling，调度粒度从 request 改成 iteration，每次只执行 batch 的一个模型迭代。</p>
+<p>关键概念 <strong>selective batching</strong>：不是把所有操作都 batch，而是选择适合 batch 的部分。inferlite M3 的裁剪正是教学版 selective batching：prefill 逐条做，decode 组 batch。</p>
+<h3 id="22-friendliaiiteration-batching-continuous-batching">2.2 FriendliAI：iteration batching / continuous batching<a class="headerlink" href="#22-friendliaiiteration-batching-continuous-batching" title="锚点">#</a></h3>
+<p>FriendliAI 将此思想称为 iteration batching / continuous batching：batch 在运行过程中动态改变，已完成请求立即返回，新请求可加入后续迭代。continuous batching 的本质是 batch membership 在 iteration 边界连续流动。</p>
+<h3 id="23-vllmcontinuous-batching-pagedattention">2.3 vLLM：continuous batching + PagedAttention<a class="headerlink" href="#23-vllmcontinuous-batching-pagedattention" title="锚点">#</a></h3>
+<p>vLLM V1 采用 token-budget 调度：优先调度 decode，再用剩余 budget 调度 prefill（chunked prefill 启用时）。比 M3 多 PagedAttention、chunked prefill、prefix cache、CUDA Graph、FlashAttention、多 GPU TP/PP/DP 等生产能力。</p>
+<h3 id="24-sglangcontinuous-batching-prefixradix-cache">2.4 SGLang：continuous batching + prefix/radix cache<a class="headerlink" href="#24-sglangcontinuous-batching-prefixradix-cache" title="锚点">#</a></h3>
+<p>SGLang 强调 prefix 复用（RadixAttention / radix tree cache），多个请求共享公共前缀 KV。prefix/session cache 不属于 M3，放到 M5。</p>
+<h3 id="25-nano-vllm-vllm">2.5 nano-vLLM：教学版 vLLM<a class="headerlink" href="#25-nano-vllm-vllm" title="锚点">#</a></h3>
+<p>nano-vLLM 保留 waiting queue、running list、block manager、PagedAttention 简化版。inferlite M3 比 nano-vLLM 再裁剪一层：不用 block manager，先用固定 slot manager，聚焦 continuous batching 本身。</p>
+<h3 id="26">2.6 对比总览<a class="headerlink" href="#26" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Orca</th>
+<th>vLLM</th>
+<th>SGLang</th>
+<th>nano-vLLM</th>
+<th>inferlite M3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>调度粒度</td>
+<td>iteration-level</td>
+<td>iteration-level</td>
+<td>iteration-level</td>
+<td>iteration-level</td>
+<td>iteration-level</td>
+</tr>
+<tr>
+<td>KV 管理</td>
+<td>—</td>
+<td>PagedAttention</td>
+<td>RadixAttention</td>
+<td>PagedAttention 简化</td>
+<td>固定 slot</td>
+</tr>
+<tr>
+<td>prefill</td>
+<td>batch</td>
+<td>chunked prefill</td>
+<td>chunked prefill</td>
+<td>batch</td>
+<td>逐条</td>
+</tr>
+<tr>
+<td>decode</td>
+<td>batch</td>
+<td>batch</td>
+<td>batch</td>
+<td>batch</td>
+<td>batch</td>
+</tr>
+<tr>
+<td>prefix cache</td>
+<td>—</td>
+<td>✅</td>
+<td>✅（radix tree）</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>kernel 加速</td>
+<td>—</td>
+<td>Triton + FlashAttn</td>
+<td>Triton + FlashAttn</td>
+<td>Triton</td>
+<td>纯 PyTorch</td>
+</tr>
+<tr>
+<td>定位</td>
+<td>论文原型</td>
+<td>生产级</td>
+<td>生产级</td>
+<td>教学版</td>
+<td>教学版</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3">3. 方案宏观拆解<a class="headerlink" href="#3" title="锚点">#</a></h2>
+<h3 id="31-m3">3.1 M3 = 四个子系统的组合<a class="headerlink" href="#31-m3" title="锚点">#</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>M3 = 调度状态机 + 固定槽位 KV 池 + batched attention + decode 重组引擎
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>scheduler/   →  &quot;谁该跑&quot;       →  纯状态机，不碰模型
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>model/       →  &quot;计算细节&quot;     →  attention + KV cache + 网络层
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>engine/      →  &quot;怎么跑&quot;       →  模型 forward + 采样 + 调度循环
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>metrics/     →  &quot;跑得怎样&quot;     →  请求级 + 步级指标采集
+</span></code></pre></div>
+<h3 id="32">3.2 依赖关系与实施顺序<a class="headerlink" href="#32" title="锚点">#</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>T1 调度状态机 ──→ T2 固定槽位 KV 池 ──→ T3 batched attention ──→ T4 batch engine
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>                                                                          │
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>                                                              T5 E2E 正确性验证
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>                                                              T6 指标 + benchmark
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>                                                              T7 文档收口
+</span></code></pre></div>
+<p>T1 定义 <code>request_id</code> 语义，T2 的 <code>SlotManager</code> 直接复用；T3 的 <code>cache_slots</code> / <code>cache_positions</code> 参数依赖 T2 的 slot id；T4 的 <code>batch_generate</code> 组装 T1–T3。</p>
+<h3 id="33">3.3 整体数据流<a class="headerlink" href="#33" title="锚点">#</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>batch_generate(requests, max_num_slots, max_seq_len)
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>  │
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>  ├─ scheduler = FCFSScheduler(max_num_seqs=max_num_slots)
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>  ├─ kv_cache  = BatchedKVCache.from_config(max_num_slots, max_seq_len)
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>  │
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>  └─ while scheduler.has_unfinished():
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>       │
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>       ├─ new_reqs = scheduler.admit_until_full()
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>       │   └─ for req in new_reqs:
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>       │        slot_manager.allocate(req.request_id)
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>       │        prefill(req)          ← B=1 forward，逐条
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>       │
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>       ├─ running = scheduler.running_dict.values()
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>       ├─ cache_slots    = [req.slot_id for req in running]
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>       ├─ cache_positions = kv_cache.seq_lens[cache_slots]
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>       │
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>       ├─ logits = model(next_tokens, cache_slots, cache_positions)
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>       │   └─ 28 layers × GQAAttention(per-row mask + gather + cache write)
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>       │
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>       ├─ next_tokens = sampler(logits)
+</span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>       │
+</span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>       └─ for req in running:
+</span><span id="__span-6-23"><a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>            update seq_len, check EOS / max_new_tokens
+</span><span id="__span-6-24"><a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>            if finished: slot_manager.free(req), scheduler.mark_finished(req)
+</span></code></pre></div>
+<h3 id="34">3.4 每个子系统影响的文件<a class="headerlink" href="#34" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>子系统</th>
+<th>新建文件</th>
+<th>修改文件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>调度状态机</td>
+<td><code>scheduler/request.py</code>, <code>scheduler/fcfs.py</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>固定槽位 KV 池</td>
+<td><code>model/batched_kv_cache.py</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>batched attention</td>
+<td>—</td>
+<td><code>model/attention.py</code>, <code>model/qwen3.py</code></td>
+</tr>
+<tr>
+<td>decode 重组引擎</td>
+<td><code>engine/batch_core.py</code></td>
+<td><code>engine/protocol.py</code></td>
+</tr>
+<tr>
+<td>指标采集</td>
+<td><code>engine/metrics.py</code></td>
+<td><code>engine/batch_core.py</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-m3">4. M3 目标与边界<a class="headerlink" href="#4-m3" title="锚点">#</a></h2>
+<h3 id="21">2.1 目标<a class="headerlink" href="#21" title="锚点">#</a></h3>
+<p>实现教学版 continuous batching：每个 decode iteration 重新组 batch，running 请求共享一次模型 forward；KV Cache 用固定 slot 方案，每个请求维护自己的 <code>slot_id + seq_len</code>。</p>
+<table>
+<thead>
+<tr>
+<th>能力</th>
+<th>M3 支持</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>多请求 waiting 队列</td>
+<td>✅</td>
+<td>支持同时提交多个请求</td>
+</tr>
+<tr>
+<td>waiting / running / finished 三队列</td>
+<td>✅</td>
+<td>调度核心</td>
+</tr>
+<tr>
+<td>prefill 逐条做</td>
+<td>✅</td>
+<td>每个请求单独 prefill，避免 padding 浪费</td>
+</tr>
+<tr>
+<td>decode batch</td>
+<td>✅</td>
+<td>所有 running 请求共享一次 forward</td>
+</tr>
+<tr>
+<td>每请求独立 cache length</td>
+<td>✅</td>
+<td><code>seq_lens[slot]</code></td>
+</tr>
+<tr>
+<td>固定 slot-based KV Cache</td>
+<td>✅</td>
+<td>每个请求占一个 slot</td>
+</tr>
+<tr>
+<td>不同请求 EOS 早停</td>
+<td>✅</td>
+<td>finished 请求立即出队释放 slot</td>
+</tr>
+<tr>
+<td>新请求中途加入</td>
+<td>✅</td>
+<td>decode iteration 边界 admit waiting 请求</td>
+</tr>
+<tr>
+<td>server-style 调度循环</td>
+<td>✅</td>
+<td>最小形态：不等整个 wave 结束</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22">2.2 边界（不做）<a class="headerlink" href="#22" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>能力</th>
+<th>说明</th>
+<th>留给</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>batch prefill</td>
+<td>prompt 长度不同，padding 浪费严重</td>
+<td>后续</td>
+</tr>
+<tr>
+<td>chunked prefill</td>
+<td>长 prompt 切块，需要 token budget</td>
+<td>M11</td>
+</tr>
+<tr>
+<td>decode-first / token-budget scheduling</td>
+<td>vLLM V1 等生产策略</td>
+<td>M11+</td>
+</tr>
+<tr>
+<td>prefill/decode mixed batch</td>
+<td>需要 chunked prefill + varlen 表示</td>
+<td>M11+</td>
+</tr>
+<tr>
+<td>PagedAttention</td>
+<td>KV Cache 按 page/block 分配</td>
+<td>M4</td>
+</tr>
+<tr>
+<td>Prefix / session cache</td>
+<td>跨请求 KV 复用</td>
+<td>M5</td>
+</tr>
+<tr>
+<td>请求抢占 / preemption</td>
+<td>running 请求被踢回 waiting</td>
+<td>后续</td>
+</tr>
+<tr>
+<td>batching window</td>
+<td>等待 5ms 凑满 batch</td>
+<td>—</td>
+</tr>
+<tr>
+<td>HTTP Server / 流式输出</td>
+<td>实时接收请求、SSE streaming</td>
+<td>M5</td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话边界</strong>：M3 只保证 fixed-slot continuous batching 的语义闭环 —— 多请求共享 decode batch、slot 可跨请求复用、iteration 边界动态调度。</p>
+<h3 id="23">2.3 关键设计决策<a class="headerlink" href="#23" title="锚点">#</a></h3>
+<h4 id="prefill-batch">为什么 prefill 不做 batch<a class="headerlink" href="#prefill-batch" title="锚点">#</a></h4>
+<p>每个请求的 prompt 长度不同，batch prefill 需要 padding 到最大长度：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>reqA prompt_len = 100, reqB = 300, reqC = 80
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>naive batch prefill → padding 到 300：
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>  真实 token: 480
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>  实际计算: 3 × 300 = 900
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>  浪费: ≈ 47%
+</span></code></pre></div>
+<p>而且 prefill 的 attention 是 O(T²)，padding 浪费是平方级的。浪费的不只是 KV cache，整条 forward（embedding / QKV projection / RMSNorm / MLP / lm_head）都在算无用的 pad token。</p>
+<p>decode 每个请求每步都是 1 token（<code>input_ids = [B, 1]</code>），天然对齐。唯一的浪费是 KV 历史长度不同导致 gather 多读了无效位置（O(T)），远小于 prefill 的 O(T²)。</p>
+<p><strong>结论：prefill 逐条做，decode 组 batch。</strong></p>
+<h4 id="slot-pagedattention">为什么用固定 slot 而不是 PagedAttention<a class="headerlink" href="#slot-pagedattention" title="锚点">#</a></h4>
+<p>M3 要学习的是 <strong>scheduler 如何每步重新组 batch</strong>，不是<strong>显存 allocator 怎么设计</strong>。固定 slot 最容易理解：<code>slot_id</code> 就是地址，<code>seq_len</code> 就是长度，不需要 block table、page 分配、block 回收。</p>
+<p>代价是每个 slot 预分配 max_seq_len 大小的空间，短请求也占满一个 slot。但 M3 的 max_num_seqs 很小（2~8），总显存可控。消除浪费留给 M4。</p>
+<h4 id="decode-first-token-budget-scheduling">为什么不做 decode-first / token-budget scheduling<a class="headerlink" href="#decode-first-token-budget-scheduling" title="锚点">#</a></h4>
+<p>vLLM V1 在 chunked prefill 启用时优先调度 decode，再用剩余 token budget 调度 prefill，倾向优化 ITL 并混合 compute-bound 的 prefill 与 memory-bound 的 decode。</p>
+<p>M3 不做这个策略：需要 chunked prefill（M11）、token budget 管理、prefill/decode mixed batch（varlen 表示）作为基础设施。M3 的策略是简单的 FCFS + prefill-first：有空 slot 就逐条 prefill，然后 batch decode。</p>
+<h4 id="batch">为什么不等凑满 batch<a class="headerlink" href="#batch" title="锚点">#</a></h4>
+<p>M3 采用 opportunistic batching：每个 iteration 边界有多少 running 请求就组多大的 batch，不为凑满而等待。M3 没有 HTTP server，所有请求一次性提交，"等凑 batch" 没有意义。</p>
+<h4 id="_3">请求从哪来<a class="headerlink" href="#_3" title="锚点">#</a></h4>
+<p>M3 的"动态"不是指请求实时到达，而是指请求完成速度不同导致的逐入逐出。所有请求一次性提交到 waiting 队列，finished 释放 slot 后 waiting 被 admit。HTTP server 实时接收请求留 M5。</p>
+<hr />
+<h2 id="5-t1-requeststate-fcfsscheduler">5. T1: RequestState + FCFSScheduler<a class="headerlink" href="#5-t1-requeststate-fcfsscheduler" title="锚点">#</a></h2>
+<blockquote>
+<p>完成时间：2026-07-05</p>
+</blockquote>
+<p>T1 是 M3 的第一步：建立纯 Python 的请求状态机。不碰模型、不碰 KV Cache。</p>
+<h3 id="31">3.1 核心数据结构<a class="headerlink" href="#31" title="锚点">#</a></h3>
+<h4 id="requeststatus">RequestStatus<a class="headerlink" href="#requeststatus" title="锚点">#</a></h4>
+<p>四个状态：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>WAITING ──→ RUNNING ──→ FINISHED
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    │           │
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    └───────────┴──→ CANCELLED
+</span></code></pre></div>
+<ul>
+<li><strong>WAITING</strong>：已提交，排队中，不占 KV 资源</li>
+<li><strong>RUNNING</strong>：已被 admit，正在使用 KV slot</li>
+<li><strong>FINISHED</strong>：正常完成（EOS / max_tokens），终态</li>
+<li><strong>CANCELLED</strong>：外部取消，终态但不算成功</li>
+</ul>
+<p>FINISHED vs CANCELLED：都是终态，但 FINISHED 表示输出可用，CANCELLED 表示输出不完整。M5 Server 阶段需要区分返回给调用方的结果码。</p>
+<h4 id="requeststate">RequestState<a class="headerlink" href="#requeststate" title="锚点">#</a></h4>
+<p><code>@dataclass</code>，承载一个请求的全部运行时状态：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nd">@dataclass</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">RequestState</span><span class="p">:</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">request_id</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="n">prompt_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>          <span class="c1"># [1, prompt_len]</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="n">max_new_tokens</span><span class="p">:</span> <span class="nb">int</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">eos_token_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>   <span class="c1"># None = 不用 EOS 停止</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>    <span class="n">last_token</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>    <span class="n">num_generated</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>    <span class="n">status</span><span class="p">:</span> <span class="n">RequestStatus</span> <span class="o">=</span> <span class="n">RequestStatus</span><span class="o">.</span><span class="n">WAITING</span>
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>    <span class="n">generated_tokens</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>    <span class="n">slot_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>    <span class="n">seq_len</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>                   <span class="c1"># prompt_len + num_generated</span>
+</span></code></pre></div>
+<p>字段按职责分组：身份 / 输入 / 结束条件 / 输出进度 / KV Cache。</p>
+<h4 id="fcfsscheduler">FCFSScheduler<a class="headerlink" href="#fcfsscheduler" title="锚点">#</a></h4>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">FCFSScheduler</span><span class="p">:</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="n">waiting</span><span class="p">:</span> <span class="n">deque</span><span class="p">[</span><span class="n">RequestState</span><span class="p">]</span>       <span class="c1"># popleft O(1)，天然 FCFS</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">running</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">RequestState</span><span class="p">]</span>   <span class="c1"># 按 request_id O(1) 索引</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="n">finished</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">RequestState</span><span class="p">]</span>  <span class="c1"># 终态</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="n">cancelled</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">RequestState</span><span class="p">]</span> <span class="c1"># 终态</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="n">_known_request_ids</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>       <span class="c1"># 防重复，只加不删</span>
+</span></code></pre></div>
+<p>FCFS（First Come First Served）是调度领域术语，等价于数据结构领域的 FIFO。调度器用 FCFS，队列本身是 FIFO deque。</p>
+<h3 id="32_1">3.2 设计决策<a class="headerlink" href="#32_1" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>决策</th>
+<th>选择</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>waiting 数据结构</td>
+<td>deque</td>
+<td>popleft O(1)，天然 FCFS</td>
+</tr>
+<tr>
+<td>running/finished/cancelled</td>
+<td>dict</td>
+<td>按 request_id O(1) 查找删除</td>
+</tr>
+<tr>
+<td>status 放哪</td>
+<td>RequestState 上，只由 Scheduler 修改</td>
+<td>外部只读检查方便；nano-vllm 同样做法</td>
+</tr>
+<tr>
+<td>_known_request_ids 清理</td>
+<td>M3 不删</td>
+<td>批量提交场景，无清理需求</td>
+</tr>
+<tr>
+<td>eos_token_id 默认</td>
+<td>None</td>
+<td>不用 EOS 停止，只靠 max_new_tokens</td>
+</tr>
+<tr>
+<td>generated_tokens 初始化</td>
+<td>field(default_factory=list)</td>
+<td>避免多请求共享 list 引用</td>
+</tr>
+</tbody>
+</table>
+<h3 id="33-status">3.3 与主流框架对比：status 管理<a class="headerlink" href="#33-status" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>vLLM</th>
+<th>SGLang / Orca</th>
+<th>nano-vllm / inferlite</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>status enum</td>
+<td>✅ SequenceStatus</td>
+<td>❌ 没有</td>
+<td>✅ RequestStatus</td>
+</tr>
+<tr>
+<td>谁改 status</td>
+<td>只 Scheduler（_status + @property 只读）</td>
+<td>不存在</td>
+<td>只 Scheduler（公开字段）</td>
+</tr>
+<tr>
+<td>真相来源</td>
+<td>status 字段</td>
+<td>队列位置</td>
+<td>两个都有，约定只在 Scheduler 改</td>
+</tr>
+</tbody>
+</table>
+<p><strong>选择</strong>：和 nano-vllm 一致 —— status 在 Request 对象上作为公开字段，约定只在 Scheduler 修改。vLLM 用 <code>@property</code> 封装更严格但对单人项目过度设计；SGLang 完全没有 status 字段，外部每次要问 Scheduler 不方便。</p>
+<h3 id="34_1">3.4 踩坑记录<a class="headerlink" href="#34_1" title="锚点">#</a></h3>
+<ol>
+<li>
+<p><strong><code>field(default_factory=list)</code> vs <code>= []</code></strong>：dataclass 字段默认值在 class 定义时创建，不是每次构造对象时。可变对象（list/dict）会变成所有实例共享。Python 变量保存的是对象引用，不是值本身 —— 这和函数传参是零拷贝是同一个原因。</p>
+</li>
+<li>
+<p><strong><code>mark_finished</code> 的顺序</strong>：必须先检查请求是否在 running 中，再修改 status 和移动队列。否则 status 被污染，finished dict 多脏数据。</p>
+</li>
+<li>
+<p><strong><code>cancel</code> 的 <code>elif</code></strong>：先判断请求在 running 还是 waiting，用 <code>elif</code> 保证只从一个队列移除。先检查再修改状态，避免不存在时仍放入 cancelled dict。</p>
+</li>
+<li>
+<p><strong>Python 传参是零拷贝</strong>：Scheduler 方法里修改 <code>request.status</code> 直接影响外部持有的同一个 RequestState 对象，因为 Python 传参传的是对象引用，不做任何拷贝。</p>
+</li>
+</ol>
+<h3 id="35">3.5 测试覆盖<a class="headerlink" href="#35" title="锚点">#</a></h3>
+<p>15 个单测（<code>tests/unit/test_scheduler.py</code>）：
+- submit / admit / mark_finished / cancel 基本功能
+- FCFS 顺序、容量限制
+- 重复 id 抛 ValueError
+- 四队列守恒不变量（多步骤全生命周期验证）
+- generated_tokens 独立性（default_factory 验证）
+- continuous batching 逐入逐出 trace
+- has_unfinished 判断（含 waiting-only 场景）</p>
+<h3 id="36">3.6 在推理链路中的位置<a class="headerlink" href="#36" title="锚点">#</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>用户提交请求
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>  ↓
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>RequestState（request.py）
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>  ↓
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>FCFSScheduler: waiting / running / finished（fcfs.py）
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>  ↓
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>T2 分配 KV slot
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>  ↓
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>T4 BatchEngine 执行 prefill / decode
+</span></code></pre></div>
+<hr />
+<h2 id="6-t2-batchedkvcache-slotmanager">6. T2: BatchedKVCache + SlotManager<a class="headerlink" href="#6-t2-batchedkvcache-slotmanager" title="锚点">#</a></h2>
+<blockquote>
+<p>完成时间：2026-07-10</p>
+</blockquote>
+<h3 id="m2-vs-m3-kv-cache">M2 vs M3 的 KV Cache 本质区别<a class="headerlink" href="#m2-vs-m3-kv-cache" title="锚点">#</a></h3>
+<p>M2 的 <code>LayerKVCache</code> 第一维是 <code>batch_size</code>，理论上 B&gt;1 也能放多个请求。但它只有一个全局 <code>cur_len</code>，所以所有请求必须<strong>锁步同步</strong>（static batching）：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>M2 static batching：
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>  - 所有请求同时 prefill
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>  - 所有请求同时 decode（共享 cur_len）
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>  - 所有请求同时结束（短的 padding 等长的）
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>  - 不可能一个请求 seq_len=128，另一个 seq_len=64
+</span></code></pre></div>
+<p>M3 的 <code>BatchedLayerKVCache</code> 第一维从 batch 变成 slot，配合 per-slot 的 <code>seq_lens[S]</code>，每个请求独立进退（continuous batching）：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>M3 continuous batching：
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>  - 请求可以不同时 prefill（逐条进入）
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>  - 请求可以不同时结束（有的先到 EOS 先退出）
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>  - 退出后 slot 被新请求复用
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>  - 每个 slot 有独立的 seq_lens[s]
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>M2 KVCache</th>
+<th>M3 BatchedKVCache</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一维含义</td>
+<td>batch（同步组）</td>
+<td>slot（独立请求）</td>
+</tr>
+<tr>
+<td>长度管理</td>
+<td>全局 <code>cur_len</code>（int）</td>
+<td>per-slot <code>seq_lens[S]</code>（tensor）</td>
+</tr>
+<tr>
+<td>请求独立性</td>
+<td>锁步同步</td>
+<td>独立进退</td>
+</tr>
+<tr>
+<td>占用管理</td>
+<td>无（整体 reset）</td>
+<td>per-slot <code>occupied[S]</code> + SlotManager</td>
+</tr>
+</tbody>
+</table>
+<p>注意：<code>BatchedLayerKVCache</code> 和 <code>LayerKVCache</code> 的<strong>数据结构完全相同</strong>（都是 <code>k: Tensor, v: Tensor</code>），本质区别在 <code>BatchedKVCache</code> 这一层（per-slot 元数据管理）。单独定义新类是为了语义清晰和独立演进。</p>
+<h3 id="max_num_slots-max_num_seqs">max_num_slots 与 max_num_seqs 的关系<a class="headerlink" href="#max_num_slots-max_num_seqs" title="锚点">#</a></h3>
+<p>这两个是<strong>同一个值</strong>，在不同层表达不同语义：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>max_num_seqs = max_num_slots = 同一个数（比如 4）
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>Scheduler 层：max_num_seqs = 最多同时跑几个请求
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>KV Cache 层：max_num_slots = 预分配了几个 cache slot
+</span></code></pre></div>
+<p>它们必须相等：每个 running 请求需要恰好一个 KV slot，Scheduler 保证 <code>len(running) ≤ max_num_seqs</code>，所以 allocate 次数不会超过 <code>max_num_slots</code>，SlotManager 永远不会触发 RuntimeError。</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>Scheduler.max_num_seqs  ──约束──→  最多 admit 几个请求
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>                                        ↓
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>                                  每个请求 allocate 一个 slot
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>                                        ↓
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>KVCache.max_num_slots   ──保证──→  slot 够用
+</span></code></pre></div>
+<p>实际使用时从同一个 config 参数读取：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">max_concurrent</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">max_num_seqs</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">scheduler</span> <span class="o">=</span> <span class="n">FCFSScheduler</span><span class="p">(</span><span class="n">max_num_seqs</span><span class="o">=</span><span class="n">max_concurrent</span><span class="p">)</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="n">kv_cache</span> <span class="o">=</span> <span class="n">BatchedKVCache</span><span class="o">.</span><span class="n">from_config</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">max_num_slots</span><span class="o">=</span><span class="n">max_concurrent</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="max_num_slots-max_seq_len-modelconfig">为什么 max_num_slots / max_seq_len 不在 ModelConfig 里<a class="headerlink" href="#max_num_slots-max_seq_len-modelconfig" title="锚点">#</a></h3>
+<p>它们是<strong>运行时参数</strong>，不是模型参数：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>ModelConfig 描述模型架构（固定不变）：
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>  num_hidden_layers=28, hidden_size=1024, num_kv_heads=8, head_dim=64
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>max_num_slots / max_seq_len 描述推理配置（每次运行可变）：
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>  同时跑几个请求？→ max_num_slots = 4 还是 8
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>  最多生成多长序列？→ max_seq_len = 512 还是 1024
+</span></code></pre></div>
+<p>同一个 Qwen3-0.6B，不同场景可以用不同配置。和 M2 的 <code>KVCache.from_config()</code> 把 <code>batch_size</code> 和 <code>max_seq_len</code> 作为参数传入是同一设计。</p>
+<h3 id="init-from_config"><strong>init</strong> 与 from_config 的分工（工厂模式）<a class="headerlink" href="#init-from_config" title="锚点">#</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># from_config: 高层接口，用户用这个</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="c1">#   从 config 读模型参数 → 分配 tensor → 组装 layers → 调 __init__</span>
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="n">cache</span> <span class="o">=</span> <span class="n">BatchedKVCache</span><span class="o">.</span><span class="n">from_config</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">max_num_slots</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">max_seq_len</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="c1"># __init__: 低层接口，接收已构建的对象</span>
+</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="c1">#   只做赋值，不分配 tensor（测试时手动构建小 tensor 用）</span>
+</span><span id="__span-18-7"><a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="n">cache</span> <span class="o">=</span> <span class="n">BatchedKVCache</span><span class="p">(</span><span class="n">layers</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">],</span> <span class="n">max_seq_len</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">max_num_slots</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+</span></code></pre></div>
+<p><code>__init__</code> 中的 <code>max_num_slots</code> 和 <code>max_seq_len</code> 也可以从 layers 推断（<code>layers[0].k.shape[0]</code> / <code>shape[2]</code>），显式传入更防御性，隐式推断更简洁。</p>
+<h3 id="classmethod-cls">@classmethod 中的 <code>cls(...)</code> 用法<a class="headerlink" href="#classmethod-cls" title="锚点">#</a></h3>
+<p><code>from_config</code> 用 <code>@classmethod</code> 装饰，第一个参数 <code>cls</code> 是类本身（不是实例 <code>self</code>）。<code>cls(...)</code> 等价于调用该类的 <code>__init__</code> 构造实例：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nd">@classmethod</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">from_config</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="o">...</span><span class="p">):</span>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>    <span class="c1"># cls = BatchedKVCache（或子类）</span>
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>    <span class="c1"># cls(layers, ...) = BatchedKVCache(layers, ...)</span>
+</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">layers</span><span class="p">,</span> <span class="n">max_seq_len</span><span class="p">,</span> <span class="n">max_num_slots</span><span class="p">)</span>
+</span></code></pre></div>
+<p>用 <code>cls</code> 而非硬编码类名是为了<strong>支持继承</strong>：子类调用 <code>from_config</code> 时返回子类实例而非父类实例。这是 Python 工厂方法的标准写法，M2 的 <code>KVCache.from_config()</code> 也用 <code>return cls(layers)</code>。</p>
+<h3 id="_4">最终实现<a class="headerlink" href="#_4" title="锚点">#</a></h3>
+<p><strong>文件结构：</strong></p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>inferlite/model/
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>├── __init__.py              # 导出 BatchedKVCache, BatchedLayerKVCache, SlotManager
+</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>├── kv_cache.py              # M2（不动）
+</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>└── batched_kv_cache.py      # M3 新增
+</span></code></pre></div>
+<p><strong>三个类的职责：</strong></p>
+<table>
+<thead>
+<tr>
+<th>类</th>
+<th>职责</th>
+<th>核心字段</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BatchedLayerKVCache</code></td>
+<td>单层 KV 数据容器</td>
+<td><code>k: Tensor [S, H_kv, L, D]</code>, <code>v: Tensor</code></td>
+</tr>
+<tr>
+<td><code>SlotManager</code></td>
+<td>slot 分配/释放</td>
+<td><code>free_slots: deque</code>, <code>req_to_slot: dict</code></td>
+</tr>
+<tr>
+<td><code>BatchedKVCache</code></td>
+<td>多层 cache + per-slot 元数据</td>
+<td><code>layers</code>, <code>seq_lens</code>, <code>occupied</code>, <code>slot_manager</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>SlotManager 接口：</strong></p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="n">sm</span><span class="o">.</span><span class="n">allocate</span><span class="p">(</span><span class="n">request_id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">slot_id</span>    <span class="c1"># 分配，失败抛 ValueError/RuntimeError</span>
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="n">sm</span><span class="o">.</span><span class="n">free</span><span class="p">(</span><span class="n">request_id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>           <span class="c1"># 释放，失败抛 ValueError</span>
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="n">sm</span><span class="o">.</span><span class="n">is_free</span><span class="p">(</span><span class="n">slot_id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>           <span class="c1"># 查询</span>
+</span></code></pre></div>
+<p><strong>BatchedKVCache 接口：</strong></p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="n">cache</span> <span class="o">=</span> <span class="n">BatchedKVCache</span><span class="o">.</span><span class="n">from_config</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">max_num_slots</span><span class="p">,</span> <span class="n">max_seq_len</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
+</span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="n">slot_id</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">allocate_slot</span><span class="p">(</span><span class="n">request_id</span><span class="p">)</span>   <span class="c1"># 分配 + 设 occupied=True</span>
+</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="n">cache</span><span class="o">.</span><span class="n">free_slot</span><span class="p">(</span><span class="n">request_id</span><span class="p">)</span>                 <span class="c1"># 释放 + 清 seq_lens/occupied</span>
+</span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="n">cache</span><span class="o">.</span><span class="n">reset_slots</span><span class="p">()</span>                          <span class="c1"># 全部清零（benchmark 用）</span>
+</span></code></pre></div>
+<p><strong>seq_lens 的更新时机：</strong></p>
+<p><code>seq_lens</code> 是被动数据，BatchedKVCache 只负责分配/清零，中间的递增由 BatchEngine（T4）在推理循环中直接写：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="c1"># prefill 完成后</span>
+</span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="n">cache</span><span class="o">.</span><span class="n">seq_lens</span><span class="p">[</span><span class="n">slot_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">prompt_len</span>
+</span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>
+</span><span id="__span-23-4"><a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="c1"># 每步 decode 后</span>
+</span><span id="__span-23-5"><a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="n">cache</span><span class="o">.</span><span class="n">seq_lens</span><span class="p">[</span><span class="n">slot_id</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+</span></code></pre></div>
+<p>主流框架（vLLM, nano-vllm）也不包函数，直接在 Sequence 对象上追踪。</p>
+<h3 id="_5">设计决策总结<a class="headerlink" href="#_5" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>决策</th>
+<th>选择</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SlotManager 数据结构</td>
+<td><code>deque</code> + <code>dict</code></td>
+<td>deque O(1) popleft/append；dict O(1) 查 req→slot</td>
+</tr>
+<tr>
+<td>只保留 req_to_slot</td>
+<td>不要 slot_to_req</td>
+<td>free() 传 request_id，不需要反查</td>
+</tr>
+<tr>
+<td>free_slot 不清 tensor</td>
+<td>只清元数据</td>
+<td>和 M2 reset() 一致，下次 prefill 会覆盖</td>
+</tr>
+<tr>
+<td>不继承 M2 KVCache</td>
+<td>独立类</td>
+<td>M2 是全局 cur_len，M3 是 per-slot seq_lens，语义不同</td>
+</tr>
+<tr>
+<td>torch.empty vs zeros</td>
+<td><code>empty</code></td>
+<td>k/v 总是 prefill 时覆盖写入，不需要初始化</td>
+</tr>
+<tr>
+<td>free_slot/allocate_slot 在 BatchedKVCache 上</td>
+<td>对称封装</td>
+<td>同时更新 SlotManager + occupied + seq_lens，调用方只调一个方法</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_6">测试覆盖<a class="headerlink" href="#_6" title="锚点">#</a></h3>
+<p>18 个单测覆盖 L0 全部 9 项：</p>
+<table>
+<thead>
+<tr>
+<th>L0 项</th>
+<th>测试</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cache shape [S, H_kv, L, D]</td>
+<td><code>test_from_config_shape</code></td>
+</tr>
+<tr>
+<td>dtype/device 一致</td>
+<td><code>test_dtype_device</code></td>
+</tr>
+<tr>
+<td>allocate 从低 slot id 开始</td>
+<td><code>test_allocate_order</code></td>
+</tr>
+<tr>
+<td>超过容量抛 RuntimeError</td>
+<td><code>test_allocate_over_capacity</code></td>
+</tr>
+<tr>
+<td>free 后可复用</td>
+<td><code>test_free_and_reuse</code></td>
+</tr>
+<tr>
+<td>duplicate request_id 抛 ValueError</td>
+<td><code>test_duplicate_request_id</code></td>
+</tr>
+<tr>
+<td>free 不存在抛 ValueError</td>
+<td><code>test_free_not_found</code>, <code>test_free_slot_not_found</code></td>
+</tr>
+<tr>
+<td>seq_lens 初始化/清零</td>
+<td><code>test_seq_lens_init</code>, <code>test_free_slot_clears_metadata</code>, <code>test_reset_slots</code></td>
+</tr>
+<tr>
+<td>occupied mask 一致</td>
+<td><code>test_occupied_init</code>, <code>test_allocate_slot</code>, <code>test_reset_slots</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="t3">T3 依赖<a class="headerlink" href="#t3" title="锚点">#</a></h3>
+<p>T3（BatchedAttention）需要：
+- 从 <code>cache.seq_lens</code> 读取每个 slot 的有效长度，构造 attention mask
+- 直接读 <code>cache.layers[i].k/v</code> 的 <code>[:, :, :seq_len, :]</code> 切片做 attention
+- 写入新 KV 时用 <code>cache.layers[i].k[slot, :, pos, :] = new_k</code>（pos = seq_lens[slot]）</p>
+<hr />
+<h2 id="7-t3-batchedattention">7. T3: BatchedAttention<a class="headerlink" href="#7-t3-batchedattention" title="锚点">#</a></h2>
+<blockquote>
+<p>完成时间：2026-07-12</p>
+</blockquote>
+<h3 id="_7">核心问题<a class="headerlink" href="#_7" title="锚点">#</a></h3>
+<p>M2 attention 的 cache 读写用全局 <code>cur_len</code>（所有请求同步）：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="c1"># M2: 所有 batch row 写同一个 cache_position，读同一段历史</span>
+</span><span id="__span-24-2"><a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="n">cache</span><span class="o">.</span><span class="n">k</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">cache_position</span> <span class="p">:</span> <span class="n">cache_position</span> <span class="o">+</span> <span class="n">seq_len</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">k</span>
+</span><span id="__span-24-3"><a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="n">k</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">k</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:</span> <span class="n">cache_position</span> <span class="o">+</span> <span class="n">seq_len</span><span class="p">,</span> <span class="p">:]</span>
+</span></code></pre></div>
+<p>M3 需要 per-slot 独立位置：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="c1"># M3: 每个 batch row 写自己 slot 的 position，从自己 slot gather 历史</span>
+</span><span id="__span-25-2"><a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">B</span><span class="p">):</span>
+</span><span id="__span-25-3"><a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>    <span class="n">cache</span><span class="o">.</span><span class="n">k</span><span class="p">[</span><span class="n">slot_i</span><span class="p">,</span> <span class="p">:,</span> <span class="n">pos_i</span> <span class="p">:</span> <span class="n">pos_i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">k</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+</span><span id="__span-25-4"><a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a><span class="n">k</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">k</span><span class="p">[</span><span class="n">cache_slots</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:</span><span class="n">max_len</span><span class="p">,</span> <span class="p">:]</span>  <span class="c1"># gather</span>
+</span><span id="__span-25-5"><a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a><span class="c1"># + per-row mask（每个请求可见长度不同）</span>
+</span></code></pre></div>
+<h3 id="gqaattention-vs">方案选择：扩展现有 GQAAttention vs 新建类<a class="headerlink" href="#gqaattention-vs" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>做法</th>
+<th>优点</th>
+<th>缺点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A: 扩展现有 forward</td>
+<td><code>isinstance</code> 分派</td>
+<td>共享 q_proj/k_proj/o_proj 等权重</td>
+<td>forward 变长</td>
+</tr>
+<tr>
+<td>B: 新建 BatchedGQAAttention</td>
+<td>独立类</td>
+<td>职责清晰</td>
+<td>重复所有 projection 权重</td>
+</tr>
+</tbody>
+</table>
+<p><strong>选择方案 A</strong>：q_proj/k_proj/v_proj/o_proj/q_norm/k_norm/rotary_emb 全部相同，只是 cache 读写分支不同。用私有方法抽取 cache 逻辑保持可读性。</p>
+<h3 id="_8">实现结构<a class="headerlink" href="#_8" title="锚点">#</a></h3>
+<p>forward 主流程不变（6 步），cache 读写按类型分派到私有方法：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="n">layer_kv_cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-26-2"><a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>            <span class="n">cache_position</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>              <span class="c1"># M2</span>
+</span><span id="__span-26-3"><a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>            <span class="n">cache_slots</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>              <span class="c1"># M3: [B]</span>
+</span><span id="__span-26-4"><a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a>            <span class="n">cache_positions</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>         <span class="c1"># M3: [B]</span>
+</span><span id="__span-26-5"><a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a>    <span class="c1"># 1-3. projection + norm + RoPE（M1/M2/M3 通用）</span>
+</span><span id="__span-26-6"><a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a>    <span class="c1"># 4. Cache 读写：</span>
+</span><span id="__span-26-7"><a id="__codelineno-26-7" name="__codelineno-26-7" href="#__codelineno-26-7"></a>    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">layer_kv_cache</span><span class="p">,</span> <span class="n">BatchedLayerKVCache</span><span class="p">):</span>
+</span><span id="__span-26-8"><a id="__codelineno-26-8" name="__codelineno-26-8" href="#__codelineno-26-8"></a>        <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batched_cache_rw</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</span><span id="__span-26-9"><a id="__codelineno-26-9" name="__codelineno-26-9" href="#__codelineno-26-9"></a>    <span class="k">elif</span> <span class="n">layer_kv_cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-26-10"><a id="__codelineno-26-10" name="__codelineno-26-10" href="#__codelineno-26-10"></a>        <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_single_cache_rw</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</span><span id="__span-26-11"><a id="__codelineno-26-11" name="__codelineno-26-11" href="#__codelineno-26-11"></a>    <span class="c1"># 5. repeat_kv + attention + mask</span>
+</span><span id="__span-26-12"><a id="__codelineno-26-12" name="__codelineno-26-12" href="#__codelineno-26-12"></a>    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">layer_kv_cache</span><span class="p">,</span> <span class="n">BatchedLayerKVCache</span><span class="p">):</span>
+</span><span id="__span-26-13"><a id="__codelineno-26-13" name="__codelineno-26-13" href="#__codelineno-26-13"></a>        <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_batched_mask</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</span><span id="__span-26-14"><a id="__codelineno-26-14" name="__codelineno-26-14" href="#__codelineno-26-14"></a>    <span class="c1"># 6. o_proj</span>
+</span></code></pre></div>
+<p>三个私有方法：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>_single_cache_rw</code></td>
+<td>M2: 全局 cache_position 写入 + 切片读取</td>
+</tr>
+<tr>
+<td><code>_batched_cache_rw</code></td>
+<td>M3: per-slot 写入 + gather</td>
+</tr>
+<tr>
+<td><code>_build_batched_mask</code></td>
+<td>M3: per-row visible mask</td>
+</tr>
+</tbody>
+</table>
+<h3 id="m3-prefill">M3 prefill 策略<a class="headerlink" href="#m3-prefill" title="锚点">#</a></h3>
+<p>任务卡说"不做 prefill batching"。M3 prefill 仍然一条一条处理，<strong>复用 <code>_batched_cache_rw</code></strong>（B=1 的特殊情况）。不能用 <code>_single_cache_rw</code>，因为 M3 cache 第一维是 slot 不是 batch。</p>
+<h3 id="_9">与主流框架对比<a class="headerlink" href="#_9" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>inferlite M3</th>
+<th>nano-vllm</th>
+<th>vLLM / SGLang</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>KV 读取</td>
+<td>Python gather</td>
+<td>PyTorch index_select</td>
+<td>CUDA kernel 内部 gather</td>
+</tr>
+<tr>
+<td>mask</td>
+<td>Python tensor</td>
+<td>PyTorch mask</td>
+<td>kernel 内按 context_len 裁切</td>
+</tr>
+<tr>
+<td>性能</td>
+<td>O(B × max_len) materialize</td>
+<td>同上</td>
+<td>O(B × avg_len)，不 materialize</td>
+</tr>
+</tbody>
+</table>
+<p>我们的 gather + per-row mask 是教学版标准做法（nano-vllm 同），生产框架把 gather + mask 下沉到 CUDA kernel 优化。M4 PagedAttention 会进一步优化。</p>
+<h3 id="m2-vs-m3-batch">M2 vs M3 的 "batch" 含义<a class="headerlink" href="#m2-vs-m3-batch" title="锚点">#</a></h3>
+<p>M2 attention 张量本身也支持 <code>B&gt;1</code>（<code>q: [B, n_heads, T, D]</code>），但 batch 维是<strong>同步组</strong>：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>M2: cache.k[:, :, cache_position:..., :] = k    ← 所有 B 行写同一个位置
+</span><span id="__span-27-2"><a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a>    cache.k[:, :, :cur_len, :]                   ← 所有 B 行读同一段历史
+</span><span id="__span-27-3"><a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a>    → B 个请求必须锁步：同一时刻进入、同一 prompt 长度、同一生成步数
+</span><span id="__span-27-4"><a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a>
+</span><span id="__span-27-5"><a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a>M3: cache.k[slot_i, :, pos_i:..., :] = k[i]      ← 每行写自己的 slot + position
+</span><span id="__span-27-6"><a id="__codelineno-27-6" name="__codelineno-27-6" href="#__codelineno-27-6"></a>    cache.k[cache_slots, :, :max_len, :]          ← 每行从自己 slot gather
+</span><span id="__span-27-7"><a id="__codelineno-27-7" name="__codelineno-27-7" href="#__codelineno-27-7"></a>    → B 个请求独立：不同时刻进入、不同长度、不同生成步数
+</span></code></pre></div>
+<p><strong>T3 的核心不是"让 attention 支持 batch"（M2 已经支持），而是"让 batch 中每行独立访问自己的 KV 历史"。</strong></p>
+<h3 id="gather">gather 临时张量的内存浪费<a class="headerlink" href="#gather" title="锚点">#</a></h3>
+<p>M3 gather 需要创建固定大小的临时张量：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-28-1"><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a><span class="n">max_len</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">cache_positions</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">+</span> <span class="mi">1</span>   <span class="c1"># 取所有请求中的最大位置</span>
+</span><span id="__span-28-2"><a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a><span class="n">k</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">k</span><span class="p">[</span><span class="n">cache_slots</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:</span><span class="n">max_len</span><span class="p">,</span> <span class="p">:]</span>   <span class="c1"># [B, H_kv, max_len, D]</span>
+</span></code></pre></div>
+<p>假设 3 个请求位置分别是 128、64、300：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>gather 后：[3, H_kv, 301, D]
+</span><span id="__span-29-2"><a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a>
+</span><span id="__span-29-3"><a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a>request 0 (pos=128): 有效 129 个 KV，后 172 个位置是垃圾数据（被 mask 掉）
+</span><span id="__span-29-4"><a id="__codelineno-29-4" name="__codelineno-29-4" href="#__codelineno-29-4"></a>request 1 (pos=64):  有效  65 个 KV，后 236 个位置是垃圾数据
+</span><span id="__span-29-5"><a id="__codelineno-29-5" name="__codelineno-29-5" href="#__codelineno-29-5"></a>request 2 (pos=300): 有效 301 个 KV，全部有效
+</span><span id="__span-29-6"><a id="__codelineno-29-6" name="__codelineno-29-6" href="#__codelineno-29-6"></a>
+</span><span id="__span-29-7"><a id="__codelineno-29-7" name="__codelineno-29-7" href="#__codelineno-29-7"></a>浪费率 = (3×301 - 495) / (3×301) ≈ 45%
+</span></code></pre></div>
+<p><strong>位置差异越大，浪费越大。</strong> 生产框架用自定义 kernel 避免这个问题（kernel 内部按 block_table 逐个 gather，不 materialize 整个 dense tensor）。教学版语义等价但多浪费临时内存。</p>
+<h3 id="_10">改动范围<a class="headerlink" href="#_10" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>改什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>attention.py</code></td>
+<td>加 3 个私有方法 + 修改 forward 参数和 cache/mask 分支</td>
+</tr>
+<tr>
+<td><code>qwen3.py</code> DecoderLayer</td>
+<td>forward 加 <code>cache_slots</code>/<code>cache_positions</code>，透传</td>
+</tr>
+<tr>
+<td><code>qwen3.py</code> Qwen3Model</td>
+<td>forward 加参数，透传</td>
+</tr>
+<tr>
+<td><code>test_batched_attention.py</code></td>
+<td>10 个测试（8 个 L0 + 2 个 Model 级）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_11">最终实现<a class="headerlink" href="#_11" title="锚点">#</a></h3>
+<p><strong>attention.py</strong> — 3 个私有方法 + forward 改造：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>职责</th>
+<th>类型</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>_single_cache_rw</code></td>
+<td>M2：全局 cache_position 写入 + 切片读取（view）</td>
+<td><code>LayerKVCache → (k, v)</code></td>
+</tr>
+<tr>
+<td><code>_batched_cache_rw</code></td>
+<td>M3：per-slot 写入 + gather 到 <code>[B, H_kv, max_len, D]</code></td>
+<td><code>BatchedLayerKVCache → (k, v)</code></td>
+</tr>
+<tr>
+<td><code>_build_batched_mask</code></td>
+<td>M3：per-row visible mask，padding 位置填 dtype min</td>
+<td><code>(scores, positions) → scores</code></td>
+</tr>
+</tbody>
+</table>
+<p>forward 主流程 6 步不变，cache 读写和 mask 按 <code>isinstance</code> 分派。</p>
+<p><strong>qwen3.py</strong> — 参数透传：</p>
+<ul>
+<li><code>DecoderLayer.forward()</code> 加 <code>cache_slots</code>/<code>cache_positions</code>，透传给 <code>self_attn</code></li>
+<li><code>Qwen3Model.forward()</code> 加 <code>cache_slots</code>/<code>cache_positions</code>，透传给每层</li>
+<li><code>cache_position</code> 用 <code>isinstance(kv_cache, KVCache)</code> 判断，M3 时传 0（不使用）</li>
+</ul>
+<h3 id="_12">设计决策<a class="headerlink" href="#_12" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>决策</th>
+<th>选择</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>扩展 vs 新建类</td>
+<td>扩展现有 GQAAttention</td>
+<td>q/k/v/o_proj 权重共享，不需要重复</td>
+</tr>
+<tr>
+<td>cache 逻辑组织</td>
+<td>私有方法抽取</td>
+<td>forward 主流程保持可读</td>
+</tr>
+<tr>
+<td>M3 prefill 路径</td>
+<td>复用 <code>_batched_cache_rw</code>（B=1）</td>
+<td>M3 cache 第一维是 slot，不能走 M2 的 <code>_single_cache_rw</code></td>
+</tr>
+<tr>
+<td>per-row mask 位置</td>
+<td>forward 内独立 <code>if</code> 分支</td>
+<td>不依赖 <code>seq_len &gt; 1</code>（M3 decode seq_len=1 也需执行）</td>
+</tr>
+<tr>
+<td>cache 写入方式</td>
+<td>Python for 循环</td>
+<td>B=4~8 开销远小于矩阵乘，nano-vllm 同做法</td>
+</tr>
+<tr>
+<td>M3 <code>cache_position</code> 处理</td>
+<td><code>isinstance(kv_cache, KVCache)</code> 判断</td>
+<td><code>BatchedKVCache</code> 无 <code>cur_len</code> 属性</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_13">测试覆盖<a class="headerlink" href="#_13" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>L0 项</th>
+<th>测试名</th>
+<th>验证内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>test_batched_decode_output_shape</code></td>
+<td><code>[B, 1, 32]</code> shape 正确</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>test_cache_slot_write_position</code></td>
+<td>只写 slot_i 的 pos_i，其他位置/slot 为零</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>test_no_cross_slot_attention</code></td>
+<td>单条 vs 合批输出一致（atol=1e-5）</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>test_mask_preserves_current_position</code></td>
+<td>输出非全零，attend 到了自己</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>test_padding_positions_masked</code></td>
+<td>输出无 NaN/Inf</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>test_b1_equivalent_to_m2_decode</code></td>
+<td>B=1 batched ≈ M2 single（atol=1e-4）</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>test_mixed_positions_equivalent_to_sequential</code></td>
+<td>混合 batch ≈ 逐条 decode（atol=1e-4）</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>test_gqa_repeat_kv_shape</code></td>
+<td>GQA heads 对齐无报错</td>
+</tr>
+<tr>
+<td>-</td>
+<td><code>test_model_batched_decode_shape</code></td>
+<td>Model 级 <code>[B, 1, 32]</code> shape</td>
+</tr>
+<tr>
+<td>-</td>
+<td><code>test_model_m2_not_broken</code></td>
+<td>M2 KVCache 路径不受影响</td>
+</tr>
+</tbody>
+</table>
+<h3 id="t4">T4 依赖<a class="headerlink" href="#t4" title="锚点">#</a></h3>
+<p>T4 BatchEngine 需要：
+1. 维护 <code>cache_slots</code>/<code>cache_positions</code> 并在每轮 decode 时传入 <code>model()</code>
+2. 调用 <code>BatchedKVCache.allocate_slot</code>/<code>free_slot</code> 管理槽位
+3. 递增 <code>BatchedKVCache.seq_lens</code> 更新每个请求的有效长度</p>
+<hr />
+<h2 id="8-t4-batchengine">8. T4: BatchEngine<a class="headerlink" href="#8-t4-batchengine" title="锚点">#</a></h2>
+<blockquote>
+<p>完成时间：2026-07-15</p>
+</blockquote>
+<h3 id="_14">核心问题<a class="headerlink" href="#_14" title="锚点">#</a></h3>
+<p>T1/T2/T3 分别解决了 scheduler、slot cache、batched attention。T4 要把它们串成 continuous batching 执行流：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>submit requests → prefill one by one → admit to running slots
+</span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a>→ batched decode one token → finished leave, waiting enter → loop
+</span></code></pre></div>
+<h3 id="seq_len-m2-cur_len-nano-vllm">seq_len 语义：与 M2 cur_len 和 nano-vllm 对齐<a class="headerlink" href="#seq_len-m2-cur_len-nano-vllm" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>seq_len</th>
+<th>cache_positions</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>prefill 前</td>
+<td>0</td>
+<td>—</td>
+<td>无历史</td>
+</tr>
+<tr>
+<td>prefill 后</td>
+<td>prompt_len</td>
+<td>—</td>
+<td>KV[0..P-1] 已写入，下一步写 P</td>
+</tr>
+<tr>
+<td>decode step 1</td>
+<td>prompt_len</td>
+<td>prompt_len</td>
+<td>写 KV[P]，采样后 seq_len=P+1</td>
+</tr>
+<tr>
+<td>decode step N</td>
+<td>prompt_len + N - 1</td>
+<td>prompt_len + N - 1</td>
+<td>写 KV[P+N-1]，采样后 seq_len=P+N</td>
+</tr>
+</tbody>
+</table>
+<p>nano-vllm 的 <code>prepare_decode</code> 用 <code>positions.append(len(seq) - 1)</code> 也是同样的"下一个写入位置"语义。</p>
+<h3 id="batchengine-model-sampler">BatchEngine 架构：直接持有 model + sampler<a class="headerlink" href="#batchengine-model-sampler" title="锚点">#</a></h3>
+<p><code>batch_generate()</code> 直接持有 <code>model</code> + <code>sampler</code>，不复用 <code>EngineCore</code>：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>EngineCore (M1/M2)</th>
+<th>batch_generate (M3)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>持有</td>
+<td>model + sampler</td>
+<td>model + sampler</td>
+</tr>
+<tr>
+<td>step 逻辑</td>
+<td><code>model(ids, logits_to_keep=1)</code> → sampler</td>
+<td>每次不同参数：kv_cache, cache_slots, cache_positions</td>
+</tr>
+<tr>
+<td>编排</td>
+<td><code>generate()</code> 函数</td>
+<td><code>batch_generate()</code> 函数</td>
+</tr>
+</tbody>
+</table>
+<p><code>EngineCore.step()</code> 不传 kv_cache/position_ids/cache_slots，在 batch_generate 里用不上。主流框架（nano-vllm、vLLM）也是 engine 直接持有 model + scheduler，没有中间层。</p>
+<h3 id="_15">主循环结构<a class="headerlink" href="#_15" title="锚点">#</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="k">while</span> <span class="n">scheduler</span><span class="o">.</span><span class="n">has_unfinished</span><span class="p">():</span>
+</span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a>    <span class="c1"># 1. finish done + free slots</span>
+</span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a>    <span class="k">for</span> <span class="n">req</span> <span class="ow">in</span> <span class="n">get_finished_in_decode</span><span class="p">():</span>
+</span><span id="__span-31-4"><a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a>        <span class="n">scheduler</span><span class="o">.</span><span class="n">mark_finished</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+</span><span id="__span-31-5"><a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a>        <span class="n">cache</span><span class="o">.</span><span class="n">free_slot</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">request_id</span><span class="p">)</span>
+</span><span id="__span-31-6"><a id="__codelineno-31-6" name="__codelineno-31-6" href="#__codelineno-31-6"></a>
+</span><span id="__span-31-7"><a id="__codelineno-31-7" name="__codelineno-31-7" href="#__codelineno-31-7"></a>    <span class="c1"># 2. admit waiting + prefill one by one</span>
+</span><span id="__span-31-8"><a id="__codelineno-31-8" name="__codelineno-31-8" href="#__codelineno-31-8"></a>    <span class="n">admitted</span> <span class="o">=</span> <span class="n">scheduler</span><span class="o">.</span><span class="n">admit_until_full</span><span class="p">()</span>
+</span><span id="__span-31-9"><a id="__codelineno-31-9" name="__codelineno-31-9" href="#__codelineno-31-9"></a>    <span class="k">for</span> <span class="n">req</span> <span class="ow">in</span> <span class="n">admitted</span><span class="p">:</span>
+</span><span id="__span-31-10"><a id="__codelineno-31-10" name="__codelineno-31-10" href="#__codelineno-31-10"></a>        <span class="n">slot</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">allocate_slot</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">request_id</span><span class="p">)</span>
+</span><span id="__span-31-11"><a id="__codelineno-31-11" name="__codelineno-31-11" href="#__codelineno-31-11"></a>        <span class="n">req</span><span class="o">.</span><span class="n">slot_id</span> <span class="o">=</span> <span class="n">slot</span>
+</span><span id="__span-31-12"><a id="__codelineno-31-12" name="__codelineno-31-12" href="#__codelineno-31-12"></a>        <span class="n">prefill_one</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">slot</span><span class="p">)</span>
+</span><span id="__span-31-13"><a id="__codelineno-31-13" name="__codelineno-31-13" href="#__codelineno-31-13"></a>
+</span><span id="__span-31-14"><a id="__codelineno-31-14" name="__codelineno-31-14" href="#__codelineno-31-14"></a>    <span class="c1"># 3. batched decode one step</span>
+</span><span id="__span-31-15"><a id="__codelineno-31-15" name="__codelineno-31-15" href="#__codelineno-31-15"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">scheduler</span><span class="o">.</span><span class="n">running</span><span class="p">:</span>
+</span><span id="__span-31-16"><a id="__codelineno-31-16" name="__codelineno-31-16" href="#__codelineno-31-16"></a>        <span class="k">break</span>
+</span><span id="__span-31-17"><a id="__codelineno-31-17" name="__codelineno-31-17" href="#__codelineno-31-17"></a>    <span class="n">running</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">scheduler</span><span class="o">.</span><span class="n">running</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+</span><span id="__span-31-18"><a id="__codelineno-31-18" name="__codelineno-31-18" href="#__codelineno-31-18"></a>    <span class="n">cache_slots</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">slot_id</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">running</span><span class="p">]</span>
+</span><span id="__span-31-19"><a id="__codelineno-31-19" name="__codelineno-31-19" href="#__codelineno-31-19"></a>    <span class="n">cache_positions</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">seq_len</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">running</span><span class="p">]</span>
+</span><span id="__span-31-20"><a id="__codelineno-31-20" name="__codelineno-31-20" href="#__codelineno-31-20"></a>    <span class="n">logits</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">next_tokens</span><span class="p">,</span> <span class="n">kv_cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
+</span><span id="__span-31-21"><a id="__codelineno-31-21" name="__codelineno-31-21" href="#__codelineno-31-21"></a>                   <span class="n">cache_slots</span><span class="o">=</span><span class="n">cache_slots</span><span class="p">,</span> <span class="n">cache_positions</span><span class="o">=</span><span class="n">cache_positions</span><span class="p">)</span>
+</span><span id="__span-31-22"><a id="__codelineno-31-22" name="__codelineno-31-22" href="#__codelineno-31-22"></a>    <span class="n">sampled</span> <span class="o">=</span> <span class="n">sampler</span><span class="p">(</span><span class="n">logits</span><span class="p">)</span>
+</span><span id="__span-31-23"><a id="__codelineno-31-23" name="__codelineno-31-23" href="#__codelineno-31-23"></a>
+</span><span id="__span-31-24"><a id="__codelineno-31-24" name="__codelineno-31-24" href="#__codelineno-31-24"></a>    <span class="c1"># 4. update state</span>
+</span><span id="__span-31-25"><a id="__codelineno-31-25" name="__codelineno-31-25" href="#__codelineno-31-25"></a>    <span class="k">for</span> <span class="n">req</span><span class="p">,</span> <span class="n">tok</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">running</span><span class="p">,</span> <span class="n">sampled</span><span class="p">):</span>
+</span><span id="__span-31-26"><a id="__codelineno-31-26" name="__codelineno-31-26" href="#__codelineno-31-26"></a>        <span class="n">req</span><span class="o">.</span><span class="n">seq_len</span> <span class="o">+=</span> <span class="mi">1</span>
+</span><span id="__span-31-27"><a id="__codelineno-31-27" name="__codelineno-31-27" href="#__codelineno-31-27"></a>        <span class="n">req</span><span class="o">.</span><span class="n">generated_tokens</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tok</span><span class="p">)</span>
+</span><span id="__span-31-28"><a id="__codelineno-31-28" name="__codelineno-31-28" href="#__codelineno-31-28"></a>        <span class="n">cache</span><span class="o">.</span><span class="n">seq_lens</span><span class="p">[</span><span class="n">req</span><span class="o">.</span><span class="n">slot_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">req</span><span class="o">.</span><span class="n">seq_len</span>
+</span><span id="__span-31-29"><a id="__codelineno-31-29" name="__codelineno-31-29" href="#__codelineno-31-29"></a>        <span class="k">if</span> <span class="n">is_finished</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">tok</span><span class="p">):</span>
+</span><span id="__span-31-30"><a id="__codelineno-31-30" name="__codelineno-31-30" href="#__codelineno-31-30"></a>            <span class="n">mark_for_finish</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="_16">改动范围<a class="headerlink" href="#_16" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>改什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>qwen3.py</code> Qwen3ForCausalLM</td>
+<td>forward 加 <code>cache_slots</code>/<code>cache_positions</code>，透传到 model</td>
+</tr>
+<tr>
+<td><code>engine/batch_core.py</code></td>
+<td>新建 <code>batch_generate</code> 函数</td>
+</tr>
+<tr>
+<td><code>engine/__init__.py</code></td>
+<td>导出 batch_generate</td>
+</tr>
+<tr>
+<td><code>test_batch_engine.py</code></td>
+<td>10 个 L0 测试</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9-t5-e2e-correctness">9. T5: E2E Correctness<a class="headerlink" href="#9-t5-e2e-correctness" title="锚点">#</a></h2>
+<h3 id="_17">目标<a class="headerlink" href="#_17" title="锚点">#</a></h3>
+<p>证明 continuous batching 没有改变每个请求的生成语义：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-32-1"><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a>同一组请求逐条串行 generate 的结果
+</span><span id="__span-32-2"><a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a>是否等价于 batch_generate continuous batching 的结果？
+</span></code></pre></div>
+<h3 id="_18">测试结构<a class="headerlink" href="#_18" title="锚点">#</a></h3>
+<p><strong><code>test_batch_generate.py</code></strong> — 串行 vs batch 语义等价：
+- <code>DeterministicModel</code>（不依赖浮点矩阵乘）：max_num_slots=&frac12;/4 三档
+- 真实 <code>Qwen3ForCausalLM</code>：3 个不同长度 prompt，token 级 <code>torch.equal</code>
+- 变长 prompt、EOS 早停、waiting&gt;slots 全部完成</p>
+<p><strong><code>test_continuous_batching_trace.py</code></strong> — trace 证明非 static batching：
+- 不同 output 长度、slot 复用无 KV 污染
+- batch size trace、非 static wave、waiting 不占 slot
+- EOS trace 验证 batch size 变化</p>
+<h3 id="_19">关键发现<a class="headerlink" href="#_19" title="锚点">#</a></h3>
+<p>真实模型测试证明 M3 的所有改动（BatchedKVCache + prefill/decode 分派 + per-row mask + gather）<strong>只有性能变化，语义完全不变</strong>——serial generate 和 batch_generate 在 token 级别 <code>torch.equal</code>。</p>
+<h3 id="_20">修改文件<a class="headerlink" href="#_20" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>改动</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tests/e2e/test_batch_generate.py</code></td>
+<td>串行 vs batch 等价测试（含真实模型）</td>
+</tr>
+<tr>
+<td><code>tests/e2e/test_continuous_batching_trace.py</code></td>
+<td>continuous batching trace 测试</td>
+</tr>
+<tr>
+<td><code>inferlite/model/attention.py</code></td>
+<td>prefill 分派 + <code>_batched_prefill_rw</code> 方法</td>
+</tr>
+<tr>
+<td><code>inferlite/model/qwen3.py</code></td>
+<td><code>Qwen3Model.forward</code> 加 <code>position_ids.dim()==1</code> 分支</td>
+</tr>
+<tr>
+<td><code>inferlite/engine/batch_core.py</code></td>
+<td><code>cache_positions</code> 用 <code>[B]</code>，<code>position_ids</code> 单独 unsqueeze</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_21">测试结果<a class="headerlink" href="#_21" title="锚点">#</a></h3>
+<p>190/190 全量回归通过（含 12 个 E2E + 178 个已有单测）。</p>
+<hr />
+<h2 id="10-t6-metrics-benchmark">10. T6: Metrics &amp; Benchmark<a class="headerlink" href="#10-t6-metrics-benchmark" title="锚点">#</a></h2>
+<h3 id="_22">目标<a class="headerlink" href="#_22" title="锚点">#</a></h3>
+<p>拆解 prefill/decode/TTFT/ITL/throughput 等指标，证明 M3 的收益来自 decode batching。</p>
+<h3 id="_23">实现<a class="headerlink" href="#_23" title="锚点">#</a></h3>
+<p><strong><code>inferlite/engine/metrics.py</code></strong>：
+- <code>RequestMetrics</code>：请求级时间戳 + 派生指标（queue_ms/prefill_ms/ttft_ms/decode_ms/itl_ms/total_ms）
+- <code>StepMetrics</code>：步级指标（batch_size/decode_ms/occupied_slots）
+- <code>MetricsCollector</code>：采集 + 聚合（avg_batch_size/slot_utilization/output_tokens_per_s/tpot_ms/ttft_ms_p50/itl_ms_p50）</p>
+<p><strong><code>inferlite/engine/batch_core.py</code></strong>：
+- 加 <code>metrics</code> 可选参数，各阶段埋点采集指标</p>
+<p><strong><code>scripts/bench_continuous_batching.py</code></strong>：
+- 对比 serial baseline 和 M3 continuous batching（真实 Qwen3-0.6B）
+- 支持 <code>--max-num-slots-list</code> 扫描不同 slot 数</p>
+<p><strong><code>bench/results/2026-07-18-m3-continuous-batching-mps-bf16.md</code></strong>：
+- 完整 benchmark 结果 + 性能瓶颈定位</p>
+<h3 id="benchmark-qwen3-06b-mps-bf16-4-16-tokens-prompt_len32">Benchmark 结果（Qwen3-0.6B, MPS bf16, 4 请求, 16 tokens, prompt_len=32）<a class="headerlink" href="#benchmark-qwen3-06b-mps-bf16-4-16-tokens-prompt_len32" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>serial tpot</th>
+<th>batch tpot</th>
+<th>speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B=1</td>
+<td>28.25 ms</td>
+<td>75.12 ms</td>
+<td>0.38x</td>
+</tr>
+<tr>
+<td>B=2</td>
+<td>28.55 ms</td>
+<td>65.40 ms</td>
+<td>0.44x</td>
+</tr>
+</tbody>
+</table>
+<p><strong>M3 在纯 PyTorch + MPS 上比 M2 serial 慢</strong>（0.38~0.44x）。</p>
+<h3 id="micro-benchmark">性能瓶颈定位（分段计时 micro-benchmark）<a class="headerlink" href="#micro-benchmark" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>段</th>
+<th>代码</th>
+<th>占比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>write</strong></td>
+<td><code>for i: cache.k[slot, :, pos, :] = k[i]</code></td>
+<td><strong>63%（主因）</strong></td>
+</tr>
+<tr>
+<td>gather</td>
+<td><code>cache.k[cache_slots, :, :max_len]</code></td>
+<td>22%</td>
+</tr>
+<tr>
+<td>max_item</td>
+<td><code>cache_positions.max().item()</code></td>
+<td>15%</td>
+</tr>
+<tr>
+<td>tolist</td>
+<td><code>cache_slots.tolist()</code></td>
+<td>0.1%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>主因不是 gather（22%），是 for 循环写 cache（63%）</strong>。28 层 × 60 步 = 1680 次循环调用，每次写 slice + MPS kernel launch。</p>
+<h3 id="m2-vs-m3">M2 vs M3：结构同构，访问方式不同<a class="headerlink" href="#m2-vs-m3" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>M2 LayerKVCache</th>
+<th>M3 BatchedLayerKVCache</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cache tensor shape</td>
+<td><code>[1, H_kv, L, D]</code></td>
+<td><code>[S, H_kv, L, D]</code></td>
+</tr>
+<tr>
+<td>第 0 维语义</td>
+<td>batch（固定 1）</td>
+<td>slot（多请求复用）</td>
+</tr>
+<tr>
+<td>写第 0 维</td>
+<td><code>[:, :, ...]</code> 切片</td>
+<td><code>[slot, :, ...]</code> 指定 slot</td>
+</tr>
+<tr>
+<td>写 T 维</td>
+<td><code>[:, :, pos:pos+T, :]</code> 一次性</td>
+<td><code>for i: [slot, :, pos, :] = k[i]</code> 循环</td>
+</tr>
+<tr>
+<td>读 T 维</td>
+<td><code>[:, :, :len]</code> view（零拷贝）</td>
+<td><code>[cache_slots, :, :max_len]</code> fancy index copy</td>
+</tr>
+</tbody>
+</table>
+<p><strong>核心矛盾</strong>：continuous batching 要求 per-row 独立位置（不同 slot、不同 pos），M2 的切片路径无法表达这种语义，必须用循环 + gather。这是 batched 的固有代价。</p>
+<h3 id="_24">与主流框架对比<a class="headerlink" href="#_24" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>框架</th>
+<th>for 循环写</th>
+<th>gather</th>
+<th>.item() 同步</th>
+<th>是否有此问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M2 inferlite</td>
+<td>否（切片）</td>
+<td>否（view）</td>
+<td>否</td>
+<td>否（只支持单请求）</td>
+</tr>
+<tr>
+<td>M3 inferlite</td>
+<td>✅ 63%</td>
+<td>✅ 22%</td>
+<td>✅ 15%</td>
+<td>是（纯 PyTorch，不调 kernel）</td>
+</tr>
+<tr>
+<td>nano-vllm</td>
+<td><strong>否（Triton kernel）</strong></td>
+<td><strong>否（Flash Attention）</strong></td>
+<td>否</td>
+<td><strong>否</strong>（≈ vLLM 性能）</td>
+</tr>
+<tr>
+<td>vLLM / SGLang</td>
+<td>否（kernel 内）</td>
+<td>否</td>
+<td>否</td>
+<td>否（自定义 kernel）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键认知修正</strong>：nano-vllm <strong>没有此限制</strong>。它的 1200 行 Python 调用的是 <strong>Triton kernel</strong>（<code>store_kvcache_kernel</code>）和 <strong>Flash Attention 库</strong>（<code>flash_attn_with_kvcache</code>），不是纯 PyTorch。官方 benchmark 显示 nano-vllm ≈ vLLM（1434 vs 1362 tok/s）。</p>
+<p><strong>inferlite M3 的性能限制是"纯 PyTorch + 不调 kernel"的路线选择，不是教学版固有代价</strong>。</p>
+<h3 id="m3">M3 的教学目标定位<a class="headerlink" href="#m3" title="锚点">#</a></h3>
+<p>M3 的核心收益是 <strong>continuous batching 语义</strong>（请求进退 + slot 复用），不是性能：</p>
+<ul>
+<li>✅ 短请求完成后释放 slot，等待请求下一轮进入（L0-9 非 static wave 测试通过）</li>
+<li>✅ 不同长度请求并发 decode（L0-4 测试通过）</li>
+<li>✅ slot 复用无 KV 污染（L0-5 测试通过）</li>
+<li>✅ serial vs batch 语义等价（token 级 torch.equal）</li>
+</ul>
+<p>性能优化路径：
+- <strong>M4 PagedAttention</strong>：block_table + 按需 gather，但 for 循环 + Python 开销还在
+- <strong>M8 Triton kernel</strong>：把 for 循环 + gather + mask 下沉到 kernel 内部，彻底解决</p>
+<h3 id="_25">测试<a class="headerlink" href="#_25" title="锚点">#</a></h3>
+<p>21 个单测（<code>test_metrics.py</code>）覆盖所有 L0 项，211/211 全量回归通过（1 个真实模型测试因浮点边界偶发 flaky）。</p>
+<hr />
+<h2 id="11-t7-docs-tag">11. T7: Docs &amp; Tag<a class="headerlink" href="#11-t7-docs-tag" title="锚点">#</a></h2>
+<blockquote>
+<p>完成时间：2026-07-19</p>
+</blockquote>
+<p>T7 是 M3 的文档与里程碑收口，不涉及代码改动。</p>
+<h3 id="111">11.1 交付物<a class="headerlink" href="#111" title="锚点">#</a></h3>
+<ul>
+<li><strong>任务卡总结</strong>：补齐 T1–T7 的 <code>## 完成总结</code>，记录每张卡的设计决策、关键结论和已知限制。</li>
+<li><strong>M3.md（设计文档）</strong>：更新状态为 ✅，新增实现总结（§23–§25，后拆分到 knowledge 文档）。</li>
+<li><strong>PROGRESS.md</strong>：M3 状态从 🟡 更新为 ✅ + tag <code>m3/continuous-batching</code>。</li>
+<li><strong>README.md</strong>：M3 状态从 🟡 更新为 ✅。</li>
+<li><strong>annotated tag</strong>：<code>m3/continuous-batching</code>，message 概括 M3 的 scheduler / cache / attention / engine / metrics 落地点。</li>
+</ul>
+<h3 id="112">11.2 文档拆分<a class="headerlink" href="#112" title="锚点">#</a></h3>
+<p>M3 最终文档结构遵循 M2 的模式（plan/ = 设计，knowledge/ = 总结）：</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>角色</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docs/plan/M3.md</code></td>
+<td>设计文档（调研、决策、数据结构、流程）</td>
+</tr>
+<tr>
+<td><code>docs/knowledge/m3-continuous-batching.md</code></td>
+<td>总结文档（设计细节 + 实现总结 + benchmark）</td>
+</tr>
+<tr>
+<td><code>bench/results/2026-07-18-m3-continuous-batching-mps-bf16.md</code></td>
+<td>实测数据</td>
+</tr>
+</tbody>
+</table>
+<h3 id="113">11.3 局限性映射<a class="headerlink" href="#113" title="锚点">#</a></h3>
+<p>T7 在总结文档中新增了 §16 局限性→里程碑映射表，明确记录 M3 的 5 个已知短板及其解决里程碑（M4/M5/M6/M9/M10），避免后续里程碑重复踩坑。</p>
+<hr />
+<h2 id="12">12. 踩坑与教训<a class="headerlink" href="#12" title="锚点">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>坑</th>
+<th>现象</th>
+<th>根因</th>
+<th>修复</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>field(default_factory=list)</code> vs <code>= []</code></td>
+<td>所有 RequestState 共享同一个 list</td>
+<td>dataclass 可变默认值在 class 定义时创建，所有实例共享引用</td>
+<td>用 <code>default_factory=list</code></td>
+</tr>
+<tr>
+<td><code>mark_finished</code> 顺序错误</td>
+<td>status 被污染，finished dict 多脏数据</td>
+<td>先改了 status 再检查队列，导致检查失效</td>
+<td>先检查请求在哪个队列，再修改 status 和移动</td>
+</tr>
+<tr>
+<td>Python 传参零拷贝</td>
+<td>scheduler 修改 request.status 影响外部</td>
+<td>Python 传参传的是对象引用，不做拷贝</td>
+<td>意识到 RequestState 是可变对象，scheduler 和调用方共享同一实例</td>
+</tr>
+<tr>
+<td><code>seq_len</code> 语义混乱</td>
+<td>off-by-one 错误</td>
+<td>seq_len 是"下一个写入位置"还是"当前长度"不明确</td>
+<td>统一为 next write position（= 已写入 token 数），和 M2 cur_len、nano-vllm 对齐</td>
+</tr>
+<tr>
+<td>per-row mask 分派条件</td>
+<td>用 <code>kv_cache is None</code> 判断，batched 时 mask 丢失</td>
+<td>M3 的 cache 类型是 <code>BatchedLayerKVCache</code>，不是 M2 的 <code>LayerKVCache</code></td>
+<td>用 <code>isinstance(BatchedLayerKVCache)</code> 分派</td>
+</tr>
+<tr>
+<td><code>cache_positions</code> vs <code>position_ids</code> 形状</td>
+<td>broadcast 错误</td>
+<td><code>cache_positions</code> shape <code>[B]</code>，<code>position_ids</code> 需要 <code>[B, 1]</code></td>
+<td><code>cache_positions</code> 保持 <code>[B]</code>，<code>position_ids</code> 单独 <code>unsqueeze(-1)</code></td>
+</tr>
+<tr>
+<td>for-loop 写 cache 性能</td>
+<td>batch throughput 0.38x–0.44x serial</td>
+<td>纯 PyTorch for-loop slice assign，28 层 × 60 步 = 1680 次循环</td>
+<td>教学版接受此限制，M9 Triton kernel 系统解决</td>
+</tr>
+<tr>
+<td><code>.item()</code> 同步开销</td>
+<td>占 decode 步耗时 15%</td>
+<td><code>tensor.item()</code> 触发 CPU-GPU 同步，阻塞 pipeline</td>
+<td>减少 <code>.item()</code> 调用，批量用 <code>.tolist()</code> 替代</td>
+</tr>
+<tr>
+<td><code>free</code> 时不清零 cache</td>
+<td>复用 slot 时读到旧 KV（预期行为，但容易误判为 bug）</td>
+<td>不清零是刻意设计：下次 prefill 覆盖写入，旧数据不影响正确性</td>
+<td>文档明确说明，测试验证 slot 复用无 KV 污染</td>
+</tr>
+<tr>
+<td>slot 耗尽时行为</td>
+<td><code>raise RuntimeError</code></td>
+<td>固定 slot 总数 = max_num_seqs，所有 slot 被占满时无法 admit 新请求</td>
+<td>防御性报错，不做自动扩容；admit_until_full 保证不超限</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="13_1">13. 测试覆盖总览<a class="headerlink" href="#13_1" title="锚点">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>测试文件</th>
+<th>数量</th>
+<th>覆盖范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tests/unit/test_scheduler.py</code></td>
+<td>8</td>
+<td>T1 四队列守恒 + admit/cancel/finish</td>
+</tr>
+<tr>
+<td><code>tests/unit/test_batched_kv_cache.py</code></td>
+<td>10</td>
+<td>T2 slot 分配/释放/耗尽/重复</td>
+</tr>
+<tr>
+<td><code>tests/unit/test_attention.py</code>（扩展）</td>
+<td>—</td>
+<td>T3 per-row mask 等价性</td>
+</tr>
+<tr>
+<td><code>tests/unit/test_batch_engine.py</code></td>
+<td>10</td>
+<td>T4 batch_generate 基础功能</td>
+</tr>
+<tr>
+<td><code>tests/e2e/test_batch_generate.py</code></td>
+<td>6</td>
+<td>T5 serial vs batch token 级等价</td>
+</tr>
+<tr>
+<td><code>tests/e2e/test_continuous_batching_trace.py</code></td>
+<td>6</td>
+<td>T5 continuous batching trace</td>
+</tr>
+<tr>
+<td><code>tests/unit/test_metrics.py</code></td>
+<td>21</td>
+<td>T6 指标采集全量覆盖</td>
+</tr>
+<tr>
+<td><strong>全量回归</strong></td>
+<td><strong>211/211</strong></td>
+<td>M2 路径不受影响</td>
+</tr>
+</tbody>
+</table>
+<h2 id="14">14. 文件清单<a class="headerlink" href="#14" title="锚点">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>任务卡</th>
+<th>类型</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>inferlite/scheduler/request.py</code></td>
+<td>T1</td>
+<td>新建</td>
+</tr>
+<tr>
+<td><code>inferlite/scheduler/fcfs.py</code></td>
+<td>T1</td>
+<td>新建</td>
+</tr>
+<tr>
+<td><code>inferlite/model/batched_kv_cache.py</code></td>
+<td>T2</td>
+<td>新建</td>
+</tr>
+<tr>
+<td><code>inferlite/model/attention.py</code></td>
+<td>T3/T5</td>
+<td>修改</td>
+</tr>
+<tr>
+<td><code>inferlite/model/qwen3.py</code></td>
+<td>T3/T5</td>
+<td>修改</td>
+</tr>
+<tr>
+<td><code>inferlite/engine/batch_core.py</code></td>
+<td>T4/T6</td>
+<td>新建</td>
+</tr>
+<tr>
+<td><code>inferlite/engine/protocol.py</code></td>
+<td>T4</td>
+<td>修改</td>
+</tr>
+<tr>
+<td><code>inferlite/engine/metrics.py</code></td>
+<td>T6</td>
+<td>新建</td>
+</tr>
+<tr>
+<td><code>scripts/bench_continuous_batching.py</code></td>
+<td>T6</td>
+<td>新建</td>
+</tr>
+<tr>
+<td><code>bench/results/2026-07-18-m3-continuous-batching-mps-bf16.md</code></td>
+<td>T6</td>
+<td>新建</td>
+</tr>
+</tbody>
+</table>
+<h2 id="15-benchmark">15. Benchmark 结果<a class="headerlink" href="#15-benchmark" title="锚点">#</a></h2>
+<p>详细结果见 <code>bench/results/2026-07-18-m3-continuous-batching-mps-bf16.md</code>，这里只保留关键结论：</p>
+<ul>
+<li>主对比（<code>num_requests=4</code>, <code>max_num_slots=2</code>）：</li>
+</ul>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-33-1"><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a>serial throughput:  35.02 tok/s
+</span><span id="__span-33-2"><a id="__codelineno-33-2" name="__codelineno-33-2" href="#__codelineno-33-2"></a>batch throughput:   15.29 tok/s
+</span><span id="__span-33-3"><a id="__codelineno-33-3" name="__codelineno-33-3" href="#__codelineno-33-3"></a>speedup:            0.44x
+</span></code></pre></div>
+<ul>
+<li>消融（<code>num_requests=4</code>, <code>max_num_slots=1</code>）：</li>
+</ul>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-34-1"><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a>serial throughput:  35.40 tok/s
+</span><span id="__span-34-2"><a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>batch throughput:   13.31 tok/s
+</span><span id="__span-34-3"><a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a>speedup:            0.38x
+</span></code></pre></div>
+<p>性能结论：</p>
+<ul>
+<li>纯 PyTorch 教学版 M3 在 MPS 上 <code>batch_generate</code> 比 M2 serial 慢，主因不在 attention，而在 cache 读写路径。</li>
+<li>
+<p>分段 micro-benchmark 显示：</p>
+</li>
+<li>
+<p>for 循环写 cache 约 63%</p>
+</li>
+<li>fancy index gather 约 22%</li>
+<li>
+<p><code>.item()</code> 同步约 15%</p>
+</li>
+<li>
+<p>这是"纯 PyTorch + 不调 kernel"的路线选择，不是 continuous batching 概念本身的问题。</p>
+</li>
+<li>nano-vllm / vLLM 性能接近生产水平，是因为使用了 Triton <code>store_kvcache_kernel</code> + FlashAttention，而不是纯 PyTorch。</li>
+<li>性能收益预计在 M4 PagedAttention 部分缓解，在 M9 Triton kernel 系统解决。</li>
+</ul>
+<h2 id="16">16. 已知局限性及后续解决路径<a class="headerlink" href="#16" title="锚点">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>M3 当前短板</th>
+<th>根因</th>
+<th>解决里程碑</th>
+<th>具体方案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cache 读写无向量化（for-loop write 63%，gather 22%）</td>
+<td>纯 PyTorch slice assign + fancy index，无自定义 kernel</td>
+<td><strong>M9 核心算子加速</strong>（阶段 1: cache write Triton kernel）</td>
+<td>Triton kernel 替代 for-loop，batch 内 cache 写/读一次 kernel launch 完成</td>
+</tr>
+<tr>
+<td>prefill 没有 batch（逐条串行 prefill）</td>
+<td><code>batch_generate</code> 设计选择：prefill 逐条 B=1 forward</td>
+<td><strong>M10 长上下文能力</strong>（阶段 1: Chunked Prefill）</td>
+<td>长 prompt 切 chunk，与 decode 交替执行，支持 prefill/decode mixed batch</td>
+</tr>
+<tr>
+<td>无 PagedAttention（固定 slot 预分配，内存利用率低）</td>
+<td>教学简化：<code>[max_num_slots, n_kv_heads, max_seq_len, head_dim]</code> 全预分配</td>
+<td><strong>M4 PagedAttention</strong></td>
+<td>block_table + 按需分配，消除内碎片</td>
+</tr>
+<tr>
+<td>无 Prefix / Session Cache（相同前缀重复计算）</td>
+<td>不在 M3 范围</td>
+<td><strong>M5 Prefix Cache</strong></td>
+<td>refcount + Copy-on-Write 复用公共前缀 KV</td>
+</tr>
+<tr>
+<td>无 HTTP / SSE 服务化</td>
+<td>M3 只解决进程内推理</td>
+<td><strong>M6 API + SSE</strong></td>
+<td>FastAPI + SSE streaming + OpenAI-compatible endpoint</td>
+</tr>
+</tbody>
+</table>
+<h2 id="17-m4">17. 后续 M4 入口<a class="headerlink" href="#17-m4" title="锚点">#</a></h2>
+<p>M3 完成后的下一步是 M4 PagedAttention：</p>
+<ul>
+<li>用 <code>block_table</code> 替代固定 slot 的连续物理 KV 分配。</li>
+<li>用 refcount + Copy-on-Write 支持更灵活的 KV 复用。</li>
+<li>在 M3 的 <code>BatchedKVCache</code> 与 attention 接口上扩展，而不破坏 continuous batching 语义。</li>
+</ul>
+<p>后续 M5 在此基础上引入 Prefix Cache 与 reasoning 字段；M6 引入 API + SSE 服务化。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  回到页面顶部
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 luhao &mdash; MIT &mdash; Built with <a href="https://squidfunk.github.io/mkdocs-material/">Material for MkDocs</a>
+
+    </div>
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/luhao-lab/inferlite" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.path", "navigation.indexes", "navigation.top", "navigation.footer", "navigation.tracking", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.code.select", "content.tabs.link", "content.tooltips", "toc.follow", "announce.dismiss"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../_assets/javascripts/extra.js"></script>
+      
+    
+  </body>
+</html>
