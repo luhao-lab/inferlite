@@ -131,10 +131,23 @@ M3 连续批处理完成
 
 本卡完成 M3 的文档与里程碑收口：
 
-- 任务卡总结：补齐 T1 / T2 / T7 的 `## 完成总结`，记录调度状态机、固定槽位 KV Cache 和本文档闭环的最终结论。
-- 技术结论：M3 实现教学版 continuous batching，固定槽位 KV Cache，decode 每 iteration 重组 batch；PagedAttention / Prefix Cache / Chunked Prefill 明确留给 M4/M5/M10。
-- Benchmark 结果：归档至 `bench/results/2026-07-18-m3-continuous-batching-mps-bf16.md`，并在 `docs/plan/M3.md` 中给出主对比、消融、瓶颈拆解和与 nano-vllm 的差异说明。
-- 进度与入口：`docs/plan/PROGRESS.md` 与 `README.md` 同步 M3 完成状态，后续 M4 入口在 PLAN/M3 中明确说明。
-- Tag：创建 annotated tag `m3/continuous-batching`，message 概括 M3 的 scheduler / cache / attention / engine / metrics 落地点。
+**任务卡总结**：
+- T1：调度状态机（`RequestState` + `FCFSScheduler`），四队列守恒。
+- T2：固定槽位 KV Cache（`BatchedKVCache` + `SlotManager`），O(1) slot 分配。
+- T3：Batched Attention（`cache_slots` / `cache_positions` 分派 + per-row mask），M2 路径不受影响。
+- T4：Batch Engine（`batch_generate` 纯函数），prefill 逐条 + decode 组 batch。
+- T5：E2E 正确性（12 个测试），serial vs batch token 级 `torch.equal`。
+- T6：指标体系 + Benchmark（21 个单测），性能瓶颈定位（for-loop write 63%）。
+- T7：本卡。
 
-待全部收口后回填：最终 commit、tag 创建时间、PROGRESS/README 中使用的具体日期与链接。
+**M3.md 汇总**：
+- §23 基于 T1–T6 完成总结写出汇总版实现总结，含每卡交付、关键设计决策、测试覆盖总览（211/211 全量回归）、文件清单、已知局限性及后续解决路径映射表。
+- §24 汇总 Benchmark 结果（0.38x~0.44x）和性能瓶颈分析。
+- §25 明确后续 M4 入口。
+- §23.10 局限性→里程碑映射表：cache 向量化→M9、prefill batch→M10、PagedAttention→M4、Prefix Cache→M5、HTTP/SSE→M6。
+
+**进度同步**：
+- `PROGRESS.md` M3 状态从 🟡 更新为 ✅ + tag `m3/continuous-batching`。
+- `README.md` M3 状态从 🟡 更新为 ✅。
+
+**Tag**：annotated tag `m3/continuous-batching`，message 概括 M3 的 scheduler / cache / attention / engine / metrics 落地点。
