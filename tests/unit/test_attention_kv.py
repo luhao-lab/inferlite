@@ -8,9 +8,9 @@
 import pytest
 import torch
 
+from inferlite.cache.kv_cache import KVCache
 from inferlite.config import ModelConfig
 from inferlite.model.attention import GQAAttention
-from inferlite.model.kv_cache import KVCache
 
 # ---------------------------------------------------------------------------
 # Fixtures

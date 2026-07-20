@@ -10,8 +10,8 @@
 import pytest
 import torch
 
+from inferlite.cache.kv_cache import KVCache, LayerKVCache
 from inferlite.config import ModelConfig
-from inferlite.model.kv_cache import KVCache, LayerKVCache
 
 # ---------------------------------------------------------------------------
 # Fixture

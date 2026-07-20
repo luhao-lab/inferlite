@@ -37,9 +37,9 @@ from typing import override
 import torch
 import torch.nn as nn
 
+from inferlite.cache import BatchedLayerKVCache
+from inferlite.cache.kv_cache import LayerKVCache
 from inferlite.config import ModelConfig
-from inferlite.model import BatchedLayerKVCache
-from inferlite.model.kv_cache import LayerKVCache
 from inferlite.model.layers import RMSNorm, RotaryEmbedding, apply_rotary_pos_emb
 
 

@@ -1,4 +1,4 @@
-# M4-T1 — BlockManager
+# M4-T1 — BlockPool
 
 > **状态**：🔧 in_progress
 > **里程碑**：M4 PagedAttention
@@ -35,7 +35,7 @@ class Block:
     ref_count: int = 0
 
 
-class BlockManager:
+class BlockPool:
     def __init__(self, num_blocks: int) -> None: ...
     def allocate(self) -> int: ...
     def free(self, block_id: int) -> None: ...
@@ -96,7 +96,7 @@ T3 会在拿到新 block_id 后复制 K/V tensor；T1 只保证元数据正确�
 
 ## 与 nano-vLLM 对齐点
 
-nano-vLLM `BlockManager` 的关键逻辑：
+nano-vLLM `BlockPool` 的关键逻辑：
 
 ```python
 free_block_ids: deque[int]
@@ -125,11 +125,11 @@ T1 的 `ref_count` 和 `copy_on_write()` 就是这两个事实的最小可测版
 
 ## 测试
 
-建议新建 `tests/unit/test_block_manager.py`。
+建议新建 `tests/unit/test_block_pool.py`。
 
 ### L0-1 初始化
 
-- `BlockManager(num_blocks=3)`
+- `BlockPool(num_blocks=3)`
 - `free_block_ids == [0, 1, 2]`
 - 所有 `ref_count == 0`
 
@@ -183,8 +183,8 @@ T1 的 `ref_count` 和 `copy_on_write()` 就是这两个事实的最小可测版
 
 ## DoD
 
-- [ ] `BlockManager` 单测全过。
+- [ ] `BlockPool` 单测全过。
 - [ ] 不依赖 attention/model/tensor。
 - [ ] 不修改 M3 `BatchedKVCache`。
 - [ ] 文档说明 block 与 slot 的区别。
-- [ ] `docs/tasks/M4-archive/M4-T1-BlockManager.md` 末尾追加完成总结。
+- [ ] `docs/tasks/M4-archive/M4-T1-BlockPool.md` 末尾追加完成总结。

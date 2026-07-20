@@ -211,7 +211,7 @@ position_ids = torch.arange(seq_len) + past_seen_tokens  # decode 步 = [[cur_le
 
 nano-vllm 以 ~1200 行实现 vLLM 核心，定位是多序列 continuous batching，KV Cache 设计与 transformers 有根本差异。
 
-**内存结构**：不按"每层一个连续 tensor"，而是用 `BlockManager` 管理固定大小的物理 block（每个 block = N 个 token 的空间），每个请求有自己的 `block_table`（逻辑→物理映射）。
+**内存结构**：不按"每层一个连续 tensor"，而是用 `BlockPool` 管理固定大小的物理 block（每个 block = N 个 token 的空间），每个请求有自己的 `block_table`（逻辑→物理映射）。
 
 **写入**：Triton kernel + `slot_mapping` 散列写入（PagedAttention），每个 token 写到分配到的物理 slot，不要求连续：
 

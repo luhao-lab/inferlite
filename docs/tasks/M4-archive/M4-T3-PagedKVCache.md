@@ -15,7 +15,7 @@ M3 `BatchedKVCache` 的单层 shape 是 `[S, H_kv, L, D]`。M4 改为 `[num_bloc
   - `v: torch.Tensor`
 - `PagedKVCache`
   - `layers`
-  - `block_manager`
+  - `block_pool`
   - `request_tables`
   - `allocate_request(request_id, prompt_len)`
   - `free_request(request_id)`

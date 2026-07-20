@@ -18,8 +18,8 @@
 | **M1** Qwen3 单序列推理 | ✅ | `m1/naive-forward` | 2026-06-19 | — | 95 个单测全绿，Qwen3-0.6B e2e 与 transformers 精确对齐 |
 | **M2** KV Cache | ✅ | `m2/static-kv-cache` | 2026-06-29 | — | T1~T5 全部完成，+28 单测，端到端 bench 7.36×@T=512 |
 | **M3** Continuous Batching | ✅ | `m3/continuous-batching` | 2026-07-19 | — | T1~T7 完成，fixed-slot continuous batching + metrics/benchmark，MPS 实测 batch throughput 慢于 serial，根因在 cache 路径 |
-| **M4** PagedAttention (PyTorch) | 🟡 | — | — | — | 规划完成：`PagedKVCache` / BlockManager / BlockTable / PyTorch 伪版 PagedAttention，任务卡 T1~T7 已创建 |
-| **M5** 服务化收口 v1 | ⬜ | `v1.0` | — | — | P1 API+SSE / P2 Prefix+Reasoning / P3 Benchmark+CI |
+| **M4** PagedAttention (PyTorch) | 🟡 | — | — | — | 规划完成（vLLM V1 设计）：BlockPool（无 CoW）/ BlockTable / PagedKVCache / PyTorch gather 伪版，任务卡 T1~T7 已创建 |
+| **M5** Prefix Caching | ⬜ | — | — | — | 依赖 M4；BlockPool + hash-based prefix caching + LRU 淘汰 + partial hit CoW |
 
 ## 扩充里程碑（M6+）
 

@@ -13,10 +13,10 @@
 
 import torch
 
+from inferlite.cache.batched_kv_cache import BatchedLayerKVCache
+from inferlite.cache.kv_cache import LayerKVCache
 from inferlite.config import ModelConfig
 from inferlite.model.attention import GQAAttention
-from inferlite.model.batched_kv_cache import BatchedLayerKVCache
-from inferlite.model.kv_cache import LayerKVCache
 from inferlite.model.qwen3 import Qwen3Model
 
 # ---------------------------------------------------------------------------
@@ -354,7 +354,7 @@ class TestBatchedAttentionModel:
 
     def test_model_batched_decode_shape(self):
         """L0-1: model batched decode 输出 shape [B, 1, hidden_size]。"""
-        from inferlite.model.batched_kv_cache import BatchedKVCache
+        from inferlite.cache.batched_kv_cache import BatchedKVCache
 
         config = _tiny_config(num_hidden_layers=2)
         model = Qwen3Model(config)
@@ -379,7 +379,7 @@ class TestBatchedAttentionModel:
 
     def test_model_m2_not_broken(self):
         """M2 generate 路径不受影响（kv_cache=KVCache, 无 cache_slots）。"""
-        from inferlite.model.kv_cache import KVCache
+        from inferlite.cache.kv_cache import KVCache
 
         config = _tiny_config(num_hidden_layers=2)
         model = Qwen3Model(config)

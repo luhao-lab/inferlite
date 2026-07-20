@@ -15,12 +15,12 @@
 import pytest
 import torch
 
-from inferlite.config import ModelConfig
-from inferlite.model.batched_kv_cache import (
+from inferlite.cache.batched_kv_cache import (
     BatchedKVCache,
     BatchedLayerKVCache,
     SlotManager,
 )
+from inferlite.config import ModelConfig
 
 # ---------------------------------------------------------------------------
 # helpers

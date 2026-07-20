@@ -49,9 +49,9 @@ from typing import override
 import torch
 import torch.nn as nn
 
+from inferlite.cache.kv_cache import KVCache, LayerKVCache
 from inferlite.config import ModelConfig
 from inferlite.model.attention import GQAAttention
-from inferlite.model.kv_cache import KVCache, LayerKVCache
 from inferlite.model.layers import RMSNorm, RotaryEmbedding, SwiGLUMLP
 
 

@@ -22,10 +22,10 @@ import time
 
 import torch
 
+from inferlite.cache import BatchedKVCache
 from inferlite.config import ModelConfig
 from inferlite.engine.metrics import MetricsCollector
 from inferlite.engine.protocol import LLMModel
-from inferlite.model import BatchedKVCache
 from inferlite.sampler.greedy import GreedySampler
 from inferlite.scheduler.fcfs import FCFSScheduler
 from inferlite.scheduler.request import RequestState

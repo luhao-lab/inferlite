@@ -64,9 +64,9 @@ import time
 
 import torch
 
+from inferlite.cache.kv_cache import LayerKVCache
 from inferlite.config import ModelConfig
 from inferlite.model.attention import GQAAttention
-from inferlite.model.kv_cache import LayerKVCache
 from inferlite.model.layers import RotaryEmbedding
 
 DEFAULT_SEQ_LENGTHS = [32, 64, 128, 256, 512, 1024]

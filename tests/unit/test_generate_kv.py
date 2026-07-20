@@ -15,10 +15,10 @@
 import pytest
 import torch
 
+from inferlite.cache.kv_cache import KVCache
 from inferlite.config import ModelConfig
 from inferlite.engine import generate
 from inferlite.engine.core import EngineCore
-from inferlite.model.kv_cache import KVCache
 from inferlite.model.qwen3 import Qwen3ForCausalLM
 from inferlite.sampler.greedy import GreedySampler
 

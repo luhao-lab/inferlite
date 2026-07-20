@@ -25,8 +25,8 @@
 
 import torch
 
+from inferlite.cache.kv_cache import KVCache
 from inferlite.engine.protocol import LLMModel
-from inferlite.model.kv_cache import KVCache
 from inferlite.sampler.greedy import GreedySampler
 
 

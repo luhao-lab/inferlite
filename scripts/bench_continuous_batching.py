@@ -79,11 +79,11 @@ import time
 import torch
 from transformers import AutoTokenizer
 
+from inferlite.cache.kv_cache import KVCache
 from inferlite.cli import resolve_device_dtype
 from inferlite.engine.batch_core import batch_generate
 from inferlite.engine.core import EngineCore, generate
 from inferlite.engine.metrics import MetricsCollector
-from inferlite.model.kv_cache import KVCache
 from inferlite.model.weights import load_causal_lm_from_hf
 from inferlite.sampler import GreedySampler
 

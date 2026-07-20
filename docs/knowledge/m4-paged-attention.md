@@ -47,7 +47,7 @@ vLLM 的核心观察：KV Cache 又大又动态，传统连续内存管理会因
 
 | 文件 | 作用 | M4 借鉴点 |
 |---|---|---|
-| `engine/block_manager.py` | `Block` / `BlockManager` / refcount / hash | block 分配、释放、refcount、prefix hash |
+| `engine/block_pool.py` | `Block` / `BlockPool` / refcount / hash | block 分配、释放、refcount、prefix hash |
 | `engine/sequence.py` | `Sequence.block_table`、`num_cached_tokens` | request 内部维护 block table |
 | `engine/scheduler.py` | schedule prefill/decode，调用 block manager | allocate/may_append/postprocess 的时机 |
 | `engine/model_runner.py` | `slot_mapping`、`block_tables` 构造 | input token 到 KV 物理槽位的映射 |
@@ -97,7 +97,7 @@ inferlite M4
 | 运行设备 | CPU/MPS 友好，纯 PyTorch | 主要 CUDA |
 | Attention 实现 | PyTorch gather 伪版：先 gather 成连续 KV，再走普通 attention | `store_kvcache` Triton kernel + FlashAttention block_table |
 | 目标 | 先理解 block table / refcount / CoW | 更接近可跑的高性能 vLLM 简化版 |
-| Prefix Cache | M4 不做 hash prefix lookup，留 M5 | `BlockManager` 已有 `hash_to_block_id` / `compute_hash` |
+| Prefix Cache | M4 不做 hash prefix lookup，留 M5 | `BlockPool` 已有 `hash_to_block_id` / `compute_hash` |
 | Chunked Prefill | 不做，留 M10 | scheduler 里已有 token budget / chunked prefill 逻辑 |
 | Scheduler | 沿用 M3：逐条 prefill + batched decode | 已有 prefill/decode schedule，支持 `max_num_batched_tokens` |
 | block_size | 倾向 16/32，方便教学和单测跨 block | 默认更偏生产，例如 256 |
@@ -223,7 +223,7 @@ FlashAttention / PagedAttention kernel 直接算 attention
 
 **Context**：M3 的 `BatchedKVCache` 已经稳定，用于 fixed-slot continuous batching。直接改会破坏 M3 回归。
 
-**Decision**：新建 `inferlite/model/paged_kv_cache.py`，提供 `PagedKVCache` / `PagedLayerKVCache` / `BlockManager` / `BlockTable`。M3 代码保留，M4 通过可选参数或新入口启用 paged 路径。
+**Decision**：新建 `inferlite/model/paged_kv_cache.py`，提供 `PagedKVCache` / `PagedLayerKVCache` / `BlockPool` / `BlockTable`。M3 代码保留，M4 通过可选参数或新入口启用 paged 路径。
 
 **Consequences**：
 - ✅ M3 fixed-slot 可作为 oracle 做正确性对比。
@@ -255,7 +255,7 @@ FlashAttention / PagedAttention kernel 直接算 attention
 
 **Context**：Prefix Cache 是 M5；但没有 refcount/CoW，M5 无法安全共享 block。
 
-**Decision**：M4 的 `BlockManager` 提供 `inc_ref` / `dec_ref` / `copy_on_write` 能力；但不做 `hash_to_block_id` prefix lookup 策略。
+**Decision**：M4 的 `BlockPool` 提供 `inc_ref` / `dec_ref` / `copy_on_write` 能力；但不做 `hash_to_block_id` prefix lookup 策略。
 
 **Consequences**：
 - ✅ M5 可直接复用。
@@ -306,7 +306,7 @@ seq_len += 1
 seq_len = 48
 append token at pos 48 -> logical_block 3
 block_table 还没有 index 3
-=> BlockManager.allocate() 新物理 block，append 到 block_table
+=> BlockPool.allocate() 新物理 block，append 到 block_table
 ```
 
 ### 4.3 gather 读取

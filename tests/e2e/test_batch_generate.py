@@ -13,10 +13,10 @@
 
 import torch
 
+from inferlite.cache.kv_cache import KVCache
 from inferlite.config import ModelConfig
 from inferlite.engine.batch_core import batch_generate
 from inferlite.engine.core import EngineCore, generate
-from inferlite.model.kv_cache import KVCache
 from inferlite.model.qwen3 import Qwen3ForCausalLM
 from inferlite.sampler.greedy import GreedySampler
 

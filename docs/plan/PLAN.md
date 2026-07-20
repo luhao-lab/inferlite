@@ -54,8 +54,8 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 | M1·P2 | 已完成 | 最小生成能力 | L1 + L3 | M1·P1 | CLI 能出字，最小 Engine/Sampler |
 | M2 | 已完成 | 单请求加速 | L2 Memory | M1 | 单序列 decode 不重算历史 |
 | M3 | 已完成 | 多请求并发 | L3 Scheduler | M2 | 多请求三队列调度，slot 复用 |
-| M4 | 进行中 | 显存分页管理 | L2 Memory | M3 | KV 按 block 管，支持 CoW/refcount |
-| M5 | 未开始 | 前缀复用 | L2 Memory | M4 | 相同前缀复用 KV，reasoning 字段可解释 |
+| M4 | 进行中 | 显存分页管理 | L2 Memory | M3 | KV 按 block 管，支持 refcount（无 CoW） |
+| M5 | 未开始 | 前缀复用 | L2 Memory | M4 | hash-based prefix caching + LRU 淘汰 + partial hit CoW |
 | M6 | 未开始 | 服务化输出 | L4 Server | M3（建议 M5 后） | `inferlite serve` + curl 流式输出 |
 | Release | 未开始 | 工程发布 | 工程发布 | M3-M6 | 对照表、CI、README badge、`v1.0` tag |
 | M7 | Backlog | MoE 模型支持 | L1 Model | M6 | 阶段 1 跑通 MoE；阶段 2 MoE 性能优化 |
@@ -70,7 +70,7 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 | 依赖 | 类型 | 原因 |
 | --- | --- | --- |
 | M3 → M6 | 硬依赖 | API/SSE 要包 `batch_generate` 或后续 EngineCore；单请求 API 不是目标服务形态。 |
-| M4 → M5 | 硬依赖 | Prefix Cache 依赖 block table / refcount / CoW；没有 M4 只能做字符串级缓存。 |
+| M4 → M5 | 硬依赖 | Prefix Cache 依赖 block table / refcount；没有 M4 只能做字符串级缓存。 |
 | M5 ↔ M6 | 无算法依赖 | Prefix Cache 是 L2 Memory；API/SSE 是 L4 Server；二者只是共同服务于 v1.0 demo。 |
 | M4 → M9 | 硬依赖 | Triton kernel 替换 M4 的 PyTorch PagedAttention 伪版。 |
 | M7+ 内部 | 主题内阶段依赖 | M7/M8/M10/M11 都遵循“先跑通 → 再优化/工程化”；同一 M 内只做一个能力主题。 |
@@ -110,38 +110,40 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 
 > 方向：L2 Memory / PagedAttention / Block Table ｜ 主层：L2 ｜ 依赖：M3
 
-**目标**：把连续 KV cache 改成 block table 管理；长 prompt + 多并发时减少显存浪费；支持 refcount 和 Copy-on-Write。
+**目标**：把连续 KV cache 改成 block table 管理；长 prompt + 多并发时减少显存浪费；支持 refcount（为 M5 prefix caching 预留）。
 
 **核心概念**：
 - 物理 block、逻辑 block table。
-- refcount / Copy-on-Write。
-- PyTorch `index_select` 伪版 PagedAttention。
+- refcount（M5 prefix caching 基础）。
+- PyTorch gather 伪版 PagedAttention。
+- M4 不含 CoW（学 vLLM V1，beam search 在上层做独立请求）。
 - M4 只做可读教学版，Triton kernel 留到 M9。
 
 **验证**：
 - `test_paged_logits.py`：分页前后 logits 对齐。
-- `test_block_invariant.py`：refcount 守恒、CoW 正确。
+- `test_block_invariant.py`：refcount 守恒。
 - GPU 上验证显存利用率；Mac 只验证功能正确性。
 
 **前置关系**：M4 是 M5 Prefix Cache 的硬前置；没有 block table，就讲不清 prefix block 复用。
 
 **文章**：《把显存当虚拟内存用 —— PagedAttention 的设计精髓》
 
-### M5 — Prefix Cache + Reasoning：把 KV 变成可复用资产
+### M5 — Prefix Caching：把 KV 变成可复用资产
 
 > 方向：L2 Memory / Prefix Cache / KV 复用 ｜ 主层：L2 ｜ 依赖：M4
 
-**目标**：相同前缀的请求复用 prefix KV；多轮对话第二轮 TTFT 明显下降；reasoning 字段为服务协议输出做准备。
+**目标**：相同前缀的请求复用 prefix KV；多轮对话第二轮 TTFT 明显下降；LRU 淘汰策略保证缓存健康。
 
 **核心概念**：
-- block hash / RadixTree-Lite。
+- block hash（链式 hash 保证上下文唯一性）。
 - prefix cache hit rate。
-- refcount 与 eviction。
-- Qwen3 thinking / non-thinking 的 `reasoning_content` 分流。
+- LRU 淘汰（OrderedDict，O(1) touch/evict）。
+- partial hit CoW（命中 block 中间时拷贝后独占写入）。
+- beam search 在上层以独立请求实现（学 vLLM V1，prefix caching 自动共享）。
 
 **验证**：
-- `test_prefix_invariant.py`：同前缀两请求 block_id 一致，refcount 正确，eviction 后不悬挂。
-- reasoning 字段解析单测。
+- `test_prefix_invariant.py`：同前缀两请求 block_id 一致，refcount 正确，LRU 淘汰后不悬挂。
+- `test_partial_hit_cow.py`：partial hit 后写入不污染缓存 block。
 - GPU 上复测 TTFT 收益。
 
 **与 M6 的关系**：M5 和 M6 无算法依赖。M5 是 L2 Memory，M6 是 L4 Server；只是最终都会进入 v1.0 demo。
