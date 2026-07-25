@@ -350,6 +350,8 @@ pytest tests/ -q
 1. 删除类 docstring 中关于已移除 `copy_on_write()` 的描述。
 2. 将 `inc_ref()` docstring 中的 fork / beam search 描述改为“增加已分配 block 的引用计数”。
 
+核心实现与测试均包含教学级注释：实现侧解释 BlockPool 职责和状态不变量；测试侧解释 FIFO 复用顺序、负索引风险、double free、空闲 block 禁止 `inc_ref()` 以及 `can_allocate(0)` 的语义。
+
 核心实现由作者本人手写；Agent 负责测试收敛、Review、详细注释补充、验证和任务卡归档。
 
 最终代码提交：`7d51e25 feat(kv-cache): add physical block pool (M4-T1 done)`。
