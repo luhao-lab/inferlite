@@ -224,6 +224,51 @@ class TestBatchedAttentionLayer:
         # 输出不为 inf
         assert not torch.isinf(out).any()
 
+    def test_nan_padding_does_not_contaminate_short_request(self):
+        """无效 K/V 尾部即使含 NaN，也不得污染短请求的 attention 输出。"""
+        torch.manual_seed(42)
+        attn = self._make_attn().eval()
+        short_pos, long_pos = 3, 10
+        short_hidden = torch.randn(1, 1, 32)
+        long_hidden = torch.randn(1, 1, 32)
+        short_k = torch.randn(2, short_pos, 8)
+        short_v = torch.randn(2, short_pos, 8)
+        long_k = torch.randn(2, long_pos, 8)
+        long_v = torch.randn(2, long_pos, 8)
+
+        # Oracle：短请求单独 decode，不存在 batch padding。
+        single_cache = _make_batched_layer_cache()
+        single_cache.k[0, :, :short_pos] = short_k
+        single_cache.v[0, :, :short_pos] = short_v
+        single_out = attn(
+            short_hidden.clone(),
+            position_ids=torch.tensor([[short_pos]]),
+            layer_kv_cache=single_cache,
+            cache_slots=torch.tensor([0]),
+            cache_positions=torch.tensor([short_pos]),
+        )
+
+        # 合批路径：短请求无效尾部显式填 NaN，稳定模拟 torch.empty
+        # 复用到含 NaN/Inf 历史内存的情况。
+        batch_cache = _make_batched_layer_cache()
+        batch_cache.k.fill_(float("nan"))
+        batch_cache.v.fill_(float("nan"))
+        batch_cache.k[0, :, :short_pos] = short_k
+        batch_cache.v[0, :, :short_pos] = short_v
+        batch_cache.k[1, :, :long_pos] = long_k
+        batch_cache.v[1, :, :long_pos] = long_v
+
+        batch_out = attn(
+            torch.cat((short_hidden, long_hidden), dim=0),
+            position_ids=torch.tensor([[short_pos], [long_pos]]),
+            layer_kv_cache=batch_cache,
+            cache_slots=torch.tensor([0, 1]),
+            cache_positions=torch.tensor([short_pos, long_pos]),
+        )
+
+        assert torch.isfinite(batch_out).all()
+        assert torch.allclose(single_out, batch_out[0:1], atol=1e-5)
+
     def test_b1_equivalent_to_m2_decode(self):
         """L0-6: B=1 batched decode 和 M2 single decode 结果等价。"""
         config = _tiny_config(num_hidden_layers=1)

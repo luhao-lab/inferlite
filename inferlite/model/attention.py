@@ -369,6 +369,18 @@ class GQAAttention(nn.Module):
         max_len = int(cache_positions.max().item()) + 1
         k = cache.k[cache_slots, :, :max_len, :]
         v = cache.v[cache_slots, :, :max_len, :]
+
+        # 变长请求合批后，短请求在 max_len 内的尾部从未写入。底层 cache
+        # 使用 torch.empty 预分配，这些无效位置可能包含 NaN/Inf。score mask
+        # 只能排除注意力概率；value 聚合中的 0 * NaN 仍会传播 NaN。
+        # 因此先把无效 K/V 统一清零，负责数值安全；后续 score mask 继续
+        # 负责 attention 语义，确保 padding 位置不会获得概率。
+        valid_lens = cache_positions + 1
+        positions = torch.arange(max_len, device=cache_positions.device)
+        valid = positions[None, :] < valid_lens[:, None]
+        invalid = ~valid[:, None, :, None]
+        k = k.masked_fill(invalid, 0)
+        v = v.masked_fill(invalid, 0)
         return k, v
 
     def _batched_prefill_rw(

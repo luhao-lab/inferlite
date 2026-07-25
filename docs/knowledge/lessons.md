@@ -13,6 +13,7 @@
 | **L2** | M0 环境搭建 | 国内拉模型用 ModelScope 替代 HF mirror | 任何拉权重的脚本 |
 | **L3** | M0 知识库重构 | 地基 vs 算法是两个频道，不要混着切 | 协作节奏 / AI 协作 |
 | **L4** | T0 ModelConfig | GQA 的 `head_dim` 是独立超参，不能从 KV 头数推导 | GQA/MQA Attention / Config 设计 |
+| **L5** | M3 Batched Attention | score mask 不能阻止 `0 × NaN` 从无效 V padding 传播 | 变长 dense batch / KV Cache / Attention |
 
 ---
 
@@ -190,6 +191,71 @@ if "head_dim" not in raw:
 ### 相关
 - knowledge.md → Papers → Qwen3 Tech Report → Self-Attention 内部
 - docs/tasks/M1-archive/M1-T0-ModelConfig.md
+
+---
+
+## L5: Score mask 不能隔离未初始化 V padding 中的 NaN
+
+**来源**：M4-T1 全量回归时发现的 M3 Batched Attention 偶发失败（2026-07-25）
+
+### 现象
+
+真实 Qwen3 贪心生成测试偶发出现 serial 与 batch 不一致：batch 路径在生成若干步后连续输出 token 0。固定 `torch.manual_seed`、单独重跑用例通常通过，但全量测试中可能失败。
+
+贪心 `argmax` 没有随机性，因此这不是采样波动。将短请求的无效 K/V 尾部显式填为 NaN 后，可以稳定复现：短请求输出全部 NaN，长请求正常；全 NaN logits 经 `argmax` 返回 0，正好解释连续 token 0。
+
+### 根因
+
+M3 使用 `torch.empty` 预分配固定槽位 KV Cache。变长请求合批时，所有行都会 gather 到本批最长序列：
+
+```text
+request A: [有效 KV][未写入 padding]
+request B: [完整有效 KV             ]
+```
+
+未写入区域保留 allocator 中的任意比特，可能被解释成 NaN 或 Inf。虽然无效 K 产生的 score 会被 per-row score mask 覆盖，但 V 直接参与加权和：
+
+\[
+O = \operatorname{softmax}(QK^T)V
+\]
+
+IEEE 754 中 `0 × NaN = NaN`，所以即使无效位置的 attention probability 为 0，V 中的 NaN 仍会污染输出。
+
+原单测辅助函数使用 `torch.zeros` 创建 cache，未覆盖真实 `torch.empty` 的内存条件，因此漏掉该问题。
+
+### 解法
+
+batched gather 后，根据每行有效长度把无效 K/V 尾部清零，同时保留 score mask：
+
+```python
+valid_lens = cache_positions + 1
+positions = torch.arange(max_len, device=cache_positions.device)
+valid = positions[None, :] < valid_lens[:, None]
+invalid = ~valid[:, None, :, None]
+
+k = k.masked_fill(invalid, 0)
+v = v.masked_fill(invalid, 0)
+```
+
+两层防护职责不同：
+
+- K/V 清零保证数值安全，不让 NaN/Inf 进入矩阵乘。
+- score mask 保证语义正确，padding 位置不获得注意力概率。
+
+回归测试必须显式向 padding 区域注入 NaN，而不是依赖 allocator 偶然返回何种旧内存。
+
+### 适用范围
+
+- 使用 `torch.empty` 预分配的 KV Cache、activation buffer 和通信 buffer。
+- 变长序列 pad 成 dense batch 后执行 matmul 的场景。
+- 任何认为“权重为 0 就能隔离 NaN”的实现。
+- FlashAttention/PagedAttention 之外的纯 PyTorch gather + mask 教学实现。
+
+### 相关
+
+- `inferlite/model/attention.py::_batched_cache_rw`
+- `tests/unit/test_batched_attention.py::test_nan_padding_does_not_contaminate_short_request`
+- `docs/knowledge/m3-continuous-batching.md`
 
 ---
 

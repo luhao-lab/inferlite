@@ -868,7 +868,7 @@ while scheduler.has_unfinished():
 
 ### 关键发现
 
-真实模型测试证明 M3 的所有改动（BatchedKVCache + prefill/decode 分派 + per-row mask + gather）**只有性能变化，语义完全不变**——serial generate 和 batch_generate 在 token 级别 `torch.equal`。
+真实模型测试证明 M3 的正常执行路径在 token 级与 serial generate 等价。后续全量回归发现一个隐藏的数值安全问题：变长 batch gather 会读取短请求在 `torch.empty` cache 中尚未写入的尾部；如果该区域含 NaN/Inf，仅做 score mask 仍可能通过 value matmul 传播 NaN。现已在 gather 后按每行有效长度清零无效 K/V，并用 NaN 注入回归测试锁定。
 
 ### 修改文件
 
@@ -876,7 +876,8 @@ while scheduler.has_unfinished():
 |---|---|
 | `tests/e2e/test_batch_generate.py` | 串行 vs batch 等价测试（含真实模型） |
 | `tests/e2e/test_continuous_batching_trace.py` | continuous batching trace 测试 |
-| `inferlite/model/attention.py` | prefill 分派 + `_batched_prefill_rw` 方法 |
+| `inferlite/model/attention.py` | prefill 分派、`_batched_prefill_rw`，以及变长 gather 后无效 K/V 清零 |
+| `tests/unit/test_batched_attention.py` | NaN padding 数值安全回归测试 |
 | `inferlite/model/qwen3.py` | `Qwen3Model.forward` 加 `position_ids.dim()==1` 分支 |
 | `inferlite/engine/batch_core.py` | `cache_positions` 用 `[B]`，`position_ids` 单独 unsqueeze |
 
@@ -969,7 +970,7 @@ M3 的核心收益是 **continuous batching 语义**（请求进退 + slot 复�
 
 ### 测试
 
-21 个单测（`test_metrics.py`）覆盖所有 L0 项，211/211 全量回归通过（1 个真实模型测试因浮点边界偶发 flaky）。
+22 个 batched-attention/metrics 相关单测覆盖关键 L0 项；当前项目全量回归 217/217 通过。此前所谓“真实模型浮点边界 flaky”已定位为 `torch.empty` 未初始化 V padding 的 NaN 传播，并通过无效 K/V 清零及 NaN 注入测试修复。
 
 ---
 
