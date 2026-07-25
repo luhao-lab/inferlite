@@ -2,7 +2,8 @@
 
 > **状态**：⬜ pending
 > **里程碑**：M4 PagedAttention
-> **目标**：让 `batch_generate` 可选择 fixed-slot 或 paged KV Cache 路径。
+> **目标**：让 `batch_generate` 支持 paged KV Cache 路径。
+> **前置**：M4-T4 PagedAttention
 
 ## 背景
 
@@ -10,9 +11,13 @@ M3 `batch_generate` 绑定 `BatchedKVCache`。M4 需要在不破坏 M3 的前提
 
 ## 产出
 
-- `batch_generate(..., cache_type="fixed" | "paged", block_size=16, num_blocks=None)` 或新增 `batch_generate_paged()`。
-- request admit 时分配 block table。
-- finished 时释放 request 的 blocks。
+文件：`inferlite/engine/paged_core.py`（新建）或扩展 `batch_core.py`
+
+- 新增 `batch_generate_paged()` 或扩展现有 `batch_generate()` 支持 paged 路径。
+- request admit 时调用 `paged_cache.allocate_request()`。
+- decode 每步调用 `may_append_block()`。
+- finished 时调用 `free_request()` 释放 blocks。
+- scheduler 按 `block_pool.can_allocate()` 做 admission 检查。
 
 ## 关键决策
 

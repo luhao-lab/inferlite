@@ -3,6 +3,7 @@
 > **状态**：⬜ pending
 > **里程碑**：M4 PagedAttention
 > **目标**：M4 文档收口、进度更新和 tag。
+> **前置**：M4-T6 E2E & Benchmark
 
 ## 产出
 
@@ -12,6 +13,14 @@
 - 更新 `docs/README.md` 文档地图。
 - 所有 M4 任务卡追加 `## 完成总结`。
 - 创建 annotated tag `m4/paged-attention`。
+
+## 完成总结内容
+
+每个任务卡追加的完成总结应包含：
+- 本任务最终能力边界。
+- 关键设计结论。
+- 已知限制。
+- 与后续任务的接口关系（如 T3 → T4 attention，T5 → M5 prefix caching）。
 
 ## DoD
 

@@ -3,6 +3,7 @@
 > **状态**：⬜ pending
 > **里程碑**：M4 PagedAttention
 > **目标**：验证 PagedKVCache 正确性，并量化内存分配/碎片情况。
+> **前置**：M4-T5 BatchEngine Integration
 
 ## 产出
 
@@ -16,7 +17,7 @@
 |---|---|
 | allocated_blocks | 实际分配 block 数 |
 | used_tokens | 实际有效 token 数 |
-| capacity_tokens | allocated_blocks × block_size |
+| capacity_tokens | allocated_blocks x block_size |
 | internal_fragmentation | capacity_tokens - used_tokens |
 | throughput | tok/s，仅参考 |
 
@@ -26,6 +27,11 @@
 - 长短混合请求。
 - prompt/output 跨 block 边界。
 - block_size 扫描：8/16/32。
+
+## M4 收益验证
+
+- **单请求**：internal_fragmentation 最多 `block_size - 1` 个 token。
+- **多请求**：同内存下 paged 比 fixed-slot 能跑更多并发请求。
 
 ## DoD
 
