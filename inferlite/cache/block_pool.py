@@ -11,23 +11,41 @@ class Block:
 
 
 class BlockPool:
-    """物理 block 的分配与引用计数管理。
+    """管理物理 KV block 的分配、释放和引用计数。
 
-    只管理元数据（哪个 block 空闲、被引用几次），不持有 K/V tensor。
-    K/V 数据的实际拷贝由调用方（PagedKVCache）在 copy_on_write 返回后完成。
+    BlockPool 只维护 block 元数据，不持有或读写 K/V tensor。
+
+    状态不变量：
+    - ref_count == 0 的 block 位于 free_block_ids。
+    - ref_count > 0 的 block 不位于 free_block_ids。
+    - allocate() 将 ref_count 从 0 变为 1。
+    - dec_ref() 将 ref_count 减到 0 时归还 block。
     """
 
-    def __init__(self, num_blocks: int) -> None:
-        self.num_blocks = num_blocks
+    def __init__(self, num_blocks: int, block_size: int) -> None:
+        if num_blocks <= 0:
+            raise ValueError("num_blocks must be positive")
+        if block_size <= 0:
+            raise ValueError("block_size must be positive")
+        self.num_blocks: int = num_blocks
+        self.block_size: int = block_size
         self.blocks: list[Block] = [Block(block_id=i) for i in range(num_blocks)]
         self.free_block_ids: deque[int] = deque(range(num_blocks))
+
+    def _validate_block_id(self, block_id: int) -> None:
+        """校验物理 block id，避免负数被解释为反向索引。"""
+        if not 0 <= block_id < self.num_blocks:
+            raise ValueError(f"block_id {block_id} out of range")
 
     def allocate(self) -> int:
         """分配一个空闲 block，ref_count 置为 1。无空闲时抛 RuntimeError。"""
         if not self.free_block_ids:
             raise RuntimeError("No free blocks available")
+
         block_id = self.free_block_ids.popleft()
-        self.blocks[block_id].ref_count = 1
+        block = self.blocks[block_id]
+        assert block.ref_count == 0
+        block.ref_count = 1
         return block_id
 
     def free(self, block_id: int) -> None:
@@ -38,26 +56,30 @@ class BlockPool:
         self.dec_ref(block_id)
 
     def inc_ref(self, block_id: int) -> None:
-        """增加引用计数（fork / beam search 时调用）。"""
-        self.blocks[block_id].ref_count += 1
+        """增加一个已分配 block 的引用计数。"""
+        self._validate_block_id(block_id)
+        block = self.blocks[block_id]
+        if block.ref_count == 0:
+            raise RuntimeError(f"Block {block_id} is not allocated")
+        block.ref_count += 1
 
     def dec_ref(self, block_id: int) -> None:
         """减少引用计数。降为 0 时自动归还空闲池。"""
+        self._validate_block_id(block_id)
         block = self.blocks[block_id]
-        assert block.ref_count > 0, f"Block {block_id} ref_count already 0"
+        if block.ref_count == 0:
+            raise RuntimeError(f"Block {block_id} ref_count already 0")
         block.ref_count -= 1
         if block.ref_count == 0:
             self.free_block_ids.append(block_id)
 
-    def copy_on_write(self, block_id: int) -> int:
-        """写时复制（元数据部分）。
+    def can_allocate(self, num_blocks: int) -> bool:
+        """检查是否还能分配 block。"""
+        if num_blocks < 0:
+            raise ValueError("num_blocks must be non-negative")
+        return len(self.free_block_ids) >= num_blocks
 
-        - ref_count == 1 → 无需复制，直接返回原 block_id。
-        - ref_count > 1  → 分配新 block、旧 block dec_ref，返回新 block_id。
-          调用方负责将旧 block 的 K/V tensor 拷贝到新 block。
-        """
-        if self.blocks[block_id].ref_count == 1:
-            return block_id
-        new_block_id = self.allocate()
-        self.dec_ref(block_id)
-        return new_block_id
+    @property
+    def num_free_blocks(self) -> int:
+        """返回当前可分配的物理 block 数。"""
+        return len(self.free_block_ids)
