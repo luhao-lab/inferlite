@@ -24,6 +24,7 @@
 | 不变量 | 说明 |
 | --- | --- |
 | **代码默认本人手写** | 作者本人手写 `inferlite/*.py`；Agent 默认仅辅助研究 / 计划 / Review / 测试 / 文章，**除非作者明确要求实现或修改，否则不得改动核心代码** |
+| **代码注释是提交门禁** | 每个代码任务提交前，必须为本任务涉及的**所有代码文件**补齐详细注释，包括实现、测试、脚本和配置代码；未完成注释不得提交 |
 | **里程碑闭环** | 每个 M 完成 = ① 代码 push  ② 知乎文章发布  ③ PROGRESS 更新 |
 | **学习 > 性能** | 优先可读性；性能优化作为后续里程碑慢慢加 |
 | **Spec-driven** | 任务卡 7 字段（前置/边界/验收/风险/完成总结），见 [ADR-001](docs/knowledge/knowledge.md) |
@@ -53,20 +54,64 @@ flowchart LR
         M5[M5<br/>API + SSE +<br/>Prefix + CI]
         M1 --> M2 --> M3 --> M4 --> M5
     end
-    subgraph EXT [扩充 · 无截止]
+    subgraph EXT [扩充 · 每周一个能力主题]
         direction TB
-        M6[M6 MoE]
-        M7[M7 Spec Decode]
-        M8[M8 Triton kernel]
-        M9[M9-M14 ...]
+        M7[M7<br/>MoE 模型支持]
+        M8[M8<br/>推测解码]
+        M9[M9<br/>核心算子]
+        M10[M10<br/>长上下文]
+        M11[M11<br/>多模态]
     end
     M5 --> M6
-    M5 --> M7
-    M5 --> M8
-    M6 --> M9
+    M6 --> M7
+    M7 --> M8
+    M8 --> M9
+    M9 --> M10
+    M10 --> M11
 ```
 
-完整 14 个里程碑见 [`docs/plan/PLAN.md`](docs/plan/PLAN.md)。
+完整路线与各里程碑范围见 [`docs/plan/PLAN.md`](docs/plan/PLAN.md)。
+
+## 周计划（从 M4 开始）
+
+> 节奏要求：以自然周（周一至周日）为单位，**每周完成一个 M**。这里的“完成”是达到该里程碑已确认的最小闭环 DoD，而不是把所有生产级优化一次做完。
+
+| 周次 | 日期 | 里程碑 | 本周最小闭环 | 周末交付 |
+|---|---|---|---|---|
+| W1 | 2026-07-20 ～ 2026-07-26 | **M4 PagedAttention** | BlockPool、BlockTable、PagedKVCache、PyTorch gather attention、batch engine 对齐 | 代码/测试全绿，benchmark，knowledge 收口，tag `m4/paged-attention` |
+| W2 | 2026-07-27 ～ 2026-08-02 | **M5 Prefix Caching** | 链式 hash、完整 block 复用、LRU、partial-hit CoW | 重复前缀 E2E、命中率 benchmark、文档与 tag |
+| W3 | 2026-08-03 ～ 2026-08-09 | **M6 API + SSE** | `inferlite serve`、请求协议、流式输出、基础 sampling 参数 | curl 可用、服务 E2E、v1.0 demo/Release 收口 |
+| W4 | 2026-08-10 ～ 2026-08-16 | **M7 MoE 模型支持** | 先跑通 MoE forward/dispatch，再做本周范围内可验证的优化 | 小模型 E2E、dense 回归、设计总结与 tag |
+| W5 | 2026-08-17 ～ 2026-08-23 | **M8 推测解码** | n-gram draft + verify/accept/rollback；EAGLE 只在前置具备时纳入 | token 等价、接受率与加速 benchmark、文档与 tag |
+| W6 | 2026-08-24 ～ 2026-08-30 | **M9 核心算子加速** | cache write / paged attention kernel；Mac 保留可验证 fallback | GPU 正确性与性能对比、fallback 回归、文档与 tag |
+| W7 | 2026-08-31 ～ 2026-09-06 | **M10 长上下文** | Chunked Prefill + YaRN/NTK RoPE scaling 最小闭环 | 长 prompt E2E、内存/延迟结果、文档与 tag |
+| W8 | 2026-09-07 ～ 2026-09-13 | **M11 多模态** | VLM 教学链路：图片编码、`inputs_embeds`、LLM decode | 小 VLM E2E、接口说明、文档与 tag |
+
+M12+ 暂不排固定日期，进入长期能力池；只有 M11 收口后，才从 LoRA、量化、TP/PP、Audio 等方向中选择一个单独立项。
+
+### 每周执行节奏
+
+| 时间 | 目标 |
+|---|---|
+| 周一 | 冻结本周 M 的范围、任务卡、接口合同和测试 oracle；确认环境/GPU 等前置 |
+| 周二～周三 | 完成核心数据结构与主路径，优先让 L0 单测通过 |
+| 周四 | 串联 E2E，补异常路径、数值安全和跨模块回归 |
+| 周五 | benchmark、与参考框架对比、修复 Review 问题 |
+| 周六 | 补齐所有代码文件详细注释，更新 task/knowledge/lessons |
+| 周日 | Ruff/format、定向测试、全量回归、提交 push、PROGRESS、文章和 tag |
+
+### 周完成门禁
+
+每个 M 只有同时满足以下条件才算当周完成：
+
+- [ ] 本周任务卡全部达到 DoD，不把未完成项口头顺延后仍标记完成。
+- [ ] 本 M 涉及的所有实现、测试、脚本和配置代码均有足够的教学级注释。
+- [ ] Ruff / format、定向测试、E2E 和全量回归全部通过。
+- [ ] 至少有一组可复现 benchmark；若本 M 不追求性能，也要记录正确性和开销。
+- [ ] 每张任务卡追加完成总结，knowledge/lessons 同步关键结论。
+- [ ] README、PROGRESS 更新，代码已 push，并创建对应 annotated tag。
+
+如果周中发现范围超过一周，必须在继续实现前缩小本 M 的最小闭环，剩余能力重新立项；不得用跳过测试、注释、文档或 benchmark 的方式赶进度。
 
 ## 当前进度
 
@@ -80,7 +125,8 @@ flowchart LR
 - 🟡 **M4** PagedAttention
   - T1 BlockPool 已完成（commit: `7d51e25`）；T2–T7 继续推进
 - ⬜ **M5** Prefix Caching
-- ⬜ M6+ MoE / Spec Decoding / Triton / VLM …
+- ⬜ **M6** API + SSE
+- ⬜ **M7–M11** MoE / 推测解码 / 核心算子 / 长上下文 / 多模态
 
 实时状态见 [`docs/plan/PROGRESS.md`](docs/plan/PROGRESS.md)。
 
@@ -188,6 +234,39 @@ lessons：抽取可在其他任务复用的踩坑经验
 ```
 
 详见 [`docs/knowledge/knowledge.md`](docs/knowledge/knowledge.md) 中的 ADR-001。
+
+### 代码任务提交前检查
+
+每个涉及代码变更的任务，在执行 `git commit` 前必须逐个检查本任务的**全部新增和修改代码文件**：
+
+- `inferlite/**/*.py`：核心实现、入口、模型、cache、scheduler、engine 等。
+- `tests/**/*.py`：单元测试、E2E 测试、fixture 和测试辅助代码。
+- `scripts/**/*.py` / `scripts/**/*.sh`：环境、benchmark、preflight 和维护脚本。
+- 其他可执行配置代码：CI、构建脚本及本任务修改的自动化配置。
+
+详细注释至少应覆盖：
+
+1. **文件职责与边界**：解决什么问题，不负责什么。
+2. **关键数据结构与 shape**：维度语义、状态字段、生命周期和不变量。
+3. **非直观算法与设计原因**：不仅写“做什么”，还要解释“为什么这样做”。
+4. **边界与异常路径**：非法输入、容量耗尽、数值安全和资源释放。
+5. **测试意图**：每个测试锁定什么合同、为何构造该场景、ground truth 来自哪里。
+6. **后续里程碑边界**：明确哪些能力刻意留到后续，避免提前混入。
+
+注释以帮助学习和维护为目标，不要求机械地逐行复述语法。简单赋值和一眼可见的控制流无需重复解释；复杂状态转换、tensor shape、mask、缓存生命周期及容易误用的 API 必须说明。
+
+提交门禁：
+
+```text
+所有代码文件注释检查完成
+  -> Ruff / format 通过
+  -> 定向测试通过
+  -> 全量回归通过
+  -> 更新任务卡完成总结
+  -> git commit
+```
+
+若任务卡 DoD 未单列“所有代码文件详细注释”，仍默认受本规则约束。
 
 ## License
 
