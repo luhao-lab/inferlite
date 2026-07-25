@@ -39,9 +39,6 @@ T1 只实现 block 级元数据管理，不碰 tensor、不碰 attention、不�
 class Block:
     block_id: int
     ref_count: int = 0
-    # M5 预留字段（M4 不使用）
-    hash: int = -1
-    token_ids: list[int] = field(default_factory=list)
 
 
 class BlockPool:
@@ -51,16 +48,24 @@ class BlockPool:
     def inc_ref(self, block_id: int) -> None: ...
     def dec_ref(self, block_id: int) -> None: ...
     def can_allocate(self, num_blocks: int) -> bool: ...
+
+    @property
+    def num_free_blocks(self) -> int: ...
 ```
 
-T1 暂不复制 KV tensor。M5 的 `copy_on_write()` 放在 T1 不做，因为 T1 不应该依赖 tensor，且 M4 不需要 CoW。
+M4 的 `Block` 只保存 `block_id/ref_count`，不提前放置 prefix cache 字段。M5 再新增 `block_hash/token_ids` 等缓存元数据。
+
+T1 不复制 KV tensor，也不实现 `copy_on_write()`。M5 的 partial-hit CoW 需要拷贝 K/V，职责属于 `PagedKVCache`，不属于只管理元数据的 BlockPool。
 
 ## 接口语义
 
 ### `__init__(num_blocks: int, block_size: int)`
 
-- `num_blocks`：物理 block 总数。
-- `block_size`：每个 block 容纳的 token 数。
+<!-- codeflicker-fix: EDGE-Issue-004/stva3u29f3klfevrjaqn -->
+
+- `num_blocks`：物理 block 总数，必须是正整数。
+- `block_size`：每个 block 容纳的 token 数，必须是正整数。
+- 任一参数小于等于 0 时，`raise ValueError`。
 - 初始化 `blocks: list[Block]` 和 `free_block_ids: deque[int]`。
 
 ### `allocate() -> int`
@@ -72,27 +77,40 @@ T1 暂不复制 KV tensor。M5 的 `copy_on_write()` 放在 T1 不做，因为 T
 
 ### `free(block_id: int) -> None`
 
-- 等价于 `dec_ref(block_id)`。
+<!-- codeflicker-fix: API-Issue-002/stva3u29f3klfevrjaqn -->
+
+- 请求释放一个 block 引用；实现上等价于 `dec_ref(block_id)`。
 - ref_count 减 1，降为 0 时归还空闲池。
 - block_id 越界，`raise ValueError`。
-- ref_count 已经是 0，`raise AssertionError`，避免 double free。
+- ref_count 已经是 0，显式 `raise RuntimeError`，避免 double free。
+- 请求生命周期代码优先调用 `free()`；`dec_ref()` 是底层引用计数原语。
 
 ### `inc_ref(block_id: int) -> None`
 
+<!-- codeflicker-fix: LOGIC-Issue-001/stva3u29f3klfevrjaqn -->
+
+- 仅允许增加**已分配 block**（`ref_count > 0`）的引用计数。
 - `ref_count += 1`。
-- 用于 M5 Prefix Cache 命中时调用。
-- block_id 越界要报错。
+- 用于 M5 Prefix Cache 命中已在用 block 等共享场景。
+- block_id 越界时 `raise ValueError`。
+- block 仍在空闲池（`ref_count == 0`）时 `raise RuntimeError`，避免同一 block 同时处于空闲和被引用状态。
+- M5 若要重新激活 ref_count=0 的缓存 block，应通过独立 `touch()` 将其先从淘汰队列移除，不复用 M4 的 `inc_ref()`。
 
 ### `dec_ref(block_id: int) -> None`
 
 - `ref_count -= 1`。
 - 如果降到 0，自动进入 free list。
-- 如果本来就是 0，`raise AssertionError`，避免 double free。
+- block_id 越界时 `raise ValueError`。
+- 如果本来就是 0，显式 `raise RuntimeError`，避免 double free。
 
 ### `can_allocate(num_blocks: int) -> bool`
 
+<!-- codeflicker-fix: EDGE-Issue-005/stva3u29f3klfevrjaqn -->
+
 - 检查是否有足够空闲 block。
-- 返回 `len(free_block_ids) >= num_blocks`。
+- `num_blocks < 0` 时 `raise ValueError`。
+- `num_blocks == 0` 时返回 `True`。
+- 其他情况返回 `len(free_block_ids) >= num_blocks`。
 
 ### `num_free_blocks -> int`（property）
 
@@ -139,43 +157,51 @@ T1 暂不复制 KV tensor。M5 的 `copy_on_write()` 放在 T1 不做，因为 T
 
 ### L0-4 dec_ref 自动释放
 
-- allocate 得到 block 0
-- `dec_ref(0)` 后 refcount=0，block 0 回到 free list
-- 再 allocate 应该能拿回 block 0
+<!-- codeflicker-fix: LOGIC-Issue-003/stva3u29f3klfevrjaqn -->
+
+- `num_blocks=1`，allocate 得到 block 0。
+- `dec_ref(0)` 后 refcount=0，block 0 回到 free list。
+- 再 allocate 能拿回 block 0。
 
 ### L0-5 double free 防御
 
-- refcount 已是 0 时调用 `dec_ref(0)` raise AssertionError
-- `free(0)` 在 refcount=0 时也 raise AssertionError
+- refcount 已是 0 时调用 `dec_ref(0)` raise RuntimeError。
+- `free(0)` 在 refcount=0 时也 raise RuntimeError。
 
 ### L0-6 inc_ref / dec_ref
 
-- allocate block 0，ref=1
-- inc_ref 后 ref=2
-- dec_ref 后 ref=1，不释放
-- dec_ref 后 ref=0，释放
+- allocate block 0，ref=1。
+- inc_ref 后 ref=2。
+- dec_ref 后 ref=1，不释放。
+- dec_ref 后 ref=0，释放。
+- 对从未 allocate 的空闲 block 调用 inc_ref raise RuntimeError。
 
 ### L0-7 can_allocate
 
-- num_blocks=3
-- can_allocate(3) == True
-- allocate 三次后 can_allocate(1) == False
-- dec_ref 一个后 can_allocate(1) == True
+- num_blocks=3。
+- can_allocate(3) == True。
+- allocate 三次后 can_allocate(1) == False。
+- dec_ref 一个后 can_allocate(1) == True。
+- can_allocate(0) == True。
+- can_allocate(-1) raise ValueError。
 
 ### L0-8 invalid block id
 
 - `inc_ref(-1)` / `inc_ref(num_blocks)` raise ValueError
 - `dec_ref(-1)` / `free(num_blocks)` raise ValueError
 
-### L0-9 block_size 存储
+### L0-9 构造参数与 block_size
 
-- `BlockPool(num_blocks=10, block_size=16).block_size == 16`
-- `BlockPool(num_blocks=10, block_size=32).block_size == 32`
+- `BlockPool(num_blocks=10, block_size=16).block_size == 16`。
+- `BlockPool(num_blocks=10, block_size=32).block_size == 32`。
+- `num_blocks <= 0` / `block_size <= 0` raise ValueError。
 
 ## DoD
 
 - [ ] `BlockPool` 单测全过。
+- [ ] free-list 与 ref_count 状态一致：空闲 block 必须 ref=0，ref>0 的 block 不在 free list。
+- [ ] 所有公开方法使用显式异常，不依赖 `assert` 做运行时校验。
 - [ ] 不依赖 attention/model/tensor。
 - [ ] 不修改 M3 `BatchedKVCache`。
-- [ ] 不含 `copy_on_write`（移 M5）。
+- [ ] 不含 prefix cache 元数据和 `copy_on_write`（移 M5）。
 - [ ] `docs/tasks/M4-archive/M4-T1-BlockPool.md` 末尾追加完成总结。
