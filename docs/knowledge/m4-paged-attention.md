@@ -1,15 +1,17 @@
 # inferlite M4 技术设计：PagedAttention
 
-> **状态**：⬜ 未开始
-> **作者**：luhao
-> **基于**：M3 tag `m3/continuous-batching`
-> **作战地图**：[M4.md](../plan/M4.md)
+| 字段 | 内容 |
+|---|---|
+| 状态 | 🟡 进行中（T1 BlockPool 已完成实现验证） |
+| 作者 | luhao |
+| 基于 | M3 tag `m3/continuous-batching` |
+| 作战地图 | [M4.md](../plan/M4.md) |
 
 ---
 
 ## 摘要
 
-M3 用 fixed-slot KV Cache 跑通了 continuous batching，但每个请求独占 `max_seq_len` 连续物理空间，短请求浪费严重，也无法表达 prefix 共享。M4 引入 PagedAttention：把每个请求的逻辑 KV 切成固定大小 block，通过 block table 映射到非连续物理 block。M4 不追求 vLLM/Triton 性能，只做纯 PyTorch 伪版，目标是把 block table、refcount、Copy-on-Write 机制讲清楚、测清楚，为 M5 Prefix Cache 和 M9 kernel 打基础。
+M3 用 fixed-slot KV Cache 跑通了 continuous batching，但每个请求独占 `max_seq_len` 连续物理空间，短请求浪费严重，也无法表达 prefix 共享。M4 引入 PagedAttention：把每个请求的逻辑 KV 切成固定大小 block，通过 block table 映射到非连续物理 block。M4 不追求 vLLM/Triton 性能，只做纯 PyTorch 伪版，目标是把 block pool、block table 和按需分页讲清楚、测清楚。M4 保留 `ref_count` 基础能力，但不实现 CoW；Prefix Caching、LRU 和 partial-hit CoW 统一留到 M5。
 
 ---
 
@@ -23,8 +25,8 @@ M3 用 fixed-slot KV Cache 跑通了 continuous batching，但每个请求独占
 | physical_block | KV 池中的实际 block id | `0..num_blocks-1` |
 | block_offset | token 在 block 内的偏移 | `pos % block_size` |
 | block_table | logical_block -> physical_block 的映射 | `list[int]` |
-| ref_count | 物理 block 被多少请求引用 | ≥0 |
-| CoW | Copy-on-Write，共享 block 写入前复制 | — |
+| ref_count | 物理 block 的生命周期引用计数；M4 建立基础不变量 | ≥0 |
+| CoW | Copy-on-Write，共享 block 写入前复制；M4 不做，M5 partial hit 再引入 | — |
 
 ---
 
@@ -38,8 +40,8 @@ vLLM 的核心观察：KV Cache 又大又动态，传统连续内存管理会因
 
 - 物理 block 不要求连续。
 - 内存按需分配，浪费只发生在最后一个 block。
-- block table 使多个 sequence 可以共享同一 physical block。
-- refcount + Copy-on-Write 保证共享安全。
+- block table 具备表达共享 physical block 的能力，但 M4 不主动发现或复用跨请求前缀。
+- vLLM V1 通过引用计数、free queue 与 prefix cache 管理共享生命周期；需要写入共享 partial block 时由上层 cache 管理执行 CoW。
 
 ### 1.2 nano-vllm 实现
 
@@ -47,13 +49,13 @@ vLLM 的核心观察：KV Cache 又大又动态，传统连续内存管理会因
 
 | 文件 | 作用 | M4 借鉴点 |
 |---|---|---|
-| `engine/block_pool.py` | `Block` / `BlockPool` / refcount / hash | block 分配、释放、refcount、prefix hash |
+| `engine/block_manager.py` | `Block` / `BlockManager` / refcount / hash | block 分配、释放和 prefix hash 的参考实现 |
 | `engine/sequence.py` | `Sequence.block_table`、`num_cached_tokens` | request 内部维护 block table |
 | `engine/scheduler.py` | schedule prefill/decode，调用 block manager | allocate/may_append/postprocess 的时机 |
 | `engine/model_runner.py` | `slot_mapping`、`block_tables` 构造 | input token 到 KV 物理槽位的映射 |
 | `layers/attention.py` | `store_kvcache` + FlashAttention block_table | M9 kernel 参考，M4 只做 PyTorch 伪版 |
 
-M4 不直接照搬 nano-vllm，因为它依赖 CUDA/Triton/FlashAttention，并且已经包含 chunked prefill/prefix cache 逻辑。inferlite M4 只取：block manager、block table、slot mapping、refcount/CoW 的核心抽象。
+M4 不直接照搬 nano-vLLM，因为它依赖 CUDA/Triton/FlashAttention，并且已经包含 chunked prefill/prefix cache 逻辑。inferlite M4 只取 block pool、block table、slot mapping 和引用计数的核心抽象；hash、LRU 与 CoW 留到 M5。
 
 ---
 
@@ -70,7 +72,8 @@ nano-vLLM
 
 inferlite M4
   = 纯 PyTorch / Mac 友好的 PagedAttention 机制教学版
-    只解决 block table + refcount + CoW + paged gather 正确性
+    只解决 block pool + block table + paged gather 正确性
+    不包含 prefix cache 与 CoW
 ```
 
 ### 2.1 总体相同点
@@ -85,7 +88,7 @@ inferlite M4
 | physical block 非连续 | ✅ | ✅ | ✅ |
 | 按需分配 block | ✅ | ✅ | ✅ |
 | refcount | ✅ | ✅ | ✅ |
-| Copy-on-Write | ✅ | 部分/可支持 | ✅ |
+| Copy-on-Write | ❌（M5） | prefix cache 场景需要 | ✅ |
 | 目标：减少固定 `max_seq_len` 预留浪费 | ✅ | ✅ | ✅ |
 
 所以 M4 学的是和 vLLM/nano-vLLM 同一个核心思想：**把 KV Cache 从连续数组改成虚拟内存式分页管理**。
@@ -96,7 +99,7 @@ inferlite M4
 |---|---|---|
 | 运行设备 | CPU/MPS 友好，纯 PyTorch | 主要 CUDA |
 | Attention 实现 | PyTorch gather 伪版：先 gather 成连续 KV，再走普通 attention | `store_kvcache` Triton kernel + FlashAttention block_table |
-| 目标 | 先理解 block table / refcount / CoW | 更接近可跑的高性能 vLLM 简化版 |
+| 目标 | 先理解 block pool / block table / paged gather | 更接近可跑的高性能 vLLM 简化版 |
 | Prefix Cache | M4 不做 hash prefix lookup，留 M5 | `BlockPool` 已有 `hash_to_block_id` / `compute_hash` |
 | Chunked Prefill | 不做，留 M10 | scheduler 里已有 token budget / chunked prefill 逻辑 |
 | Scheduler | 沿用 M3：逐条 prefill + batched decode | 已有 prefill/decode schedule，支持 `max_num_batched_tokens` |
@@ -137,7 +140,7 @@ logical pos → physical block + offset
   ↓
 按需分配
   ↓
-refcount / CoW
+引用计数生命周期
   ↓
 paged gather 后 attention 正确
 ```
@@ -223,7 +226,7 @@ FlashAttention / PagedAttention kernel 直接算 attention
 
 **Context**：M3 的 `BatchedKVCache` 已经稳定，用于 fixed-slot continuous batching。直接改会破坏 M3 回归。
 
-**Decision**：新建 `inferlite/model/paged_kv_cache.py`，提供 `PagedKVCache` / `PagedLayerKVCache` / `BlockPool` / `BlockTable`。M3 代码保留，M4 通过可选参数或新入口启用 paged 路径。
+**Decision**：新建 `inferlite/cache/paged_kv_cache.py`，提供 `PagedKVCache` / `PagedLayerKVCache` / `BlockTable`；`BlockPool` 保持在 `inferlite/cache/block_pool.py`。M3 代码保留，M4 通过可选参数或新入口启用 paged 路径。
 
 **Consequences**：
 - ✅ M3 fixed-slot 可作为 oracle 做正确性对比。
@@ -251,16 +254,16 @@ FlashAttention / PagedAttention kernel 直接算 attention
 - ✅ 单测更有效。
 - ❌ metadata 相对开销更大；教学版接受。
 
-### ADR-04：M4 做 refcount/CoW，但不做 prefix hash lookup
+### ADR-04：M4 保留 refcount，但不做 CoW 和 prefix hash lookup
 
-**Context**：Prefix Cache 是 M5；但没有 refcount/CoW，M5 无法安全共享 block。
+**Context**：vLLM V1 的 beam search 在上层以独立请求实现，公共完整前缀由 prefix caching 自动复用；M4 尚未实现 prefix cache，因此没有真实共享写入场景。
 
-**Decision**：M4 的 `BlockPool` 提供 `inc_ref` / `dec_ref` / `copy_on_write` 能力；但不做 `hash_to_block_id` prefix lookup 策略。
+**Decision**：M4 的 `BlockPool` 只提供 allocate/free/inc_ref/dec_ref 基础能力，不提供 `copy_on_write` 或 `hash_to_block_id`。M5 增加 hash、LRU 和 partial-hit CoW。
 
 **Consequences**：
-- ✅ M5 可直接复用。
-- ✅ M4 边界清楚。
-- ❌ M4 中 CoW 只能通过人工构造共享 block table 测试。
+- ✅ M4 只聚焦分页分配与映射，边界更清楚。
+- ✅ refcount 不变量可直接为 M5 复用。
+- ❌ M4 不支持跨请求 prefix block 自动共享。
 
 ### ADR-05：M4 暂不做 chunked prefill
 
@@ -326,7 +329,7 @@ batch 内多个请求 gather 后 padding 到同一个 `max_seq_len_in_batch`，�
 
 | 里程碑 | M4 提供什么 |
 |---|---|
-| M5 Prefix Cache | block table + refcount + CoW，使公共前缀 block 可以共享 |
+| M5 Prefix Cache | block table + refcount 基础；M5 增加 hash、LRU 与 partial-hit CoW |
 | M9 Triton kernel | PyTorch gather 伪版提供正确性 oracle，Triton kernel 替换 gather/read/write |
 | M10 Chunked Prefill | block table 可表达长 prompt 分块写入 |
 | M6 API/SSE | M4 不是硬依赖，但可降低长请求并发时的内存浪费 |
@@ -339,7 +342,7 @@ batch 内多个请求 gather 后 padding 到同一个 `max_seq_len_in_batch`，�
 |---|---|
 | logical block 和 physical block 混用 | 所有变量命名显式带 `logical_` / `physical_` |
 | offset off-by-one | 单测覆盖 block 边界：15/16/17、31/32/33 |
-| free 时重复释放共享 block | refcount 为 0 才进 free list |
-| CoW 后 block_table 未替换 | `copy_on_write(table, logical_idx)` 返回新 physical id 并写回 table |
-| gather padding 读到垃圾 | per-row mask 必须按 seq_len 构造 |
+| free 时重复释放 block | refcount 为 0 才进 free list；double free 显式报错 |
+| M4/M5 边界混淆 | M4 不实现 hash/LRU/CoW；M5 再增加共享与淘汰 |
+| gather padding 读到垃圾或 NaN | score mask 保证语义；无效 K/V 尾部清零保证数值安全 |
 | M3 回归被破坏 | fixed-slot 路径不动，M4 新类型分派 |
