@@ -8,7 +8,7 @@
 |---|---|
 | 任务 ID | M4-T2 |
 | 里程碑 | M4 — PagedAttention |
-| 状态 | ⬜ pending |
+| 状态 | ✅ done |
 | 前置 | M4-T1 — BlockPool ✅ |
 | 后续 | M4-T3 — PagedKVCache |
 | 估时 | 1h |
@@ -421,6 +421,8 @@ BlockTable 的所有操作都是 O(1)，这是 PagedAttention 能做到低开销
 | 8 | 构造参数 | `block_size<=0`、`seq_len<0`、`seq_len>capacity`、负 `block_ids` 抛 `ValueError` |
 | 9 | 多请求隔离 | 两个 BlockTable 各自 `append_block`/`extend` 互不影响 |
 
+实现时 L0-5 拆成了两个用例：「写满需要新块」与「预分配富余块不得误判」方向相反，混在同一函数里失败时无法区分是哪个方向错。因此最终为 10 个测试函数。
+
 ### 测试命令
 
 ```bash
@@ -499,16 +501,16 @@ uv run pytest tests/unit/test_block_table.py -q
 
 ## DoD
 
-- [ ] `BlockTable` 实现与任务卡接口合同一致。
-- [ ] `uv run pytest tests/unit/test_block_table.py -q` 全绿。
-- [ ] `uv run pytest tests/ -q` 全量回归通过。
-- [ ] 满足不变量 `0 <= seq_len <= capacity`，且写入口是唯一修改途径。
-- [ ] 调用方可能触发的错误用显式 `ValueError` / `RuntimeError`；仅内部不变量用 `assert`。
-- [ ] 不 import torch，不依赖 `BlockPool` / attention / model。
-- [ ] 不修改 M3 `BatchedKVCache`。
-- [ ] 不含 prefix hash / `token_ids` / LRU / CoW 字段（留 M5）。
-- [ ] 实现与测试文件均补齐详细注释（README 提交门禁）。
-- [ ] 末尾追加 `## 完成总结` 与 commit 号。
+- [x] `BlockTable` 实现与任务卡接口合同一致。
+- [x] `uv run pytest tests/unit/test_block_table.py -q` 全绿（10 passed）。
+- [x] `uv run pytest tests/ -q` 全量回归通过（227 passed）。
+- [x] 满足不变量 `0 <= seq_len <= capacity`，且写入口是唯一修改途径（约定，已写入类 docstring）。
+- [x] 调用方可能触发的错误用显式 `ValueError` / `RuntimeError`；仅内部不变量用 `assert`。
+- [x] 不 import torch，不依赖 `BlockPool` / attention / model。
+- [x] 不修改 M3 `BatchedKVCache`。
+- [x] 不含 prefix hash / `token_ids` / LRU / CoW 字段（留 M5）。
+- [x] 实现与测试文件均补齐详细注释（README 提交门禁）。
+- [x] 末尾追加 `## 完成总结` 与 commit 号。
 
 ## 坑（按概率排序）
 
@@ -519,3 +521,55 @@ uv run pytest tests/unit/test_block_table.py -q
 5. **`last_block_offset` 在写满时返回 0**：误当成"最后一块还剩 0 个位置可用"就会漏分配。判断是否需要新块只用 `needs_new_block()`。
 6. **给 `append_block` 加假的上界校验**：BlockTable 拿不到 `num_blocks`，任何自造上界都是错的。这不是遗漏，而是"不依赖 BlockPool"这一设计的直接后果 —— 上界由 `BlockPool.allocate()` 在发号时保证，它才是知道总量的那一方。
 7. **提前实现 M5**：不加 hash、`token_ids`、LRU 或 CoW。
+
+## 完成总结
+
+M4-T2 已完成逻辑位置到物理 block 的映射层：
+
+- `BlockTable` 保存 `request_id` / `block_size` / `block_ids` / `seq_len` 四个字段，纯 Python 实现，不 import torch、不依赖 `BlockPool`。
+- 四个只读 property（`num_blocks` / `capacity` / `num_full_blocks` / `last_block_offset`）全部实时派生，避免与 `block_ids`、`seq_len` 出现「两份事实」。
+- `position_to_block()` 先校验定义域 `[0, seq_len)` 再做除法取模，显式拒绝负数以避免 Python 反向索引静默返回错误物理块。
+- `append_block()` 只增 `capacity`，`extend()` 只增 `seq_len`，两者共同守住 `seq_len <= capacity`。
+- 异常分层与 T1 一致：全部对外契约用显式 `ValueError` / `RuntimeError`，仅 `position_to_block()` 中 `logical_block < num_blocks` 这一条内部不变量使用 `assert`。
+
+### 实现期间修正的设计问题
+
+1. **`needs_new_block()` 语义**：草稿的 `seq_len % block_size == 0 and seq_len > 0` 有两个错误场景 —— `capacity == 0`（刚创建）时漏判为 False，导致上层不分配首块；预分配富余块（`seq_len=32`、`capacity=48`）时误判为 True，导致上层白白多要一块。改为直接比较 `seq_len >= capacity` 后对所有中间状态都成立。
+2. **`__post_init__` 的比较符**：`seq_len < capacity` 会让「正好写满」无法构造，且默认构造（`seq_len=0`、`capacity=0`）直接失败。修正为 `seq_len > capacity` 才报错。
+3. **assert 与 raise 混用**：初版把四条构造校验全写成 `assert`，`python -O` 下会整条移除，使校验在生产环境静默失效，且抛出的 `AssertionError` 与合同约定的 `ValueError` 不符。已全部改为显式异常。
+4. **`extend()` 的异常类型**：初版用 `NotImplementedError`（语义是「功能未实现」，会被误读为 TODO），改为 `RuntimeError`，与 T1 `BlockPool.allocate()` 耗尽时保持一致。
+5. **`last_block_capacity` 更名**：`seq_len % block_size` 是「最后一块已用多少」，命名含 capacity 容易被理解成「还能放多少」，T3 写入时用反会很难查。已改为 `last_block_offset`。
+
+### 关于字段可写性的取舍
+
+`seq_len` 和 `block_ids` 保持为普通 dataclass 字段，未做私有化（`_seq_len` + 只读 property）。这意味着外部仍可绕过写入口直接赋值破坏不变量。选择保持现状的理由：
+
+- T3 是唯一调用方，教学项目中可读性优先于强封装。
+- 测试需要直接构造 `block_ids=[7, 2, 5]` 来验证乱序映射（L0-3），加下划线前缀会让测试变得别扭。
+- vLLM 同样直接暴露 `req_to_blocks` 等结构。
+
+该约定已写入类 docstring，明确「应只通过 `extend()` / `append_block()` 修改」。
+
+### 验证结果（2026-07-28）
+
+```text
+ruff format + ruff check inferlite/cache/ tests/unit/test_block_table.py
+All checks passed!
+
+pytest tests/unit/test_block_table.py -q
+10 passed
+
+pytest tests/ -q
+227 passed
+
+python -O -m pytest tests/unit/test_block_table.py -q
+10 passed
+```
+
+最后一条是专门验证异常分层的：若某条对外契约仍用 `assert`，`-O` 模式下该测试会因异常类型不符而失败。
+
+测试文件包含 10 个函数（任务卡 L0 清单 9 项，其中 L0-5 拆为「写满需要新块」与「预分配富余块不得误判」两个独立用例，因为它们是相反方向的判断，合并后失败时无法定位方向）。
+
+核心实现由作者本人手写；Agent 负责任务卡、Review、详细注释补充、单元测试与验证。
+
+最终代码提交：见本任务卡提交记录。

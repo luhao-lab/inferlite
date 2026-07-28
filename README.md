@@ -133,7 +133,7 @@ M12+ 暂不排固定日期，进入长期能力池；只有 M11（2026-09-20）�
 - ✅ **M3** Continuous Batching（tag: `m3/continuous-batching`，2026-07-19）
   - T1~T7 全部完成，fixed-slot continuous batching + metrics/benchmark，E2E 与 serial generate 等价
 - 🟡 **M4** PagedAttention（排期 W1～W2，至 2026-08-02）
-  - T1 BlockPool 已完成（commit: `7d51e25`）；T2–T7 继续推进
+  - T1 BlockPool、T2 BlockTable 已完成；T3–T7 继续推进
 - ⬜ **M5** Prefix Caching
 - ⬜ **M6** API + SSE
 - ⬜ **M7–M11** MoE / 推测解码 / 核心算子 / 长上下文 / 多模态
