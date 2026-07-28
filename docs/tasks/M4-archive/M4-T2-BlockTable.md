@@ -75,6 +75,38 @@ M4-T2 BlockTable   M4-T1 BlockPool ✅
 
 BlockTable 与 BlockPool 是**平级**的，互不依赖，都由 T3 组合使用。
 
+### block_id 是编号，不是地址
+
+一个容易误解的点：`block_id` 不是内存地址，也不是任何形式的指针。
+
+T1 `BlockPool` 里没有任何 tensor、指针或地址，全部数据只有 `Block(block_id=i)` 和 `deque(range(num_blocks))` —— 它就是一个"0 到 `num_blocks-1` 的编号池，附带每个编号的引用计数"。
+
+这里的 physical / logical 是**两层索引之间的相对关系**，不是"虚拟内存 vs 物理内存"那种硬件含义。`block_id` 之所以叫 physical，只因为它全局唯一、跨请求共享 —— 相对于每个请求各自从 0 开始编号的 logical block index 而言。
+
+完整的三层索引模型：
+
+```text
+逻辑层：请求视角的 token 位置     pos = 0 .. seq_len-1
+              |  BlockTable 翻译（T2）
+              v
+物理层：全局共享的 block 编号     block_id = 0 .. num_blocks-1
+              |  PagedKVCache 索引（T3）
+              v
+真实内存：tensor 第 0 维下标      k[block_id, offset, head, dim]
+```
+
+编号变成真实地址发生在 T3：`block_id` 用作 `k: [num_blocks, block_size, n_kv_heads, head_dim]` 的第 0 维下标，真正的地址由 PyTorch 按 stride 算出。BlockPool 和 BlockTable 都只管到第一步之前。
+
+这样分层有三个收益：
+
+1. **同一个 pool 服务所有层**。Qwen3-0.6B 有 28 层，若 pool 管地址就要管 28×2 个 tensor。而 `block_id=5` 对 28 层都成立 —— 每层的 `k[5]` 是不同内存，但共用同一个编号，分配逻辑只需写一份。
+2. **与 device / dtype 解耦**。CPU / MPS / CUDA、fp16 / bf16，映射代码完全不变，地址与对齐全归 PyTorch。
+3. **让 M5 的引用计数有意义**。prefix caching 让两请求共享同一 `block_id`（`ref_count=2`），共享的是廉价整数，底层内存自然被共享，无需任何拷贝或地址运算。
+
+vLLM 是同构设计：其 `BlockPool` 同样只管 `block_id` 和 `ref_cnt`，真实 `kv_cache` tensor 由 worker 持有，`block_id` 最终展平成 `slot_mapping` 交给 kernel 做地址计算。
+
+对 T2 的直接影响：既然只处理编号，`BlockTable` 就不需要 import torch。如果实现时发现自己想 import，说明有逻辑串到 T3 去了。
+
 ### 设计原则
 
 - **纯 Python，零依赖**：不 import torch，不 import BlockPool。这让它可以被单独测试，也让"位置映射算错"和"tensor 写错"两类 bug 互不掩盖。
@@ -133,6 +165,114 @@ class BlockTable:
 `block_ids` 必须用 `field(default_factory=list)`。写成 `block_ids: list[int] = []` 会让所有 BlockTable 实例共享同一个列表对象，多请求隔离直接失效。
 
 M4 的 `BlockTable` 不预埋 `block_hashes` / `token_ids` 字段。M5 做 prefix caching 时再新增。
+
+## 与 BlockPool 的关系
+
+这一节回答两个容易混淆的问题：两个类各自负责什么，以及为什么它们在代码层面没有依赖。
+
+### 职责切分
+
+| | BlockPool（T1） | BlockTable（T2） |
+|---|---|---|
+| 数量 | 全局 **1 个** | 每个请求 **1 个** |
+| 回答的问题 | 哪些块空闲？这块被几个人用着？ | 我这个请求的第 pos 个 token 在哪块的哪个位置？ |
+| 核心数据 | `free_block_ids`、`ref_count` | `block_ids`（有序）、`seq_len` |
+| 视角 | 全局资源账本（集合语义） | 单请求顺序记录（**序列语义**） |
+
+一句话概括：**BlockPool 决定块归谁，BlockTable 决定块的顺序。**
+
+`block_ids` 是 list 而不是 set，这是本质区别 —— 顺序本身就是信息。`block_ids=[7, 2]` 和 `[2, 7]` 对 BlockPool 完全等价（都是"7 和 2 被占用"），但对 BlockTable 是两个不同的序列：token 0 分别落在物理块 7 和物理块 2。
+
+### 代码层面没有依赖
+
+T2 不 import `BlockPool`、不持有它的引用、不调用它的任何方法。两者平级，由 T3 组合：
+
+```text
+        M4-T3 PagedKVCache        <- 唯一同时认识两者的人
+        +--------+--------+
+        v                 v
+  BlockTable          BlockPool
+（每请求一个）        （全局一个）
+        +---  互不认识  ---+
+```
+
+协作不通过直接调用，而是通过 `block_id` 这个整数，T3 做中间人。以下是 T3 的伪代码示意（**下周 T3 的内容，T2 不实现**）：
+
+```python
+# prefill：向 pool 要块，把编号交给 table
+def allocate_request(self, request_id, prompt_len):
+    num_needed = ceil(prompt_len / self.block_size)
+    if not self.block_pool.can_allocate(num_needed):    # 问 pool 够不够
+        raise ...
+    table = BlockTable(request_id, self.block_size)
+    for _ in range(num_needed):
+        table.append_block(self.block_pool.allocate())  # pool 发号，table 记顺序
+    table.extend(prompt_len)
+
+# decode：需要时补一块
+def may_append_block(self, request_id):
+    table = self.block_tables[request_id]
+    if table.needs_new_block():                         # table 说不够了
+        table.append_block(self.block_pool.allocate())  # 再去 pool 要
+    table.extend(1)
+
+# 释放：table 把编号还给 pool
+def free_request(self, request_id):
+    table = self.block_tables.pop(request_id)
+    for block_id in table.block_ids:
+        self.block_pool.free(block_id)
+
+# 读写：table 翻译位置，编号当 tensor 下标
+def write_decode(self, layer_idx, request_id, k, v):
+    table = self.block_tables[request_id]
+    block_id, offset = table.position_to_block(table.seq_len - 1)
+    self.layers[layer_idx].k[block_id, offset] = k
+```
+
+信息始终单向流动：`pool.allocate()` 产出编号 → `table.append_block()` 消费编号；释放时 `table.block_ids` 提供编号 → `pool.free()` 消费编号。两边都只碰整数。
+
+### 为什么刻意不让 BlockTable 依赖 BlockPool
+
+这是设计决定，不是简化：
+
+1. **两个关注点可独立演进**。M5 要给 pool 加 prefix hash 查找和 LRU 淘汰队列，pool 会复杂很多，而 BlockTable 的映射逻辑一行都不用改。
+2. **分配失败的处理归上层**。若 table 自己去 pool 要块，"块不够了"就会在 table 内部抛出。但此时该抢占别的请求还是把当前请求踢回等待队列，是**调度决策**，BlockTable 无从判断。所以要块必须由能做决策的 T3/T5 发起。
+3. **可独立测试**。T2 的单测直接构造 `block_ids=[7, 2, 5]` 即可，不需要真实分配、不需要 pool、不需要 torch。"映射算错"和"分配算错"两类 bug 互不掩盖。
+4. **避免双向引用**。若 table 持有 pool，很容易演化成 table 析构时自动 `free`；而 M5 又需要 pool 知道哪些 table 引用了某块 —— 双向依赖一旦成型就很难拆。
+
+### 走查示例：物理块复用
+
+`block_size=4`、pool 共 3 块、两个请求 A / B：
+
+```text
+初始       pool: free=[0,1,2]  ref=[0,0,0]
+
+A 到达，prompt_len=6，需 2 块
+           pool.allocate() -> 0      free=[1,2]  ref=[1,0,0]
+           pool.allocate() -> 1      free=[2]    ref=[1,1,0]
+           A.block_ids=[0,1]  A.seq_len=6
+
+B 到达，prompt_len=3，需 1 块
+           pool.allocate() -> 2      free=[]     ref=[1,1,1]
+           B.block_ids=[2]    B.seq_len=3
+
+此时映射互不干扰：
+  A.position_to_block(5) == (1, 1)   A 的第 6 个 token 在物理块 1 的 offset 1
+  B.position_to_block(2) == (2, 2)   B 的第 3 个 token 在物理块 2 的 offset 2
+
+A 结束释放
+           pool.free(0); pool.free(1)   free=[0,1]  ref=[0,0,1]
+
+B decode，seq_len 3 -> 4，恰好写满
+           B.needs_new_block() -> True  （seq_len 4 >= capacity 4）
+           pool.allocate() -> 0         <- 复用了 A 用过的块
+           B.block_ids=[2,0]
+  B.position_to_block(4) == (0, 0)
+```
+
+关键观察：B 最终的 `block_ids=[2, 0]` 逻辑上连续，物理编号却是倒序的。这正是 PagedAttention 消除内存碎片的机制，而实现它只需要"pool 管账本 + table 管顺序"这两个各自都很简单的部件。
+
+对比 M3 `SlotManager`：它给每个请求预留一整段 `max_seq_len`，A 释放的空间只能整段复用。B 写到第 5 个 token 时若自己那段已满，没有任何办法借用 A 腾出的空间。
 
 ## 接口合同
 
@@ -377,5 +517,5 @@ uv run pytest tests/unit/test_block_table.py -q
 3. **dataclass 可变默认值**：`block_ids: list[int] = []` 让所有实例共享同一列表，多请求彼此串数据。必须用 `field(default_factory=list)`。
 4. **混淆 logical index 与 physical id**：`block_ids[2]` 是"第 3 个逻辑块的物理 id"，不是"物理块 2"。命名和注释都要显式区分。
 5. **`last_block_offset` 在写满时返回 0**：误当成"最后一块还剩 0 个位置可用"就会漏分配。判断是否需要新块只用 `needs_new_block()`。
-6. **给 `append_block` 加假的上界校验**：BlockTable 拿不到 `num_blocks`，任何自造上界都是错的。上界由 `BlockPool` 负责。
+6. **给 `append_block` 加假的上界校验**：BlockTable 拿不到 `num_blocks`，任何自造上界都是错的。这不是遗漏，而是"不依赖 BlockPool"这一设计的直接后果 —— 上界由 `BlockPool.allocate()` 在发号时保证，它才是知道总量的那一方。
 7. **提前实现 M5**：不加 hash、`token_ids`、LRU 或 CoW。
