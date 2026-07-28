@@ -78,16 +78,26 @@ flowchart LR
 
 | 周次 | 日期 | 里程碑 | 本周最小闭环 | 周末交付 |
 |---|---|---|---|---|
-| W1 | 2026-07-20 ～ 2026-07-26 | **M4 PagedAttention** | BlockPool、BlockTable、PagedKVCache、PyTorch gather attention、batch engine 对齐 | 代码/测试全绿，benchmark，knowledge 收口，tag `m4/paged-attention` |
-| W2 | 2026-07-27 ～ 2026-08-02 | **M5 Prefix Caching** | 链式 hash、完整 block 复用、LRU、partial-hit CoW | 重复前缀 E2E、命中率 benchmark、文档与 tag |
-| W3 | 2026-08-03 ～ 2026-08-09 | **M6 API + SSE** | `inferlite serve`、请求协议、流式输出、基础 sampling 参数 | curl 可用、服务 E2E、v1.0 demo/Release 收口 |
-| W4 | 2026-08-10 ～ 2026-08-16 | **M7 MoE 模型支持** | 先跑通 MoE forward/dispatch，再做本周范围内可验证的优化 | 小模型 E2E、dense 回归、设计总结与 tag |
-| W5 | 2026-08-17 ～ 2026-08-23 | **M8 推测解码** | n-gram draft + verify/accept/rollback；EAGLE 只在前置具备时纳入 | token 等价、接受率与加速 benchmark、文档与 tag |
-| W6 | 2026-08-24 ～ 2026-08-30 | **M9 核心算子加速** | cache write / paged attention kernel；Mac 保留可验证 fallback | GPU 正确性与性能对比、fallback 回归、文档与 tag |
-| W7 | 2026-08-31 ～ 2026-09-06 | **M10 长上下文** | Chunked Prefill + YaRN/NTK RoPE scaling 最小闭环 | 长 prompt E2E、内存/延迟结果、文档与 tag |
-| W8 | 2026-09-07 ～ 2026-09-13 | **M11 多模态** | VLM 教学链路：图片编码、`inputs_embeds`、LLM decode | 小 VLM E2E、接口说明、文档与 tag |
+| W1 | 2026-07-20 ～ 2026-07-26 | **M4 PagedAttention**（起步） | T1 BlockPool：物理 block 元数据池与引用计数 | T1 代码/测试全绿，任务卡归档（`7d51e25`） |
+| W2 | 2026-07-27 ～ 2026-08-02 | **M4 PagedAttention**（收口） | T2–T7：BlockTable、PagedKVCache、PyTorch gather attention、batch engine 对齐 | 代码/测试全绿，benchmark，knowledge 收口，tag `m4/paged-attention` |
+| W3 | 2026-08-03 ～ 2026-08-09 | **M5 Prefix Caching** | 链式 hash、完整 block 复用、LRU、partial-hit CoW | 重复前缀 E2E、命中率 benchmark、文档与 tag |
+| W4 | 2026-08-10 ～ 2026-08-16 | **M6 API + SSE** | `inferlite serve`、请求协议、流式输出、基础 sampling 参数 | curl 可用、服务 E2E、v1.0 demo/Release 收口 |
+| W5 | 2026-08-17 ～ 2026-08-23 | **M7 MoE 模型支持** | 先跑通 MoE forward/dispatch，再做本周范围内可验证的优化 | 小模型 E2E、dense 回归、设计总结与 tag |
+| W6 | 2026-08-24 ～ 2026-08-30 | **M8 推测解码** | n-gram draft + verify/accept/rollback；EAGLE 只在前置具备时纳入 | token 等价、接受率与加速 benchmark、文档与 tag |
+| W7 | 2026-08-31 ～ 2026-09-06 | **M9 核心算子加速** | cache write / paged attention kernel；Mac 保留可验证 fallback | GPU 正确性与性能对比、fallback 回归、文档与 tag |
+| W8 | 2026-09-07 ～ 2026-09-13 | **M10 长上下文** | Chunked Prefill + YaRN/NTK RoPE scaling 最小闭环 | 长 prompt E2E、内存/延迟结果、文档与 tag |
+| W9 | 2026-09-14 ～ 2026-09-20 | **M11 多模态** | VLM 教学链路：图片编码、`inputs_embeds`、LLM decode | 小 VLM E2E、接口说明、文档与 tag |
 
-M12+ 暂不排固定日期，进入长期能力池；只有 M11 收口后，才从 LoRA、量化、TP/PP、Audio 等方向中选择一个单独立项。
+M12+ 暂不排固定日期，进入长期能力池；只有 M11（2026-09-20）收口后，才从 LoRA、量化、TP/PP、Audio 等方向中选择一个单独立项。
+
+### 排期调整记录
+
+- **2026-07-28：M4 由一周顺延为两周（W1 + W2），M5～M11 整体右移一周。**
+  - 原因一：T1 BlockPool 的接口合同经过三轮 Review 才收敛（`inc_ref` 前置条件、异常类型、free-list 复用顺序、构造参数校验）。
+  - 原因二：T1 全量回归时定位并修复了 M3 变长 batch 的 NaN 传播问题，属计划外但必须先修的正确性缺陷（见 [`lessons.md`](docs/knowledge/lessons.md) L5）。
+  - W2 直接从「周二～周三 核心实现」进入，不重复执行周一的范围冻结；范围已在 W1 冻结完毕。
+
+这里不采用「压缩 M4 范围赶上原周表」的做法：T2～T5 是 M5 Prefix Caching 的地基，地基上省下的时间会在后面以更高代价还回来。
 
 ### 每周执行节奏
 
@@ -122,7 +132,7 @@ M12+ 暂不排固定日期，进入长期能力池；只有 M11 收口后，才�
   - T1~T5 全部完成，新增 28 个单测，M1/M2 端到端 bench 实测加速 7.36×
 - ✅ **M3** Continuous Batching（tag: `m3/continuous-batching`，2026-07-19）
   - T1~T7 全部完成，fixed-slot continuous batching + metrics/benchmark，E2E 与 serial generate 等价
-- 🟡 **M4** PagedAttention
+- 🟡 **M4** PagedAttention（排期 W1～W2，至 2026-08-02）
   - T1 BlockPool 已完成（commit: `7d51e25`）；T2–T7 继续推进
 - ⬜ **M5** Prefix Caching
 - ⬜ **M6** API + SSE
