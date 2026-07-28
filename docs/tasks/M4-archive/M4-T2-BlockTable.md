@@ -572,4 +572,4 @@ python -O -m pytest tests/unit/test_block_table.py -q
 
 核心实现由作者本人手写；Agent 负责任务卡、Review、详细注释补充、单元测试与验证。
 
-最终代码提交：见本任务卡提交记录。
+最终代码提交：`a863a8f feat(kv-cache): add block table position mapping (M4-T2 done)`。
