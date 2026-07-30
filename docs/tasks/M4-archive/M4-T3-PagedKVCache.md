@@ -47,18 +47,20 @@ cache = PagedKVCache.from_config(
     config, num_blocks=64, block_size=16, dtype=torch.float32, device="cpu"
 )
 
-# prefill：一次分配 ceil(20/16)=2 块
+# prefill：两个请求已经分别 allocate，K/V 一次批量写入
 cache.allocate_request("req-0", prompt_len=20)
-cache.write_prefill(layer_idx=0, request_id="req-0", k=k_prompt, v=v_prompt)
+cache.allocate_request("req-1", prompt_len=5)
+cache.write_prefill(layer_idx=0, request_ids=["req-0", "req-1"], k=k_batch, v=v_batch)
 
-# decode：写满时自动补块
-cache.append_token("req-0")          # seq_len 20 -> 21
-cache.write_decode(0, "req-0", k_new, v_new)
+# decode：先逐请求扩展逻辑长度，再一次批量写入本轮的 2 个 token
+cache.append_token("req-0")
+cache.append_token("req-1")
+cache.write_decode(0, ["req-0", "req-1"], k_new_batch, v_new_batch)
 
 # attention 读取：批量 gather，返回 padding 后的 K/V 和有效长度
 k, v, valid_lens = cache.gather_kv(layer_idx=0, request_ids=["req-0", "req-1"])
 
-cache.free_request("req-0")          # 归还全部块
+cache.free_request("req-0")          # 归还 req-0 的全部块
 ```
 
 ### 不做什么
@@ -90,8 +92,10 @@ T3 是**唯一同时认识 BlockPool 和 BlockTable 的类**。它们互不依�
 ### 设计原则
 
 - **编号到地址只在这一层发生**。`block_id` 用作 tensor 第 0 维下标，其余全部交给 PyTorch。
+- **生命周期与张量路径分离**。allocate / append / free 由 scheduler 按请求决定；大 K/V tensor 的读写必须是 batch 路径。
+- **写入复刻 vLLM 数据流**。先从 BlockTable 生成扁平 `slot_mapping`，再一次 PyTorch scatter；M9 再替换为 kernel。
 - **不持有请求语义**。只认 `request_id: str`，不耦合 `RequestState`。
-- **失败必须原子**。分配中途失败要回滚已分配的块，不能泄漏。
+- **M4 分配使用预检查**。单线程、无抢占时，预检查之后没有其他 allocator 介入；M5/M6 引入并发后必须升级事务回滚。
 - **数值安全责任显式移交**。`gather_kv` 返回 `valid_lens`，调用方必须据此清零 padding（见 ADR-05）。
 
 ## 产出文件
@@ -137,12 +141,20 @@ class PagedKVCache:
     def append_token(self, request_id: str) -> None: ...
     def free_request(self, request_id: str) -> None: ...
 
-    # ── KV 写入 ──
+    # ── KV 写入（批量 slot scatter）──
     def write_prefill(
-        self, layer_idx: int, request_id: str, k: torch.Tensor, v: torch.Tensor
+        self,
+        layer_idx: int,
+        request_ids: list[str],
+        k: torch.Tensor,
+        v: torch.Tensor,
     ) -> None: ...
     def write_decode(
-        self, layer_idx: int, request_id: str, k: torch.Tensor, v: torch.Tensor
+        self,
+        layer_idx: int,
+        request_ids: list[str],
+        k: torch.Tensor,
+        v: torch.Tensor,
     ) -> None: ...
 
     # ── Attention 读取 ──
@@ -243,14 +255,75 @@ padding 区域的物理块可能从未写入，底层是 `torch.empty` 的未初
 - 用 `torch.empty` 预分配（与 M3 一致，不清零）。**注意由此产生的未初始化内存必须靠 `valid_lens` 屏蔽**。
 - `num_blocks <= 0` / `block_size <= 0` 由 `BlockPool` 校验抛 `ValueError`。
 
+### ADR-06：KV 写入采用批量 slot mapping scatter
+
+vLLM V1 的 KV 写入不是逐请求调用：runner 把本轮所有 token 展平，生成每个 token 的物理 `slot_mapping`，再由 `reshape_and_cache` kernel 一次 scatter 到 paged KV cache。T3 采用相同数据流的 PyTorch 教学版，M9 再把 scatter 替换为 kernel。
+
+#### slot 定义与 scatter
+
+```text
+slot = physical_block_id * block_size + block_offset
+```
+
+每层物理 tensor 的 shape 为 `[num_blocks, block_size, n_kv, D]`，可零拷贝 reshape 为 `[num_blocks * block_size, n_kv, D]`：
+
+```python
+flat_cache_k = layer.k.reshape(num_blocks * block_size, n_kv, head_dim)
+flat_cache_k[slot_mapping] = flat_k
+```
+
+| 名称 | shape | 语义 |
+|---|---|---|
+| `slot_mapping` | `[total_valid_tokens]`，long | 每个有效 token 的物理写入位置 |
+| `flat_k` / `flat_v` | `[total_valid_tokens, n_kv, D]` | 从 batch 输入滤出的有效 token KV |
+| `flat_cache_k/v` | `[num_blocks * block_size, n_kv, D]` | 物理 K/V tensor 的 reshape view |
+
+slot mapping 的生成允许用 Python 循环（只处理廉价整数）；大 tensor 搬运必须是一次高级索引 scatter。M4 不写 CUDA kernel。
+
+#### 变长 prefill：有效长度只信任 BlockTable
+
+严格前置：`allocate_request(request_id, prompt_len)` 已为每个请求建立 table，且 `table.seq_len == prompt_len`。因此 batch 的有效长度来自 table，**不额外传 `prompt_lens`**，避免同一长度出现两个事实来源：
+
+```text
+request_ids = ["a", "b"]
+table.seq_len = [20, 5]
+k/v shape = [2, n_kv, 20, D]
+
+写入 k[0, :, 0:20, :] 与 k[1, :, 0:5, :]
+绝不写 k[1, :, 5:20, :] 的 batch padding
+```
+
+M10 Chunked Prefill 中「本次写入长度」会与「累计 seq_len」不同，届时升级为 `write_tokens(request_ids, start_positions, token_lens, ...)`。
+
+#### 接口合同
+
+**`write_prefill(layer_idx, request_ids, k, v)`**：
+
+- `k/v` shape `[B, n_kv_heads, T_max, head_dim]`。
+- `request_ids` 非空、无重复，且 `len(request_ids) == B == k.shape[0] == v.shape[0]`；否则 `ValueError`。
+- 每个 id 必须已注册；否则 `KeyError`。`layer_idx` 越界；`IndexError`。
+- `T_max >= max(table.seq_len)`；否则 `ValueError`。
+- heads / head_dim / dtype / device 必须与目标 layer cache 一致；否则 `ValueError`。
+- 有效 token 总数 `sum(table.seq_len)` 必须等于 `slot_mapping.numel()`；每个有效 token 只写一次。
+
+**`write_decode(layer_idx, request_ids, k, v)`**：
+
+- `k/v` shape `[B, n_kv_heads, 1, head_dim]`，B 与 request_ids 同上。
+- K/V token 维不为 1 时 `ValueError`。
+- 调用方先对每个 id 调 `append_token()`；每个 table 的 `seq_len > 0`，否则 `RuntimeError`。
+- slot mapping shape `[B]`，第 i 个 slot 是第 i 个 table 的 `seq_len - 1`。
+
+两个 batch write 都不允许生产路径按 request 循环调用单请求写接口；不存在单请求 `write_prefill` / `write_decode` API。
+
 ### `allocate_request(request_id, prompt_len)`
 
 - `request_id` 已存在时 `raise ValueError`（重复注册通常是上层状态机 bug）。
 - `prompt_len <= 0` 时 `raise ValueError`。
 - 计算 `num_needed = ceil(prompt_len / block_size)`。
 - 逐个 `block_pool.allocate()`，`append_block` 到新建的 `BlockTable`，最后 `extend(prompt_len)`。
-- **块不足时必须回滚**：把本次已分配的块全部 `block_pool.free()` 后再 `raise RuntimeError`。这是最容易漏的一条 —— 循环到第 3 块耗尽时，前 2 块若不归还就永久泄漏，且不会当场报错，只表现为服务跑一段时间后分配不出块。
-- 更稳妥的写法是先 `block_pool.can_allocate(num_needed)` 预检查，但**仍需保留回滚逻辑**作为兜底。
+- 先调用 `block_pool.can_allocate(num_needed)` 预检查；不足时 `raise RuntimeError`，错误消息包含需要与可用的块数。
+- M4 是单线程且无抢占，预检查到 allocate 循环之间没有其他 allocator 介入，因此正常路径无需 `try/except` 回滚。
+- **升级条件**：M5/M6 若引入并发分配、抢占或可重入 callback，必须改为 `try/finally` 事务回滚；不可继续依赖预检查。
 
 ### `append_token(request_id)`
 
@@ -265,19 +338,6 @@ padding 区域的物理块可能从未写入，底层是 `torch.empty` 的未初
 - `request_id` 未注册时 `raise KeyError`。
 - 遍历 `table.block_ids` 逐个 `block_pool.free()`，然后从注册表移除。
 - M4 无 CoW，一个块只属于一个请求，因此可以无条件释放。M5 有共享后要改成按 ref_count 判断。
-
-### `write_prefill(layer_idx, request_id, k, v)`
-
-- `k` / `v` shape `[n_kv_heads, prompt_len, head_dim]`（与 attention 内部 `[B, n_kv, T, D]` 去掉 batch 维对应）。
-- `request_id` 未注册 → `KeyError`；`layer_idx` 越界 → `IndexError`。
-- `k.shape[1] != table.seq_len` 时 `raise ValueError`（写入长度与已声明的 `seq_len` 不符）。
-- 按 `position_to_block(pos)` 写入每个位置。教学版可用 Python 循环（prefill 每请求每层只做一次，不是热点）；如需向量化，按块切片写入。
-
-### `write_decode(layer_idx, request_id, k, v)`
-
-- `k` / `v` shape `[n_kv_heads, 1, head_dim]`。
-- 写入位置固定为 `table.seq_len - 1`，即 `append_token()` 刚腾出的那个位置。
-- **调用顺序契约**：必须先 `append_token()` 再 `write_decode()`。顺序颠倒会覆盖上一个 token 的 KV，且不报错 —— 属静默数据损坏，需在注释中显式警告。
 
 ### `gather_kv(layer_idx, request_ids) -> (k, v, valid_lens)`
 
@@ -326,11 +386,11 @@ pos（逻辑位置）
 ### 写入路径
 
 ```text
-prefill: allocate_request(prompt_len)   -> 一次分配 ceil(prompt_len/block_size) 块
-         write_prefill()                -> 按 position_to_block 逐位置写
+prefill: allocate_request(request, prompt_len)  -> 调度层逐请求分配 ceil(prompt_len/block_size) 块
+         write_prefill(batch)                  -> 从所有 table 生成 slot_mapping，一次 scatter
 
-decode:  append_token()                 -> 需要时补块，seq_len += 1
-         write_decode()                 -> 写 seq_len-1 位置
+decode:  append_token(request)                 -> 调度层逐请求补块并 seq_len += 1
+         write_decode(batch)                   -> B 个 slot，一次 scatter
 ```
 
 ### 状态不变量
@@ -346,18 +406,16 @@ free_request 后：num_free_blocks 恢复到该请求分配前的值
 
 ## 实现步骤
 
-1. 在 `paged_kv_cache.py` 追加 `PagedLayerKVCache` dataclass。
-2. 实现 `PagedKVCache.__init__` 与 `from_config`。
-3. 实现 `allocate_request`，**先写回滚逻辑**再写正常路径。
-4. 实现 `append_token` / `free_request`。
-5. 实现 `write_prefill` / `write_decode`，注意调用顺序契约。
-6. 实现 `gather_kv_single`（简单，先用它建立正确性基线）。
-7. 实现 `gather_kv` 批量版本，用 `gather_kv_single` 对比验证维度变换。
-8. 实现 `num_free_blocks` / `can_allocate` / `seq_len_of`。
-9. 在 `cache/__init__.py` 导出两个新类。
-10. 跑 T3 单测，再跑全量回归。
-
-第 6 步先于第 7 步是刻意的：批量版本的 `reshape` / `transpose` 容易把维度顺序写错，有了 oracle 才好调。
+1. 整理当前文件：标准库 / 第三方 / 本地 import 顺序，修正 `gather_kv_singe` 与 `request_ids` 拼写，补 `PagedKVCache` docstring；不实现单请求 write。
+2. 实现 `_blocks_needed`、`allocate_request`、`append_token`、`free_request`；分配按预检查版实现，并在注释写清单线程前提。
+3. 实现 layer / request / batch K/V shape 的共有校验 helper，避免两个 batch write 的合同漂移。
+4. 实现 `_make_prefill_slot_mapping`，用小例子逐项与 `position_to_block` 手算值比对。
+5. 实现 `write_prefill`：从 `[B, n_kv, T_max, D]` 滤出有效 token、生成 `flat_k/v`、一次 scatter。
+6. 实现 `_make_decode_slot_mapping` 与 `write_decode`：每个请求一个 token、一次 scatter。
+7. 实现 `gather_kv_single`（精确 oracle）。
+8. 实现 `gather_kv`（ADR-05 批量 gather），逐请求与 single 对比。
+9. 实现 `num_free_blocks` / `can_allocate` / `seq_len_of`，在 `cache/__init__.py` 导出新类，补全部注释。
+10. 按 slot mapping → batch write → gather oracle → 全量回归的顺序验证。
 
 ## 复杂度
 
@@ -366,8 +424,8 @@ free_request 后：num_free_blocks 恢复到该请求分配前的值
 | `allocate_request` | O(num_needed) | 逐块 allocate |
 | `append_token` | O(1) 均摊 | 多数步不分配 |
 | `free_request` | O(num_blocks_held) | 逐块归还 |
-| `write_prefill` | O(prompt_len) | 逐位置写；可优化为按块切片 |
-| `write_decode` | O(1) | 单位置写 |
+| `write_prefill` | O(total_valid_tokens × n_kv × D) | Python 生成 slots + 一次 tensor scatter；不写 batch padding |
+| `write_decode` | O(B × n_kv × D) | B 个 slot + 一次 tensor scatter |
 | `gather_kv` | O(B × L_pad × n_kv × D) | 一次高级索引复制；与 M3 同量级 |
 | `gather_kv_single` | O(seq_len) Python 循环 | 仅测试用 |
 
@@ -386,7 +444,8 @@ free_request 后：num_free_blocks 恢复到该请求分配前的值
 |---|---|---|
 | vLLM `kv_cache` tensor `[2, num_blocks, block_size, n_kv, D]` | 物理 KV 存储 | 每层 `PagedLayerKVCache.k/v` 分开存 |
 | vLLM `KVCacheManager.allocate_slots()` | 请求分配块 | `allocate_request()` / `append_token()` |
-| vLLM `slot_mapping` | 展平的写入位置，交给 kernel | `position_to_block()` 逐位置写（教学版） |
+| vLLM `slot_mapping` | 展平的写入位置，交给 kernel | `_make_*_slot_mapping()` + PyTorch scatter |
+| vLLM `reshape_and_cache` | batch KV scatter 写 cache | `flat_cache[slot_mapping] = flat_k/v`（教学版） |
 | vLLM paged attention kernel | kernel 内按 block table 寻址，无 padding | `gather_kv()` 先物化再算，有 padding（M9 优化） |
 | nano-vLLM `BlockManager` + `store_kvcache` | 块管理 + KV 写入 | T1 + T3 分开 |
 | vLLM `free_block_queue` 回收 | 释放 | `free_request()` |
@@ -398,15 +457,17 @@ free_request 后：num_free_blocks 恢复到该请求分配前的值
 | # | 测什么 | 预期 |
 |---|---|---|
 | 1 | `from_config` | 层数、K/V shape、pool 容量正确 |
-| 2 | prefill 跨多块 | `prompt_len=20`、`block_size=16` 占 2 块，逐位置读回一致 |
-| 3 | decode 跨块边界 | 写满时自动补块，`block_ids` 增长正确 |
+| 2 | batch prefill 跨多块 | `[20, 5]` 两请求单次 `write_prefill` 写入；各自逐位置读回正确，短请求 padding 未写入 |
+| 3 | batch decode 跨块 | 两请求先分别 append、再单次 `write_decode`；写满请求补块，另一请求不补，KV 都正确 |
 | 4 | `gather_kv_single` 正确性 | 与逐位置手工拼接一致 |
 | 5 | 批量与单请求一致 | `gather_kv` 前 `seq_len` 段等于 `gather_kv_single` |
 | 6 | `free_request` | 归还全部块，`num_free_blocks` 复原 |
-| 7 | 多请求隔离 | 交错 prefill/decode，KV 互不污染 |
+| 7 | batch 写入隔离 | 请求 a/b 值分别为 1/2，单次 scatter 后 gather 各自纯净 |
 | 8 | 分配失败无泄漏 | 块不足时抛 `RuntimeError` 且 `num_free_blocks` 不变 |
 | 9 | 未注册 request | 各接口抛 `KeyError` |
 | 10 | padding 区 NaN | 注入 NaN 后 `valid_lens` 足以让调用方清零 |
+| 11 | prefill slot mapping | 长度等于 `sum(seq_lens)`，每个 slot 与手工 BlockTable 映射一致 |
+| 12 | batch 输入合同 | B/id 不一致、重复 id、短 `T_max`、decode token 维非 1 均抛 `ValueError` |
 
 ### 测试命令
 
@@ -424,18 +485,20 @@ uv run pytest tests/unit/test_paged_kv_cache.py -q
 - `cache.layers[0].k.shape == (num_blocks, block_size, n_kv_heads, head_dim)`。
 - `cache.num_free_blocks == num_blocks`。
 
-### L0-2 prefill 跨多块
+### L0-2 batch prefill 跨多块
 
-- `block_size=16`、`prompt_len=20` → 占 2 块。
-- 构造可识别的 k/v（如按位置递增填值），写入后用 `position_to_block` 逐位置读回比对。
-- 断言 `num_free_blocks == num_blocks - 2`。
+- `block_size=16`；请求 a/b 的长度为 `[20, 5]`，分别先 `allocate_request`。
+- K/V 输入 shape `[2, n_kv, 20, D]`，a 使用位置递增值，b 使用不同的可识别值。
+- 一次 `write_prefill(0, ["a", "b"], k, v)` 后，分别按 BlockTable 逐位置读回比对。
+- b 的输入 padding `[:, :, 5:20, :]` 不得写入 b 持有的任意物理块。
 
-### L0-3 decode 跨块边界
+### L0-3 batch decode 跨块边界
 
-- `block_size=4`、`prompt_len=4`（正好写满 1 块）。
-- `append_token()` 后应触发新块分配，`num_free_blocks` 减 1。
-- `write_decode()` 写入的位置应是新块的 offset 0。
-- 再连续 decode 3 次不应再分配。
+- `block_size=4`；a 的 prefill 长度为 4（已写满），b 的长度为 3（还剩一位）。
+- 两请求都 `append_token()`，再一次 `write_decode()`。
+- a 应多拿一块且写新块 offset 0；b 不拿块且写旧块 offset 3。
+- 两个输入 KV 在各自物理位置正确，且只有一次 batch scatter。
+
 
 ### L0-4 gather_kv_single 正确性
 
@@ -456,11 +519,12 @@ uv run pytest tests/unit/test_paged_kv_cache.py -q
 - `allocate_request` 后减少，`free_request` 后完全复原。
 - 再次 `free_request` 同一 id 应抛 `KeyError`。
 
-### L0-7 多请求隔离
+### L0-7 batch 写入隔离
 
-- 请求 a、b 交错 prefill 与 decode，各写入可区分的值（如 a 全 1.0、b 全 2.0）。
-- 分别 gather 后断言各自内容纯净，无对方数据。
-- 这条能抓住"写入位置算错串到别人块"的 bug。
+- 请求 a、b 的 prefill 长度不同，输入 a 全 1.0、b 全 2.0。
+- 单次 `write_prefill` scatter 后分别 `gather_kv_single`。
+- 断言 a 的有效 KV 全为 1.0、b 的全为 2.0，无对方数据。
+- 这条能抓住 slot mapping 把 batch 行和 request id 顺序错配的 bug。
 
 ### L0-8 分配失败无泄漏
 
@@ -476,11 +540,26 @@ uv run pytest tests/unit/test_paged_kv_cache.py -q
 
 ### L0-10 padding 区 NaN
 
-- 两个请求 `seq_len` 差异较大（如 20 与 3），确保 padding 区存在。
-- 用 `cache.layers[0].k.fill_(float("nan"))` 后再写入有效数据。
+- 两个请求 `seq_len` 差异较大（如 20 与 3），确保 gather padding 区存在。
+- 用 `cache.layers[0].k.fill_(float("nan"))` 后通过 batch prefill 写入有效数据。
 - `gather_kv` 返回的 `k[i, :, :valid_lens[i], :]` 必须全部 finite。
 - padding 区允许含 NaN —— 这正是要求返回 `valid_lens` 的原因，T4 负责清零。
 - 这条锁定 ADR-05 的数值安全契约，对齐 lessons L5。
+
+### L0-11 prefill slot mapping
+
+- 请求长度 `[5, 2]`，`block_size=4`，从 `_make_prefill_slot_mapping(["a", "b"])` 得到 slots。
+- `slots.numel() == 7`。
+- 逐个用 `position_to_block(pos)` 手算 `block_id * block_size + offset`，结果与 slots 完全一致。
+- 这条把「block table 逻辑映射」和「扁平 scatter 地址」的连接锁死。
+
+### L0-12 batch 输入合同
+
+- `len(request_ids) != k.shape[0]` / `v.shape[0]` raise ValueError。
+- request_ids 内重复 id raise ValueError。
+- prefill `T_max < max(seq_len)` raise ValueError。
+- decode token 维不是 1 raise ValueError。
+- K/V heads、head_dim、dtype、device 与 cache 不一致 raise ValueError。
 
 </details>
 
@@ -492,7 +571,11 @@ uv run pytest tests/unit/test_paged_kv_cache.py -q
 - [ ] `gather_kv` 无 Python 循环、无 `torch.cat`（ADR-05）。
 - [ ] `gather_kv` 返回 `valid_lens`，且注释说明 padding 区可能含 NaN。
 - [ ] 批量 `gather_kv` 与 `gather_kv_single` 结果一致。
-- [ ] `allocate_request` 失败时回滚，`num_free_blocks` 不变。
+- [ ] `write_prefill` / `write_decode` 均为 batch API，不存在生产路径的逐请求 T3 write 调用。
+- [ ] 两种 batch write 各只有一次 tensor scatter；不使用 `torch.cat`。
+- [ ] slot mapping 与 BlockTable 的逐位置手工映射一致；batch padding 不写入物理 cache。
+- [ ] batch 的 request_ids 去重、长度和 K/V shape / dtype / device 合同完整。
+- [ ] M4 `allocate_request` 使用预检查，块不足时不改变 pool 或 block_tables（单线程前提已写入注释）。
 - [ ] 不修改 M3 `BatchedKVCache`，不改 attention。
 - [ ] 不含 prefix hash / LRU / CoW（留 M5）。
 - [ ] 实现与测试文件均补齐详细注释（README 提交门禁）。
@@ -500,11 +583,13 @@ uv run pytest tests/unit/test_paged_kv_cache.py -q
 
 ## 坑（按概率排序）
 
-1. **`allocate_request` 中途失败不回滚**：块永久泄漏，且不当场报错，只表现为服务跑一段时间后分配不出块。必须用 try/except 或先预检查 + 兜底回滚。
-2. **`write_decode` 与 `append_token` 顺序颠倒**：会覆盖上一个 token 的 KV，静默数据损坏。契约是先 `append_token` 再 `write_decode`。
-3. **padding 区 NaN 传播**：`gather_kv` 的 `L_pad` 区域可能是 `torch.empty` 的未初始化内存。只做 score mask 不够，`0 × NaN` 仍会污染 value 聚合（lessons L5）。必须靠 `valid_lens` 清零。
-4. **假设 `L_pad == max(seq_len)`**：`L_pad` 是块对齐长度，通常更大。调用方按 `max(seq_len)` 切片会漏数据或越界。
-5. **`reshape` 与 `transpose` 顺序搞错**：`[B, nb, bs, h, d]` 必须先 `reshape` 合并 `nb×bs` 再 `transpose` 换 head 维。顺序颠倒不报错但语义全错 —— 这就是需要 `gather_kv_single` 做 oracle 的原因。
-6. **block table padding 填了非法块号**：填 0 是安全的（会被 `valid_lens` 屏蔽），但填 `-1` 会被当作反向索引，静默读到最后一块。
-7. **`from_config` 用 `torch.zeros` 掩盖问题**：清零能让 L0-10 假通过，但掩盖了真实的未初始化风险。应与 M3 一致用 `torch.empty`，靠 `valid_lens` 正面解决。
-8. **提前实现 M5**：不加 hash、LRU、CoW；`free_request` 在 M4 可无条件释放。
+1. **batch 写入退回逐请求调用**：会让每层每步出现 B 次 Python 调度，把 gather 消掉的开销搬到 write 路径。必须生成扁平 slot mapping 后一次 scatter。
+2. **slot mapping 顺序与 batch 行错配**：slot 的顺序必须和 `flat_k/v` 中 token 的顺序完全一致；错配不报错，但会把 a 的 KV 写进 b 的块。L0-7/L0-11 锁定。
+3. **batch padding 被写入物理 cache**：短请求的 `k[i, :, seq_len_i:, :]` 可能是 NaN 或无意义值，写入后会污染后续读取。prefill 只 flatten 每行的有效范围。
+4. **decode 忘记先 append_token**：slot 会指向上一个 token，静默覆盖旧 KV。契约是先对 batch 中每个 request append，再 batch write。
+5. **重复 request id**：会让一次 scatter 出现同 slot 多次写入，顺序无业务语义，必须在入口拒绝。
+6. **假设 `L_pad == max(seq_len)`**：`L_pad` 是块对齐长度，通常更大。调用方按 `max(seq_len)` 切片会漏数据或越界。
+7. **padding 区 NaN 传播**：`gather_kv` 的 `L_pad` 区域可能是 `torch.empty` 的未初始化内存。只做 score mask 不够，`0 × NaN` 仍会污染 value 聚合（lessons L5）。必须靠 `valid_lens` 清零。
+8. **预检查的并发假设失效**：M4 单线程下预检查可取代回滚；M5/M6 一旦有抢占或并发 allocator，必须升级事务回滚。
+9. **`reshape` 与 `transpose` 顺序搞错**：`[B, nb, bs, h, d]` 必须先 `reshape` 合并 `nb×bs` 再 `transpose` 换 head 维。顺序颠倒不报错但语义全错 —— 需要 `gather_kv_single` 做 oracle。
+10. **提前实现 M5**：不加 hash、LRU、CoW；`free_request` 在 M4 可无条件释放。
