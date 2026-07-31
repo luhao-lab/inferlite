@@ -3,19 +3,25 @@
 本文件承载两个协作但职责分离的组件：
 
   - BlockTable（T2）：单请求的 pos -> (physical_block_id, block_offset) 映射。
-    纯 Python，不 import torch，不依赖 BlockPool。
-  - PagedKVCache（T3，待实现）：持有各层 K/V tensor，组合 BlockPool 与
-    BlockTable，负责请求生命周期和 KV 读写。
+    映射本身只做整数运算，不依赖 torch 或 BlockPool。
+  - PagedKVCache（T3）：持有各层 K/V tensor，组合 BlockPool 与 BlockTable，
+    负责请求生命周期、批量 KV scatter 与 gather。
 
 分层关系：BlockPool 管「块归谁」（全局一个），BlockTable 管「块的顺序」
 （每请求一个）。两者互不认识，由 PagedKVCache 组合。
 
-关于 block_id 的语义：它是一个**编号**，不是内存地址。真正的寻址发生在 T3，
-届时 block_id 用作 k: [num_blocks, block_size, n_kv_heads, head_dim] 的第 0 维
-下标。因此本文件只做整数运算，不需要 torch。
+关于 block_id 的语义：它是一个**编号**，不是内存地址。T3 以它作为 K/V
+物理 tensor 的第 0 维下标；`slot = block_id * block_size + offset` 是其展平
+后的等价坐标。
 """
 
 from dataclasses import dataclass, field
+from math import ceil
+
+import torch
+
+from inferlite.cache.block_pool import BlockPool
+from inferlite.config import ModelConfig
 
 
 @dataclass
@@ -155,3 +161,360 @@ class BlockTable:
                 f"seq_len {self.seq_len} + {num_tokens} > capacity {self.capacity}"
             )
         self.seq_len += num_tokens
+
+
+@dataclass
+class PagedLayerKVCache:
+    """单层 paged KV 数据容器。
+
+    k/v shape: [num_blocks, block_size, n_kv_heads, head_dim]
+    """
+
+    k: torch.Tensor
+    v: torch.Tensor
+
+
+class PagedKVCache:
+    """多层分页 KV 容器。
+
+    `block_pool` 管全局物理 block 的分配与回收；`block_tables` 为每个活跃
+    请求保存逻辑位置到物理 block 的映射；本类则持有真实 K/V tensor 并将
+    batch 的连续 K/V 输入 scatter 到不连续物理 slot，或反向 gather 回连续序列。
+
+    M4 中 block 在请求之间独占。M5 prefix cache 引入共享后，写共享 block 前
+    必须在本类完成 Copy-on-Write，不能直接沿用当前的原地 scatter。
+    """
+
+    def __init__(
+        self,
+        layers: list[PagedLayerKVCache],
+        block_pool: BlockPool,
+        block_size: int,
+    ) -> None:
+        self.layers = layers
+        self.block_pool = block_pool
+        self.block_size = block_size
+        self.block_tables: dict[str, BlockTable] = {}
+
+    @classmethod
+    def from_config(
+        cls,
+        config: ModelConfig,
+        num_blocks: int,
+        block_size: int,
+        dtype: torch.dtype,
+        device: torch.device | str,
+    ) -> "PagedKVCache":
+        layers: list[PagedLayerKVCache] = []
+        for _ in range(config.num_hidden_layers):
+            k = torch.empty(
+                num_blocks,
+                block_size,
+                config.num_key_value_heads,
+                config.head_dim,
+                dtype=dtype,
+                device=device,
+            )
+            v = torch.empty(
+                num_blocks,
+                block_size,
+                config.num_key_value_heads,
+                config.head_dim,
+                dtype=dtype,
+                device=device,
+            )
+            layers.append(PagedLayerKVCache(k=k, v=v))
+        return cls(layers, BlockPool(num_blocks, block_size), block_size)
+
+    # —— 请求生命周期 ——
+    def allocate_request(self, request_id: str, prompt_len: int) -> None:
+        if request_id in self.block_tables:
+            raise ValueError(f"request_id {request_id} already allocated")
+        num_needed = self._blocks_needed(prompt_len)
+
+        table = BlockTable(request_id=request_id, block_size=self.block_size)
+        allocated: list[int] = []
+        try:
+            for _ in range(num_needed):
+                block_id = self.block_pool.allocate()  # 池空时抛 RuntimeError
+                allocated.append(block_id)
+                table.append_block(physical_block_id=block_id)
+            table.extend(num_tokens=prompt_len)
+        except RuntimeError:
+            # 回滚：把本次已拿到的块全部归还，否则永久泄漏
+            for block_id in allocated:
+                self.block_pool.free(block_id)
+            raise  # 重新抛出异常，让调用方知道分配失败
+
+        self.block_tables[request_id] = table
+
+    def append_token(self, request_id: str) -> None:
+        table = self.block_tables[request_id]
+        if table.needs_new_block():
+            block_id = self.block_pool.allocate()
+            table.append_block(physical_block_id=block_id)
+        table.extend(1)
+
+    def free_request(self, request_id: str) -> None:
+        table = self.block_tables.pop(request_id)
+        for block_id in table.block_ids:
+            self.block_pool.free(block_id)
+
+    # —— KV 写入 ——
+    def write_prefill(
+        self, layer_idx: int, request_ids: list[str], k: torch.Tensor, v: torch.Tensor
+    ) -> None:
+        if not request_ids:
+            raise ValueError("request_ids must not be empty")
+        if len(request_ids) != len(set(request_ids)):
+            raise ValueError("request_ids must not contain duplicates")
+        if not 0 <= layer_idx < len(self.layers):
+            raise IndexError(f"layer_idx {layer_idx} out of range")
+        if k.shape != v.shape:
+            raise ValueError("k and v must have identical shapes")
+        if k.shape[0] != len(request_ids):
+            raise ValueError("batch size must match request_ids")
+        if k.ndim != 4:
+            raise ValueError("write_prefill expects k/v shape [B, n_kv_heads, T_max, head_dim]")
+
+        tables = [self.block_tables[request_id] for request_id in request_ids]
+        # table.seq_len 在 allocate_request() 时由 prompt_len 初始化；
+        # prefill 阶段它就是每个 batch 行的有效 token 数。
+        seq_lens = [table.seq_len for table in tables]
+        t_max = k.shape[2]
+
+        if t_max < max(seq_lens):
+            raise ValueError("T_max is shorter than a request seq_len")
+
+        # 2. 地址与数据按完全相同的「请求优先、位置递增」顺序展平
+        layer: PagedLayerKVCache = self.layers[layer_idx]
+
+        expected_shape = (layer.k.shape[2], layer.k.shape[3])
+        if k.shape[1] != expected_shape[0] or k.shape[3] != expected_shape[1]:
+            raise ValueError(
+                f"expected [B, {expected_shape[0]}, T, {expected_shape[1]}], got {tuple(k.shape)}"
+            )
+
+        if k.dtype != layer.k.dtype or k.device != layer.k.device:
+            raise ValueError("k/v dtype and device must match cache layer")
+
+        # [total_valid_tokens]，例如请求长度 [20, 5] 时长度是 25。
+        slot_mapping = self._make_prefill_slot_mapping(request_ids, layer.k.device)
+
+        positions = torch.arange(t_max, device=k.device)
+        lengths = torch.tensor(seq_lens, device=k.device)
+        valid = positions[None, :] < lengths[:, None]
+        flat_k = k.transpose(1, 2)[valid]
+        flat_v = v.transpose(1, 2)[valid]
+
+        assert slot_mapping.numel() == flat_k.shape[0] == flat_v.shape[0]
+
+        # 3. 一次 batch scatter
+        flat_cache_k = layer.k.view(-1, *layer.k.shape[2:])
+        flat_cache_v = layer.v.view(-1, *layer.v.shape[2:])
+        flat_cache_k[slot_mapping] = flat_k
+        flat_cache_v[slot_mapping] = flat_v
+
+    def write_decode(
+        self, layer_idx: int, request_ids: list[str], k: torch.Tensor, v: torch.Tensor
+    ) -> None:
+        if not request_ids:
+            raise ValueError("request_ids must not be empty")
+        if len(request_ids) != len(set(request_ids)):
+            raise ValueError("request_ids must not contain duplicates")
+        if not 0 <= layer_idx < len(self.layers):
+            raise IndexError(f"layer_idx {layer_idx} out of range")
+        if k.shape != v.shape:
+            raise ValueError("k and v must have identical shapes")
+        if k.shape[0] != len(request_ids):
+            raise ValueError("batch size must match request_ids")
+        if k.ndim != 4 or k.shape[2] != 1:
+            raise ValueError("write_decode expects k/v shape [B, n_kv_heads, 1, head_dim]")
+
+        layer: PagedLayerKVCache = self.layers[layer_idx]
+        expected_shape = (layer.k.shape[2], layer.k.shape[3])
+        if k.shape[1] != expected_shape[0] or k.shape[3] != expected_shape[1]:
+            raise ValueError(
+                f"expected [B, {expected_shape[0]}, 1, {expected_shape[1]}], got {tuple(k.shape)}"
+            )
+        if k.dtype != layer.k.dtype or k.device != layer.k.device:
+            raise ValueError("k/v dtype and device must match cache layer")
+
+        # [B]；调用方必须先 append_token()，使每个 table 的 seq_len 指向
+        # 本轮刚新增 token 的后一位，helper 再以 seq_len - 1 定位其 slot。
+        slot_mapping = self._make_decode_slot_mapping(request_ids, layer.k.device)
+
+        # 一次 batch scatter
+        flat_cache_k = layer.k.view(-1, *layer.k.shape[2:])
+        flat_cache_v = layer.v.view(-1, *layer.v.shape[2:])
+        flat_cache_k[slot_mapping] = k.squeeze(2)
+        flat_cache_v[slot_mapping] = v.squeeze(2)
+
+    # —— Attenion 读取 ——
+    def gather_kv(
+        self, layer_idx: int, request_ids: list[str]
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """批量读取分页 KV，返回 block 对齐 padding 与每行有效长度。
+
+        注意：padding 区可能含 torch.empty 的 NaN/Inf。调用方必须根据
+        valid_lens 清零 K/V，再进行 attention。
+        """
+        if not request_ids:
+            raise ValueError("request_ids must not be empty")
+        if len(request_ids) != len(set(request_ids)):
+            raise ValueError("request_ids must not contain duplicates")
+        if not 0 <= layer_idx < len(self.layers):
+            raise IndexError(f"layer_idx {layer_idx} out of range")
+
+        tables = [self.block_tables[request_id] for request_id in request_ids]
+        layer = self.layers[layer_idx]
+
+        batch_size = len(tables)
+        max_num_blocks = max(table.num_blocks for table in tables)
+
+        # 将变长 block_ids 补齐成矩阵：
+        #
+        # a: [7, 2]
+        # b: [5]
+        #
+        # block_table:
+        # [[7, 2],
+        #  [5, 0]]    # 0 只是 padding 占位，后续必须由 valid_lens 屏蔽
+        block_table = torch.zeros(
+            (batch_size, max_num_blocks),
+            dtype=torch.long,
+            device=layer.k.device,
+        )
+        for batch_idx, table in enumerate(tables):
+            block_table[batch_idx, : table.num_blocks] = torch.tensor(
+                data=table.block_ids,
+                dtype=torch.long,
+                device=layer.k.device,
+            )
+        # 一次高级索引：
+        #
+        # layer.k:             [num_blocks, block_size, n_kv, D]
+        # layer.k[block_table]: [B, max_num_blocks, block_size, n_kv, D]
+        k = layer.k[block_table]
+        v = layer.v[block_table]
+
+        # 合并「逻辑 block」与「block 内 offset」，再把 head 换到第 1 维，
+        # 对齐 attention 的 K/V layout。
+        #
+        # [B, nb, bs, n_kv, D]
+        # -> [B, nb * bs, n_kv, D]
+        # -> [B, n_kv, L_pad, D]
+        k = k.reshape(batch_size, max_num_blocks * self.block_size, *k.shape[3:])
+        v = v.reshape(batch_size, max_num_blocks * self.block_size, *v.shape[3:])
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+
+        valid_lens = torch.tensor(
+            [table.seq_len for table in tables],
+            dtype=torch.long,
+            device=layer.k.device,
+        )
+        return k, v, valid_lens
+
+    def gather_kv_single(
+        self, layer_idx: int, request_id: str
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """读取一个请求的连续有效 KV，不含 padding，仅用于测试 oracle。"""
+        if not 0 <= layer_idx < len(self.layers):
+            raise IndexError(f"layer_idx {layer_idx} out of range")
+
+        table = self.block_tables[request_id]  # 未注册时自然抛 KeyError
+        layer = self.layers[layer_idx]
+
+        # 例如 table.block_ids = [7, 2]。
+        # layer.k[block_ids]：
+        # [num_blocks, block_size, n_kv, D]
+        # -> [2, block_size, n_kv, D]
+        block_ids = torch.tensor(
+            table.block_ids,
+            dtype=torch.long,
+            device=layer.k.device,
+        )
+
+        # 逻辑顺序已由 block_ids 的列表顺序保证：
+        # [block 7 的全部 token, block 2 的全部 token]
+        # -> [num_blocks * block_size, n_kv, D]
+        k = layer.k[block_ids].reshape(-1, *layer.k.shape[2:])
+        v = layer.v[block_ids].reshape(-1, *layer.v.shape[2:])
+
+        # 最后一个 block 通常没写满，必须截到真实有效长度。
+        # [seq_len, n_kv, D] -> [n_kv, seq_len, D]
+        k = k[: table.seq_len].transpose(0, 1)
+        v = v[: table.seq_len].transpose(0, 1)
+        return k, v
+
+    # -- 容量查询（T5 admission 用）
+    @property
+    def num_free_blocks(self) -> int:
+        """当前空闲的物理 block 数。"""
+        return self.block_pool.num_free_blocks
+
+    def can_allocate(self, prompt_len: int) -> bool:
+        """检查能否为指定长度的 prompt 分配空间。"""
+        return self.block_pool.can_allocate(self._blocks_needed(prompt_len))
+
+    def seq_len_of(self, request_id: str) -> int:
+        return self.block_tables[request_id].seq_len
+
+    # —— 校验 ——
+    def _blocks_needed(self, prompt_len: int) -> int:
+        """把 prompt 长度换算成需要的块数，顺带校验。
+
+        allocate_request 和 can_allocate 都经由此处，校验逻辑只有一份。
+        """
+        if prompt_len <= 0:
+            raise ValueError(f"prompt_len must be positive, got {prompt_len}")
+        return ceil(prompt_len / self.block_size)
+
+    def _make_prefill_slot_mapping(
+        self,
+        request_ids: list[str],
+        device: torch.device | str,
+    ) -> torch.Tensor:
+        """按 request_ids 顺序生成所有有效 prefill token 的物理 slot。
+
+        返回 slot_mapping[i] 与 write_prefill 中 flat_k[i] / flat_v[i]
+        一一对应，顺序均为「请求优先、请求内位置递增」。
+        """
+        slots_per_request: list[torch.Tensor] = []
+        offsets = torch.arange(self.block_size, device=device)
+
+        for request_id in request_ids:
+            table = self.block_tables[request_id]
+
+            # [num_blocks, 1] * block_size + [block_size]
+            # -> [num_blocks, block_size]
+            block_ids = torch.tensor(table.block_ids, dtype=torch.long, device=device)
+            slots = block_ids[:, None] * self.block_size + offsets[None, :]
+
+            # flatten 后是：
+            # block 0 的 offset 0..block_size-1，
+            # 再 block 1 的 offset 0..block_size-1，顺序正好对应逻辑 token 顺序。
+            slots_per_request.append(slots.flatten()[: table.seq_len])
+
+        return torch.cat(slots_per_request)
+
+    def _make_decode_slot_mapping(
+        self,
+        request_ids: list[str],
+        device: torch.device | str,
+    ) -> torch.Tensor:
+        """按 request_ids 顺序生成所有有效 decode token 的物理 slot。
+
+        返回 slot_mapping[i] 与 write_decode 中 k[i] / v[i]
+        一一对应，顺序均为「请求优先、请求内位置递增」。
+        """
+        slots_per_request: list[torch.Tensor] = []
+
+        for request_id in request_ids:
+            table: BlockTable = self.block_tables[request_id]
+            block_id = table.block_ids[-1]  # 最后一个 block
+            slot = block_id * self.block_size + ((table.seq_len - 1) % self.block_size)
+            slots_per_request.append(torch.tensor([slot], device=device))
+
+        return torch.cat(slots_per_request)

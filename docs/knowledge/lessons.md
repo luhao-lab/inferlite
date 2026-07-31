@@ -225,7 +225,7 @@ IEEE 754 中 `0 × NaN = NaN`，所以即使无效位置的 attention probabilit
 
 ### 解法
 
-batched gather 后，根据每行有效长度把无效 K/V 尾部清零，同时保留 score mask：
+batched gather 后，根据每行有效长度把无效 K/V 尾部清零，同时保留 score mask。M3 的有效长度来自 `cache_positions + 1`；M4-T3 `PagedKVCache.gather_kv()` 显式返回 `valid_lens`，T4 必须沿用同一清零逻辑：
 
 ```python
 valid_lens = cache_positions + 1
@@ -249,13 +249,14 @@ v = v.masked_fill(invalid, 0)
 - 使用 `torch.empty` 预分配的 KV Cache、activation buffer 和通信 buffer。
 - 变长序列 pad 成 dense batch 后执行 matmul 的场景。
 - 任何认为“权重为 0 就能隔离 NaN”的实现。
-- FlashAttention/PagedAttention 之外的纯 PyTorch gather + mask 教学实现。
+- FlashAttention/PagedAttention 之外的纯 PyTorch gather + mask 教学实现。M4-T3 的 paged gather 会产生块对齐 padding，必须把 `valid_lens` 传给 T4 清零 K/V。
 
 ### 相关
 
 - `inferlite/model/attention.py::_batched_cache_rw`
 - `tests/unit/test_batched_attention.py::test_nan_padding_does_not_contaminate_short_request`
 - `docs/knowledge/m3-continuous-batching.md`
+- `docs/knowledge/m4-paged-kv-cache.md`
 
 ---
 

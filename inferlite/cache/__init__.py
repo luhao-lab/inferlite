@@ -14,7 +14,11 @@ from inferlite.cache.batched_kv_cache import (
 )
 from inferlite.cache.block_pool import Block, BlockPool
 from inferlite.cache.kv_cache import KVCache, LayerKVCache
-from inferlite.cache.paged_kv_cache import BlockTable
+from inferlite.cache.paged_kv_cache import (
+    BlockTable,
+    PagedKVCache,
+    PagedLayerKVCache,
+)
 
 __all__ = [
     "KVCache",
@@ -25,4 +29,6 @@ __all__ = [
     "Block",
     "BlockPool",
     "BlockTable",
+    "PagedKVCache",
+    "PagedLayerKVCache",
 ]

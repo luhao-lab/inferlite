@@ -237,7 +237,7 @@ FlashAttention / PagedAttention kernel 直接算 attention
 
 **Context**：vLLM/nano-vllm 使用 Triton/FlashAttention 直接按 block_table 读 KV；Mac/MPS 环境不适合。
 
-**Decision**：M4 每步先按 block table gather 成临时连续 KV，再复用已有 attention 计算。
+**Decision**：M4 每步先按 block table gather 成临时连续 KV，再复用已有 attention 计算。T3 的完整写入/读取数据流见 [M4-T3 深入：PagedKVCache 数据流](m4-paged-kv-cache.md)。
 
 **Consequences**：
 - ✅ 可读、可测、设备兼容。
@@ -279,7 +279,9 @@ FlashAttention / PagedAttention kernel 直接算 attention
 
 ## 5. 数据流
 
-### 4.1 prefill 写入
+> 本节是 M4 总览；T3 的 batch slot mapping、scatter/gather 和 NaN 安全细节见 [M4-T3 深入：PagedKVCache 数据流](m4-paged-kv-cache.md)。
+
+### 5.1 prefill 写入
 
 ```text
 request prompt length = 45, block_size = 16
@@ -291,7 +293,7 @@ pos 16..31  -> physical block 3,  offset 0..15
 pos 32..44  -> physical block 11, offset 0..12
 ```
 
-### 4.2 decode 追加
+### 5.2 decode 追加
 
 ```text
 seq_len = 45
@@ -312,7 +314,7 @@ block_table 还没有 index 3
 => BlockPool.allocate() 新物理 block，append 到 block_table
 ```
 
-### 4.3 gather 读取
+### 5.3 gather 读取
 
 M4 伪版 attention 先 gather：
 
@@ -321,7 +323,7 @@ full_k = gather_by_block_table(layer_cache.k, block_table, seq_len)
 # full_k: [n_kv_heads, seq_len, head_dim]
 ```
 
-batch 内多个请求 gather 后 padding 到同一个 `max_seq_len_in_batch`，再用 per-row mask 保证每行只看自己的有效 KV。
+batch 内多个请求 gather 后 padding 到同一个块对齐长度 `L_pad = max_num_blocks_in_batch * block_size`，再用 `valid_lens` 清零无效 K/V 并构造 per-row score mask。
 
 ---
 
