@@ -631,4 +631,4 @@ pytest tests/ -q
 
 核心实现由作者手写；Agent 负责代码 review、补充合同校验与注释、单元测试、验证及任务卡收口。
 
-最终代码提交：见本任务卡提交记录。
+最终代码提交：`6857c09 feat(kv-cache): add paged KV cache container (M4-T3 done)`。
