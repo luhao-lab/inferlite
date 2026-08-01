@@ -60,7 +60,7 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 | Release | 未开始 | 工程发布 | 工程发布 | M3-M6 | 对照表、CI、README badge、`v1.0` tag |
 | M7 | Backlog | MoE 模型支持 | L1 Model | M6 | 阶段 1 跑通 MoE；阶段 2 MoE 性能优化 |
 | M8 | Backlog | 推测解码加速 | L3 Engine | M6 | 阶段 1 n-gram；阶段 2 EAGLE |
-| M9 | Backlog | 核心算子加速 | L1/L2 Kernel | M4 | 阶段 1 cache write kernel；阶段 2 paged attention kernel |
+| M9 | Backlog | 核心算子加速 | L1/L2 Kernel | M4-T7 backend 边界 | 阶段 1 cache write kernel；阶段 2 paged attention kernel |
 | M10 | Backlog | 长上下文能力 | L1 + L2 + L3 | M4 | 阶段 1 Chunked Prefill；阶段 2 YaRN |
 | M11 | Backlog | 多模态能力 | L1 + L2 + L4 | M6 | 阶段 1 VLM 教学版；阶段 2 VLM 工程化 |
 | M12+ | Backlog | 工程能力扩展 | 不定 | 不定 | Serving / Quant / Distributed / Audio 等按需新开 |
@@ -72,7 +72,7 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 | M3 → M6 | 硬依赖 | API/SSE 要包 `batch_generate` 或后续 EngineCore；单请求 API 不是目标服务形态。 |
 | M4 → M5 | 硬依赖 | Prefix Cache 依赖 block table / refcount；没有 M4 只能做字符串级缓存。 |
 | M5 ↔ M6 | 无算法依赖 | Prefix Cache 是 L2 Memory；API/SSE 是 L4 Server；二者只是共同服务于 v1.0 demo。 |
-| M4 → M9 | 硬依赖 | Triton kernel 替换 M4 的 PyTorch PagedAttention 伪版。 |
+| M4 → M9 | 硬依赖 | Triton/kernel backend 替换 M4 的 PyTorch PagedAttention 伪版，并复用 M4-T7 形成的 attention/backend 边界。 |
 | M7+ 内部 | 主题内阶段依赖 | M7/M8/M10/M11 都遵循“先跑通 → 再优化/工程化”；同一 M 内只做一个能力主题。 |
 
 <!-- anchor:current-mainline -->
@@ -201,7 +201,7 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 | --- | --- | --- | --- | --- | --- |
 | M7 | MoE 模型支持 | 支持非 dense 大模型结构 | 阶段 1：跑通 MoE；阶段 2：MoE 性能优化 | for-loop dispatch；grouped GEMM / token permutation | 勉强，推荐 GPU |
 | M8 | 推测解码加速 | 同样算力下生成更多 token | 阶段 1：n-gram spec；阶段 2：EAGLE | verify/accept/rollback；draft head | 可以开发，训练建议 GPU |
-| M9 | 核心算子加速 | 每次 forward 更快 | 阶段 1：cache write kernel；阶段 2：paged attention kernel；阶段 3：Mac-friendly 分支 | Triton；FlashAttention；torch.compile / flex_attention | 主线需 NVIDIA GPU；Mac 只做分支探索 |
+| M9 | 核心算子加速 | 每次 forward 更快 | 阶段 0：kernel backend 边界与 metadata tensor 化；阶段 1：cache write kernel；阶段 2：paged attention kernel；阶段 3：Mac-friendly 分支 | Triton；FlashAttention；torch.compile / flex_attention；slot_mapping / block_tables / seq_lens | 主线需 NVIDIA GPU；Mac 只做 fallback/分支探索 |
 | M10 | 长上下文能力 | 支持超长 prompt 和更长上下文窗口 | 阶段 1：Chunked Prefill；阶段 2：YaRN / NTK RoPE scaling | prefill slicing；RoPE scaling | 可以，小心内存 |
 | M11 | 多模态能力 | 支持图片输入并逐步工程化 | 阶段 1：VLM 教学版；阶段 2：VLM 工程化 | vision encoder；image prefix cache；encoder/LLM 异步 | 可以，小模型优先 |
 | M12+ | 长期工程能力池 | 按需补齐生产特性 | 每个方向单独开 M | LoRA；量化；TP/PP；metrics；Audio | 不定 |
@@ -265,7 +265,8 @@ CI 在 Release Checklist 引入，只跑 CPU-only 的 fast tests；真实模型 
 | M7/M8/M10/M11 | 大多可开发 | 大模型/性能更合适 |
 | M9 | 主线不支持；Mac-friendly 分支可探索 | 必须 NVIDIA GPU |
 
-Triton 与 FlashAttention 主要面向 CUDA；Mac 加速可探索 `torch.compile` / `flex_attention`，但不作为主线性能目标。
+- M9 不在模型 attention 主流程里直接写 kernel 分支；通过 M4-T7 的 backend 边界选择 PyTorch fallback 或 kernel backend。
+- Triton 与 FlashAttention 主要面向 CUDA；Mac 加速可探索 `torch.compile` / `flex_attention`，但不作为主线性能目标。
 
 ### 6.5 协作与文章
 

@@ -274,4 +274,4 @@ T5 使用本任务提供的 attention 能力接入 batch engine，并负责：
 - block admission；
 - running / waiting / finished 生命周期。
 
-T6 负责 E2E 与 benchmark。T7 负责文档和 tag 收口。
+T6 负责 E2E 与 benchmark。T7 负责 attention/backend 边界整理，T8 负责文档和 tag 收口。

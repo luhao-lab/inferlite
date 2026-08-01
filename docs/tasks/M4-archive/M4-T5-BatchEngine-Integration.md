@@ -34,7 +34,7 @@ T5 是 **engine 集成任务**。T4 只证明单层 attention 能用 paged KV；
 ### 明确不做
 
 - 不做 benchmark 结果归档（T6）。
-- 不更新 README/PROGRESS/tag（T7）。
+- 不更新 README/PROGRESS/tag（T8）。
 - 不做 prefix sharing、hash、LRU、CoW（M5）。
 - 不做复杂抢占、swap、recompute；block 不足时 waiting 排队即可。
 - 不优化 PyTorch gather 性能；性能分析留 T6，kernel 化留 M9。
@@ -257,7 +257,7 @@ uv run pytest tests/unit/test_batched_attention.py tests/unit/test_paged_attenti
 5. **为了复用 M3 过度改 batch_core**：容易破坏 stable oracle。优先新建 paged 入口。
 6. **block 不足时状态半更新**：append/allocate 失败时不能让 request 状态和 cache 状态不一致。
 7. **prefill/decode 靠 seq_len 猜**：T5 应显式传 `paged_is_prefill`。
-8. **T5 顺手做 benchmark/文档收口**：这些留给 T6/T7，避免任务失焦。
+8. **T5 顺手做 benchmark/attention 重构/文档收口**：这些留给 T6/T7/T8，避免任务失焦。
 
 ## 与后续任务的衔接
 

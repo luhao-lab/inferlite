@@ -10,7 +10,7 @@
 | 里程碑 | M4 — PagedAttention |
 | 状态 | ⬜ pending |
 | 前置 | M4-T5 BatchEngine Integration ✅ |
-| 后续 | M4-T7 — Docs & Tag |
+| 后续 | M4-T7 — Attention Backend Refactor |
 | 估时 | 3～5h |
 | 核心文件 | `tests/e2e/`、`scripts/bench_paged_attention.py`、`bench/results/` |
 | 参考 oracle | M3 fixed-slot `batch_generate` |
@@ -198,4 +198,4 @@ uv run python scripts/bench_paged_attention.py --block-size 16 --num-blocks 128
 
 ## 与后续任务的衔接
 
-T7 基于 T6 的 E2E 和 benchmark 结果更新 README、PROGRESS、M4 plan、knowledge，并准备 `m4/paged-attention` tag。
+T7 基于 T6 的 E2E 和 benchmark 结果整理 attention/cache backend 边界；T8 更新 README、PROGRESS、M4 plan、knowledge，并准备 `m4/paged-attention` tag。

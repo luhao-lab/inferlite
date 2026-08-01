@@ -29,7 +29,8 @@
      -> attn @ v
      -> o_proj
 
-T4 只做 full causal attention，不做 KV cache；KV cache 留到 M2。
+T4 新增：M4 PagedAttention（分页 KV）路径。forward 现在支持四路：
+  M1 无 cache / M2 单序列 cache / M3 batched fixed-slot cache / M4 paged cache。
 """
 
 from typing import override
@@ -37,7 +38,7 @@ from typing import override
 import torch
 import torch.nn as nn
 
-from inferlite.cache import BatchedLayerKVCache
+from inferlite.cache import BatchedLayerKVCache, PagedKVCache
 from inferlite.cache.kv_cache import LayerKVCache
 from inferlite.config import ModelConfig
 from inferlite.model.layers import RMSNorm, RotaryEmbedding, apply_rotary_pos_emb
@@ -160,42 +161,61 @@ class GQAAttention(nn.Module):
         cache_position: int = 0,
         cache_slots: torch.Tensor | None = None,
         cache_positions: torch.Tensor | None = None,
+        paged_kv_cache: PagedKVCache | None = None,
+        layer_idx: int | None = None,
+        request_ids: list[str] | None = None,
+        is_prefill: bool = False,
     ) -> torch.Tensor:
-        """执行 causal self-attention，支持 M1（无 cache）和 M2（有 cache）两路。
+        """执行 causal self-attention，支持 M1/M2/M3/M4 四种 cache 模式。
 
-        ## 两种调用方式
+        ## 四种调用方式
 
         **M1 路径**（无 cache，每步传全量 tokens）：
             forward(hidden_states=[B, T, H], position_ids=[B, T])
-            - hidden_states 包含历史 + 当前所有 token
-            - 每步重算所有 K/V，O(T²)
 
-        **M2 路径**（有 cache，每步只传当前 token）：
-            forward(hidden_states=[B, 1, H], position_embeddings=(cos, sin),
-                    layer_kv_cache=cache.layers[i], cache_position=cur_len)
-            - hidden_states 只含当前新 token（T=1 for decode，T=T_p for prefill）
-            - 历史 K/V 从 cache 读取，O(T)
+        **M2 路径**（单序列 cache）：
+            forward(hidden_states=[B, T, H], position_embeddings=(cos, sin),
+                    layer_kv_cache=LayerKVCache, cache_position=int)
+
+        **M3 路径**（batched fixed-slot cache）：
+            forward(hidden_states=[B, T, H], position_embeddings=(cos, sin),
+                    layer_kv_cache=BatchedLayerKVCache, cache_slots=[B],
+                    cache_positions=[B])
+            - prefill: cache_positions=None，走 _batched_prefill_rw
+            - decode: cache_positions=[B]，走 _batched_cache_rw + per-row mask
+
+        **M4 路径**（paged cache，T4 新增）：
+            forward(hidden_states=[B, T, H], position_embeddings=(cos, sin),
+                    paged_kv_cache=PagedKVCache, layer_idx=int,
+                    request_ids=[str], is_prefill=bool)
+            - prefill: is_prefill=True，写入整段 prompt K/V
+            - decode: is_prefill=False，append_token 后写入单 token K/V
+            - gather_kv 返回 block 对齐的 K/V + valid_lens
+            - valid_lens 同时用于 K/V 清零（防 NaN）和 score mask
 
         ## 参数
 
         Args:
             hidden_states: [B, T, hidden_size]
-                M1：所有 token（历史 + 当前）的 hidden states。
-                M2 prefill：prompt 全部 token，T = prompt 长度。
-                M2 decode：只有当前新 token，T = 1。
+                当前输入 token 的 hidden states。
             position_ids: [B, T]，M1 兼容路径专用。
                 token 的绝对位置，用于 Attention 内部计算 RoPE cos/sin。
-                M2 路径改用 position_embeddings（外部统一计算，避免 28 层重复调用）。
-            position_embeddings: (cos, sin)，M2 路径专用，与 position_ids 二选一。
+            position_embeddings: (cos, sin)，M2/M3/M4 路径专用，与 position_ids 二选一。
                 由 Qwen3Model.forward 统一计算后传入；shape: [B, T, head_dim]。
             layer_kv_cache: 当前层的 KV Cache 容器。
                 LayerKVCache 时走 M2 路径（单序列 cache）。
                 BatchedLayerKVCache 时走 M3 路径（多请求 batched cache）。
-                None 时走 M1 兼容路径，行为与原始实现完全相同。
+                None 且 paged_kv_cache=None 时走 M1 兼容路径。
             cache_position: M2 路径专用。当前 token(s) 写入 cache 的起始槽位 = kv_cache.cur_len。
                 prefill 时为 0；decode 第 i 步时为 prompt_len + i。
             cache_slots: M3 路径专用。[B] 每个请求对应的 slot id。
-            cache_positions: M3 路径专用。[B] 每个请求当前 token 的写入位置。
+            cache_positions: M3 decode 路径专用。[B] 每个请求当前 token 的写入位置。
+                M3 prefill 时为 None。
+            paged_kv_cache: M4 路径专用。PagedKVCache 实例。
+                与 layer_kv_cache 互斥：同时传两者会走 paged 路径，layer_kv_cache 被忽略。
+            layer_idx: M4 路径专用。当前 decoder layer 索引。
+            request_ids: M4 路径专用。[B] 每个请求的 ID，用于定位 BlockTable。
+            is_prefill: M4 路径专用。True 表示 prefill（写整段），False 表示 decode（写单 token）。
 
         Returns:
             [B, T, hidden_size]，T 与输入 hidden_states 的 seq_len 相同。
@@ -262,7 +282,16 @@ class GQAAttention(nn.Module):
         #   这一刀切出来的是 cache tensor 的 view（不 copy），T_k = cache_position + seq_len。
         #
         # M1 兼容路径（layer_kv_cache=None）：跳过，k/v 直接用当前输入的。
-        if layer_kv_cache is not None:
+        paged_valid_lens: torch.Tensor | None = None
+        if paged_kv_cache is not None:
+            if request_ids is None:
+                raise ValueError("request_ids is required when paged_kv_cache is provided")
+            if layer_idx is None:
+                raise ValueError("layer_idx is required when paged_kv_cache is provided")
+            k, v, paged_valid_lens = self._paged_cache_rw(
+                paged_kv_cache, layer_idx, request_ids, k, v, is_prefill
+            )
+        elif layer_kv_cache is not None:
             if isinstance(layer_kv_cache, BatchedLayerKVCache):
                 assert cache_slots is not None
                 if cache_positions is not None:
@@ -280,7 +309,7 @@ class GQAAttention(nn.Module):
         k = repeat_kv(k, self.num_key_value_groups)
         v = repeat_kv(v, self.num_key_value_groups)
 
-        # 5. scaled dot-product attention。
+        # 5.scores + masks； scaled dot-product attention。
         # q:           [B, n_q, T, D]    T = 当前输入长度
         # k（有cache）: [B, n_q, T_k, D]  T_k = cache_position + T >= T
         # attn_weights: q @ k^T → [B, n_q, T, T_k]
@@ -304,9 +333,12 @@ class GQAAttention(nn.Module):
                 causal_mask,
                 torch.finfo(attn_weights.dtype).min,
             )
-        # M3 per-row mask（batched decode，每行可见长度不同）
-        # prefill 阶段 cache_positions=None，走标准 causal mask，不需 per-row mask
-        if isinstance(layer_kv_cache, BatchedLayerKVCache) and cache_positions is not None:
+        # valid_lens score mask（M4 paged，屏蔽 block 对齐 padding）
+        # 或 per-row mask（M3 batched decode，每行可见长度不同）
+        # M3 prefill 走标准 causal mask，不需 per-row mask
+        if paged_valid_lens is not None:
+            attn_weights = self._build_valid_lens_mask(attn_weights, paged_valid_lens)
+        elif isinstance(layer_kv_cache, BatchedLayerKVCache) and cache_positions is not None:
             attn_weights = self._build_batched_mask(attn_weights, cache_positions)
 
         # 与 transformers eager attention 对齐：softmax 用 fp32 做，再 cast 回 q dtype。
@@ -426,4 +458,78 @@ class GQAAttention(nn.Module):
         visible = positions[None, :] < valid_lens[:, None]  # [B, max_len]
         # 扩到 [B, 1, 1, max_len] 广播到 [B, n_heads, T, max_len]
         scores = scores.masked_fill(~visible[:, None, None, :], torch.finfo(scores.dtype).min)
+        return scores
+
+    def _build_valid_positions(
+        self,
+        seq_len: int,
+        valid_lens: torch.Tensor,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """构建 [B, seq_len] 布尔 mask：位置 < valid_lens 为 True。
+
+        被 _batched_cache_rw（K/V 清零）和 _build_valid_lens_mask（score mask）
+        共用，避免重复计算 valid position 逻辑。
+        """
+        positions = torch.arange(seq_len, device=device)
+        return positions[None, :] < valid_lens[:, None]
+
+    def _paged_cache_rw(
+        self,
+        cache: PagedKVCache,
+        layer_idx: int,
+        request_ids: list[str],
+        k: torch.Tensor,
+        v: torch.Tensor,
+        is_prefill: bool,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """M4 分页 KV 读写：scatter 写入 -> gather 读取 -> 清零 padding。
+
+        三步流程：
+          1. write: 将当前 K/V scatter 写入物理 block（prefill 整段 / decode 单 token）。
+             先写后读，因为 causal self-attention 需要当前 token 在 cache 中可见。
+          2. gather: 按 block table 收集每个请求的完整 K/V（block 对齐长度 L_pad）。
+          3. clear: 清零 padding 区 K/V，防止 value 聚合时 0 * NaN = NaN。
+
+        Returns:
+            (k, v, valid_lens): 清零后的 K/V + 每个请求的实际有效长度。
+            valid_lens 后续用于 score mask，与 K/V 清零成对出现。
+        """
+        # 1、当前token写入 kv cache
+        # 将本次 forward 计算出的 K/V 写入 paged cache：
+        # - prefill: 写入整段 prompt 的 K/V
+        # - decode: 写入本轮新增 token 的 K/V
+        if is_prefill:
+            cache.write_prefill(layer_idx, request_ids, k, v)
+        else:
+            cache.write_decode(layer_idx, request_ids, k, v)
+
+        # 2、获取所有的 kv cache
+        # 按 block table gather 出每个请求可见的完整 K/V。
+        # 返回的 K/V 是 block 对齐长度 L_pad，尾部 padding 需要用 valid_lens 屏蔽。
+        k, v, valid_lens = cache.gather_kv(layer_idx, request_ids)
+
+        # 3、 mask无效位置的 kv cache
+        # 清零 padding 区的 K/V，避免 value 聚合时出现 0 * NaN = NaN。
+        # 注意：这不是 score mask；score mask 还需要在 attention weights 上单独做。
+        valid = self._build_valid_positions(k.shape[-2], valid_lens, k.device)
+        invalid = ~valid[:, None, :, None]
+        k = k.masked_fill(invalid, 0)
+        v = v.masked_fill(invalid, 0)
+        return k, v, valid_lens
+
+    def _build_valid_lens_mask(
+        self,
+        scores: torch.Tensor,
+        valid_lens: torch.Tensor,
+    ) -> torch.Tensor:
+        """M4 paged valid_lens mask：屏蔽超出每个请求实际长度的 block padding 位置。
+
+        valid_lens[i] = 请求 i 的实际 token 数（非 block 对齐长度）。
+        超出部分填 dtype min，softmax 后概率 ≈ 0。
+        与 _paged_cache_rw 中的 K/V 清零成对出现：清零防 NaN，mask 防概率泄漏。
+        """
+        valid = self._build_valid_positions(scores.shape[-1], valid_lens, scores.device)
+        # 扩到 [B, 1, 1, max_len] 广播到 [B, n_heads, T, max_len]
+        scores = scores.masked_fill(~valid[:, None, None, :], torch.finfo(scores.dtype).min)
         return scores
