@@ -13,7 +13,7 @@
 | 后续 | M4-T6 — E2E Correctness & Benchmark |
 | 估时 | 4～6h |
 | 核心文件 | `inferlite/engine/paged_core.py`（优先新建） |
-| 可能涉及 | `inferlite/engine/batch_core.py`、`inferlite/model/model.py`、`inferlite/engine/protocol.py` |
+| 可能涉及 | `inferlite/engine/batch_core.py`（只读参考）、`inferlite/model/qwen3.py`（加可选参数）、`inferlite/engine/protocol.py`（扩展 Protocol） |
 | 测试文件 | `tests/unit/test_paged_batch_engine.py` 或 `tests/e2e/test_paged_batch_generate.py` |
 
 ## 范围冻结
@@ -25,11 +25,11 @@ T5 是 **engine 集成任务**。T4 只证明单层 attention 能用 paged KV；
 - 新增 `batch_generate_paged()` 或等价 paged batch generation 入口。
 - 保持 M3 fixed-slot `batch_generate` 路径可作为 oracle，不删除旧实现。
 - prefill 阶段为 admitted request 调 `PagedKVCache.allocate_request(request_id, prompt_len)`。
-- 将 `paged_kv_cache`、`layer_idx`、`request_ids`、`paged_is_prefill` 透传到每层 attention。
+- 将 `paged_kv_cache`、`request_ids`、`is_prefill` 透传到每层 attention（`layer_idx` 由 `Qwen3Model` 的 `enumerate` 自动生成，不需要顶层传入）。
 - decode 阶段每轮对 running requests 先调 `PagedKVCache.append_token(request_id)`，再走 paged attention decode。
 - finished / EOS / max_new_tokens 时调用 `PagedKVCache.free_request(request_id)`。
-- 做最小 block admission：`cache.can_allocate(prompt_len)` 为真才 admit；不足则留在 waiting。
-- 证明 paged path 输出 token 语义对齐 M3 fixed-slot path。
+- 做最小 block admission：`cache.can_allocate(prompt_len)` 为真才 admit；不足则留在 waiting。admission 在 `paged_core.py` 内 inline 实现，不新建 scheduler 文件。
+- 证明 paged path 输出 token 语义对齐 M3 fixed-slot path（最小闭环验证，全面 token 级等价留 T6）。
 
 ### 明确不做
 
@@ -112,7 +112,7 @@ admitted request 进入 running 前或进入 running 当轮：
 
 ```python
 paged_cache.allocate_request(request_id, prompt_len)
-model(..., paged_kv_cache=paged_cache, request_ids=[request_id], paged_is_prefill=True)
+model(..., paged_kv_cache=paged_cache, request_ids=[request_id], is_prefill=True)
 ```
 
 边界：
@@ -128,16 +128,19 @@ model(..., paged_kv_cache=paged_cache, request_ids=[request_id], paged_is_prefil
 
 ```python
 request_ids = [req.request_id for req in running]
+# 每个请求的 decode position = 当前 seq_len（从 block_table 获取）
+positions = torch.tensor([paged_cache.block_tables[rid].seq_len for rid in request_ids])
+position_ids = positions.unsqueeze(1)  # [B, 1]
 for request_id in request_ids:
     paged_cache.append_token(request_id)
-model(..., paged_kv_cache=paged_cache, request_ids=request_ids, paged_is_prefill=False)
+model(..., paged_kv_cache=paged_cache, request_ids=request_ids, is_prefill=False)
 ```
 
 边界：
 
 - `append_token` 必须在写当前 token K/V 前调用。
 - `request_ids` 顺序必须与 batch input 行顺序完全一致。
-- 任一 append 因 block 不足失败时，T5 暂不做抢占；可保持请求 waiting/running 状态并抛清晰异常，或在 admission 阶段预留 decode 容量。具体实现策略必须写入完成总结。
+- 任一 append 因 block 不足失败时，T5 暂不做抢占，抛 RuntimeError。默认策略：admission 只按 `can_allocate(prompt_len)` 准入，不预留 decode blocks。这意味着测试需要保证 `num_blocks` 足以容纳所有请求的 prompt + max_new_tokens。如果未来需要更激进的 admission（预留 decode 容量），在完成总结里记录策略变化。
 
 ### 4. Finish / Free
 
@@ -155,31 +158,97 @@ paged_cache.free_request(request_id)
 
 释放是 T5 的硬门禁。测试必须覆盖：finished 后 `num_free_blocks` 恢复，waiting 请求能继续进入。
 
-## 接口透传边界
+## 接口透传方案
 
-T4 没有打通完整 model 调用链，T5 需要做最小透传：
+T4 没有打通完整 model 调用链，T5 需要做最小透传。经 vLLM V1 架构调研后，确定以下方案：
 
-```text
-batch_generate_paged
-  -> Qwen3ForCausalLM / model wrapper
-    -> Qwen3Model
-      -> DecoderLayer(layer_idx=i)
-        -> GQAAttention.forward(
-             paged_kv_cache=paged_cache,
-             layer_idx=i,
-             request_ids=request_ids,
-             paged_is_prefill=...
-           )
+### 方案选择：直接加可选参数（方案 A）
+
+给 `Qwen3ForCausalLM` / `Qwen3Model` / `DecoderLayer` 各加 3 个可选参数（默认 None/False），直接透传到 `GQAAttention`。T7 会用 `AttentionCacheContext` 收敛这些参数，T5 先用最简单的方式打通。
+
+**不采用** vLLM V1 的 forward context / bind 机制——需要 ForwardContext 等基础设施，对教学项目过重。
+
+### 模型签名变更
+
+```python
+# Qwen3ForCausalLM.forward 新增 3 个可选参数：
+def forward(self, input_ids, ...,
+            paged_kv_cache: PagedKVCache | None = None,
+            request_ids: list[str] | None = None,
+            is_prefill: bool = False) -> torch.Tensor
+
+# Qwen3Model.forward 同样新增 3 个：
+def forward(self, input_ids, ...,
+            paged_kv_cache: PagedKVCache | None = None,
+            request_ids: list[str] | None = None,
+            is_prefill: bool = False) -> torch.Tensor
+
+# DecoderLayer.forward 新增 4 个（多一个 layer_idx）：
+def forward(self, hidden_states, position_ids, ...,
+            paged_kv_cache: PagedKVCache | None = None,
+            layer_idx: int | None = None,
+            request_ids: list[str] | None = None,
+            is_prefill: bool = False) -> torch.Tensor
 ```
 
-实现时必须保证：
+`layer_idx` 不在顶层传入，由 `Qwen3Model` 的 `enumerate(self.layers)` 自动生成：
 
-- `layer_idx` 是 decoder layer 的真实下标，不是 batch 下标。
-- `request_ids` 顺序与 `input_ids` batch 行顺序一致。
-- prefill/decode 标志显式传递，不靠 token 维度猜。
-- 不破坏 M1/M2/M3 现有模型调用签名；新增参数都应有默认值。
+```python
+for i, layer in enumerate(self.layers):
+    hidden_states = layer(
+        hidden_states, position_ids, ...,
+        paged_kv_cache=paged_kv_cache,
+        layer_idx=i if paged_kv_cache is not None else None,
+        request_ids=request_ids,
+        is_prefill=is_prefill,
+    )
+```
 
-如果透传需要改 `engine/protocol.py`，只增加 paged 所需的最小参数，并补注释说明这是 M4-T5 的调用链桥接。
+所有新参数都有默认值，M1/M2/M3 路径零影响。
+
+### LLMModel Protocol 扩展
+
+```python
+class LLMModel(Protocol):
+    def __call__(self, input_ids, *,
+                 # ... 现有参数不变 ...
+                 paged_kv_cache: object = None,        # M4-T5 新增
+                 request_ids: list[str] | None = None,  # M4-T5 新增
+                 is_prefill: bool = False,              # M4-T5 新增
+                 ) -> torch.Tensor: ...
+```
+
+新增参数用默认值，不影响现有 FakeModel 或 M3 调用方。
+
+### Scheduler 方案：inline admission，不新建文件
+
+**不新建** `paged_fcfs.py`。M3 `FCFScheduler` 已稳定，M4 plan §3.1 中 `paged_fcfs.py` 标记为"可能新建"，不是强制。
+
+在 `paged_core.py` 内写一个 `_paged_admit()` helper：
+
+```python
+def _paged_admit(scheduler: FCFSScheduler,
+                 paged_cache: PagedKVCache) -> list[RequestState]:
+    """Block-aware admission：只在 cache 有足够 block 时从 waiting 取请求到 running。
+
+    与 M3 FCFSScheduler.admit_until_full() 的区别：
+    - M3 只看 max_num_seqs（slot 数量）
+    - M4 额外检查 can_allocate(prompt_len)（block 数量）
+    """
+    admitted = []
+    while scheduler.waiting:
+        req = scheduler.waiting[0]
+        prompt_len = req.prompt_ids.shape[1]
+        if not paged_cache.can_allocate(prompt_len):
+            break  # FCFS：队首不够空间就停，不跳过头部请求
+        scheduler.waiting.popleft()
+        req.status = RequestStatus.RUNNING
+        scheduler.running[req.request_id] = req
+        admitted.append(req)
+    return admitted
+```
+
+T7/T8 再考虑是否抽象公共 admission 接口。
 
 ## Block admission 策略
 
@@ -189,27 +258,27 @@ M4 最小策略：只检查 prompt prefill 所需 blocks：
 needed = ceil(prompt_len / block_size)
 ```
 
-可选增强：为 decode 预留 1 个 block，减少刚 admit 后第一轮 decode 失败概率。但如果做预留，必须在任务卡完成总结里记录：
+**不预留 decode blocks**。admission 只保证 prompt 能放下，decode 阶段 block 不足时抛 RuntimeError。测试必须保证 `num_blocks` 足以容纳所有请求的 `prompt + max_new_tokens`。
 
-- 预留了多少；
-- 是否影响并发；
-- T6 benchmark 如何解释。
+这一策略与 vLLM V1 不同：vLLM V1 在 schedule 阶段为每个请求的 `num_new_tokens`（含 decode）统一调 `allocate_slots`，失败时抢占低优先级请求。T5 不做抢占，不预留，保持最小闭环。如果未来需要更智能的 admission，在完成总结里记录策略变化。
 
-本任务默认不实现复杂 token budget，也不做 chunked prefill。
+本任务不做 chunked prefill，不做复杂 token budget。
 
 ## 实现步骤
 
 1. 阅读 M3 `batch_generate` / scheduler / request state，确认 fixed-slot 生命周期。
-2. 新建 `engine/paged_core.py` 或最小扩展现有 batch engine。
-3. 实现 paged cache 初始化与 request_id 生成/传递。
-4. 实现 admission：`can_allocate(prompt_len)` 不满足则 waiting。
-5. 实现 prefill：`allocate_request` + paged prefill 参数透传。
-6. 实现 decode：`append_token` + paged decode 参数透传。
-7. 实现 finish/free：EOS / max_new_tokens 后 `free_request`。
-8. 保留/转发 metrics 基本字段，并新增 paged 相关最小指标（如 allocated/free blocks）。
-9. 补 unit/e2e 测试，使用 M3 fixed-slot 作为 oracle。
-10. 跑定向测试和 M3 回归。
-11. 补齐实现与测试文件教学级注释，任务卡追加完成总结。
+2. 给 `Qwen3ForCausalLM` / `Qwen3Model` / `DecoderLayer` 加 paged 可选参数（见「接口透传方案」）。
+3. 扩展 `LLMModel` Protocol，加 `paged_kv_cache` / `request_ids` / `is_prefill`。
+4. 新建 `engine/paged_core.py`，实现 `batch_generate_paged()` 入口。
+5. 实现 inline `_paged_admit()`：`can_allocate(prompt_len)` 不满足则 waiting。
+6. 实现 paged cache 初始化与 request_id 生成/传递。
+7. 实现 prefill：`allocate_request` + paged prefill 参数透传。
+8. 实现 decode：`append_token` + per-request position_ids + paged decode 参数透传。
+9. 实现 finish/free：EOS / max_new_tokens 后 `free_request`。
+10. 保留/转发 metrics 基本字段，并新增 paged 相关最小指标（`allocated_blocks` / `free_blocks`）。
+11. 补 unit 测试，使用 M3 fixed-slot 作为 oracle（最小闭环验证）。
+12. 跑定向测试和 M3 回归。
+13. 补齐实现与测试文件教学级注释，任务卡追加完成总结。
 
 ## 测试清单
 
@@ -217,7 +286,7 @@ needed = ceil(prompt_len / block_size)
 |---|---|---|
 | 1 | M3 fixed path 回归 | 原 `batch_generate` 测试继续全绿 |
 | 2 | 单请求 paged generate | 输出与 serial/M3 fixed-slot 等价 |
-| 3 | 多请求变长 paged generate | token 级输出与 fixed-slot path 等价 |
+| 3 | 多请求变长 paged generate | paged path 可运行、不崩溃；token 级等价留 T6 全面验证 |
 | 4 | waiting > capacity | block 不足的请求留在 waiting，前序完成释放后继续进入 |
 | 5 | finished 释放 block | EOS / max_new_tokens 后 `num_free_blocks` 恢复 |
 | 6 | 跨 block decode | 长度正好跨 block 边界时输出正确 |
@@ -236,6 +305,8 @@ uv run pytest tests/unit/test_batched_attention.py tests/unit/test_paged_attenti
 
 ## DoD
 
+- [ ] 模型调用链（`Qwen3ForCausalLM` / `Qwen3Model` / `DecoderLayer`）已加 paged 可选参数，M1/M2/M3 路径不受影响。
+- [ ] `LLMModel` Protocol 已扩展 `paged_kv_cache` / `request_ids` / `is_prefill`。
 - [ ] 新增 paged batch generation 入口，M3 fixed-slot 入口不被删除。
 - [ ] prefill 阶段正确调用 `allocate_request` 且只调用一次。
 - [ ] decode 阶段每轮写 K/V 前正确调用 `append_token`。
@@ -253,12 +324,17 @@ uv run pytest tests/unit/test_batched_attention.py tests/unit/test_paged_attenti
 1. **忘记 free_request**：短测可能不暴露，但长时间运行会 block 泄漏，waiting 永远进不来。
 2. **decode 写 K/V 前忘记 append_token**：会覆盖旧 token 或写到错误 offset。
 3. **request_ids 与 batch 行错配**：shape 全对但语义全错，必须用测试锁住。
-4. **把 admission 和 prefix cache 混在一起**：M4 只按容量 admit，不做共享命中。
-5. **为了复用 M3 过度改 batch_core**：容易破坏 stable oracle。优先新建 paged 入口。
-6. **block 不足时状态半更新**：append/allocate 失败时不能让 request 状态和 cache 状态不一致。
-7. **prefill/decode 靠 seq_len 猜**：T5 应显式传 `paged_is_prefill`。
-8. **T5 顺手做 benchmark/attention 重构/文档收口**：这些留给 T6/T7/T8，避免任务失焦。
+4. **模型链透传漏层**：最容易出问题的地方。每加一个参数，必须从 `Qwen3ForCausalLM` → `Qwen3Model` → `DecoderLayer` → `GQAAttention` 全部打通，少一层就 None 传到 attention 层。先用单测锁住透传链路。
+5. **把 admission 和 prefix cache 混在一起**：M4 只按容量 admit，不做共享命中。
+6. **为了复用 M3 过度改 batch_core**：容易破坏 stable oracle。优先新建 paged 入口。
+7. **block 不足时状态半更新**：append/allocate 失败时不能让 request 状态和 cache 状态不一致。
+8. **is_prefill 靠 seq_len 猜**：T5 应显式传 `is_prefill`，不靠 token 维度推断。
+9. **T5 顺手做 benchmark/attention 重构/文档收口**：这些留给 T6/T7/T8，避免任务失焦。
 
 ## 与后续任务的衔接
 
-T6 基于 T5 的 paged engine 做 E2E 正确性和 benchmark。T5 完成时只需提供可运行、可测、可解释的 paged batch generation，不要求性能优于 M3。
+T6 基于 T5 的 paged engine 做 E2E 正确性和 benchmark。T5 完成时只需提供可运行、可测、可解释的 paged batch generation，不要求性能优于 M3。T5 的测试只做最小闭环验证（单请求等价 + 多请求可运行 + admission/free 基本正确），token 级全面等价 + benchmark 留 T6。
+
+## 修订记录
+
+- **2026-08-01**：基于 vLLM V1 架构调研，修订接口透传方案（直接加可选参数，不引入 forward context/bind）、Scheduler 方案（inline admission，不新建 paged_fcfs.py）、参数命名统一为 `is_prefill`、补充 decode position_ids 构造示例、明确 block admission 不预留 decode blocks、调整 T5/T6 测试边界。
