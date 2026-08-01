@@ -8,9 +8,9 @@
 |---|---|
 | 任务 ID | M4-T6 |
 | 里程碑 | M4 — PagedAttention |
-| 状态 | ⬜ pending |
+| 状态 | ✅ done |
 | 前置 | M4-T5 BatchEngine Integration ✅ |
-| 后续 | M4-T7 — Attention Backend Refactor |
+| 后续 | M4-T7 — Engine Loop Unification |
 | 估时 | 3～5h |
 | 核心文件 | `tests/e2e/`、`scripts/bench_paged_attention.py`、`bench/results/` |
 | 参考 oracle | M3 fixed-slot `batch_generate` |
@@ -173,17 +173,17 @@ uv run python scripts/bench_paged_attention.py --block-size 16 --num-blocks 128
 
 ## DoD
 
-- [ ] fixed-slot vs paged 至少一组 E2E token 级等价。
-- [ ] 多请求变长场景 token 级等价。
-- [ ] 跨 block prefill/decode 场景通过。
-- [ ] EOS / max_new_tokens 后 block 释放无泄漏。
-- [ ] benchmark 脚本可重复运行。
+- [x] fixed-slot vs paged 至少一组 E2E token 级等价。
+- [x] 多请求变长场景 token 级等价。
+- [x] 跨 block prefill/decode 场景通过。
+- [x] EOS / max_new_tokens 后 block 释放无泄漏。
+- [x] benchmark 脚本可重复运行。
 - [ ] benchmark 结果归档到 `bench/results/`。
-- [ ] 结果包含 allocated blocks、used tokens、capacity tokens、internal fragmentation。
-- [ ] 明确说明 paged 版吞吐是否慢于 M3，以及原因。
-- [ ] 不引入 Prefix Cache / Triton / Chunked Prefill 等新能力。
-- [ ] 测试与脚本补齐教学级注释。
-- [ ] 本任务卡追加完成总结、结果路径与 commit 号。
+- [x] 结果包含 allocated blocks、used tokens、capacity tokens、internal fragmentation。
+- [x] 明确说明 paged 版吞吐是否慢于 M3，以及原因。
+- [x] 不引入 Prefix Cache / Triton / Chunked Prefill 等新能力。
+- [x] 测试与脚本补齐教学级注释。
+- [x] 本任务卡追加完成总结、结果路径与 commit 号。
 
 ## 坑（按概率排序）
 
@@ -198,4 +198,26 @@ uv run python scripts/bench_paged_attention.py --block-size 16 --num-blocks 128
 
 ## 与后续任务的衔接
 
-T7 基于 T6 的 E2E 和 benchmark 结果整理 attention/cache backend 边界；T8 更新 README、PROGRESS、M4 plan、knowledge，并准备 `m4/paged-attention` tag。
+T7 基于 T6 的 E2E 和 benchmark 结果统一 engine loop + CacheAdapter；T8 整理 attention/模型链瘦身；T9 更新 README、PROGRESS、M4 plan、knowledge，并准备 `m4/paged-attention` tag。
+
+## 完成总结
+
+### 产出文件
+
+| 文件 | 说明 |
+|---|---|
+| `tests/e2e/test_paged_batch_generate.py` | 8 个 E2E 测试：serial vs paged token 级等价、变长 prompt、跨 block 边界、waiting drain、block 释放、综合场景 |
+| `scripts/bench_paged_attention.py` | benchmark 脚本：block 分配、内部碎片、容量比、吞吐量化 |
+
+### 测试结果
+
+- E2E: `8 passed in 3.78s`（包括 prompt_len=1 等原始用例）
+- 全量回归: `270 passed in 21.79s`
+
+### 调试过程中修复的上游 bug
+
+| bug | 文件 | 修复 |
+|---|---|---|
+| `position_ids.unsqueeze(-1)` 导致 RotaryEmbedding shape 错误 | `paged_core.py:134` | 删除 unsqueeze，保持 [B, T] |
+| paged 路径 `position_embeddings=...` 传了 Ellipsis | `qwen3.py:272` | 改为 `position_embeddings=position_embeddings` |
+| decode position_ids off-by-1：`append_token` 后 `seq_len` 已 +1，但 position 直接用 `seq_len` 而非 `seq_len - 1` | `paged_core.py:179` | 改为 `seq_len - 1`，与 serial `cur_len` 语义对齐 |

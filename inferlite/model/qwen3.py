@@ -49,7 +49,7 @@ from typing import override
 import torch
 import torch.nn as nn
 
-from inferlite.cache.kv_cache import KVCache, LayerKVCache
+from inferlite.cache import KVCache, LayerKVCache, PagedKVCache
 from inferlite.config import ModelConfig
 from inferlite.model.attention import GQAAttention
 from inferlite.model.layers import RMSNorm, RotaryEmbedding, SwiGLUMLP
@@ -97,6 +97,10 @@ class DecoderLayer(nn.Module):
         cache_position: int = 0,
         cache_slots: torch.Tensor | None = None,
         cache_positions: torch.Tensor | None = None,
+        paged_kv_cache: PagedKVCache | None = None,
+        layer_idx: int | None = None,
+        request_ids: list[str] | None = None,
+        is_prefill: bool = False,
     ) -> torch.Tensor:
         """执行一个 Qwen3 decoder block：self-attention + MLP。
 
@@ -135,6 +139,10 @@ class DecoderLayer(nn.Module):
             cache_position=cache_position,
             cache_slots=cache_slots,
             cache_positions=cache_positions,
+            paged_kv_cache=paged_kv_cache,
+            layer_idx=layer_idx,
+            request_ids=request_ids,
+            is_prefill=is_prefill,
         )
         # residual add：把 attention 增量加回主干。
         hidden_states = residual + hidden_states
@@ -215,6 +223,9 @@ class Qwen3Model(nn.Module):
         kv_cache: KVCache | None = None,
         cache_slots: torch.Tensor | None = None,
         cache_positions: torch.Tensor | None = None,
+        paged_kv_cache: PagedKVCache | None = None,
+        request_ids: list[str] | None = None,
+        is_prefill: bool = False,
     ) -> torch.Tensor:
         """Qwen3 backbone 前向，返回最后一层 hidden states。
 
@@ -253,16 +264,28 @@ class Qwen3Model(nn.Module):
         # Step 2: 逐层通过 decoder blocks。
         # M2 路径：传入 position_embeddings + kv_cache.layers[i]，每层 Attention 自动读写 cache。
         # kv_cache=None 时（M1 路径）：layer_kv_cache=None，行为与原屙实现完全相同。
-        for i, layer in enumerate(self.layers):
-            hidden_states = layer(
-                hidden_states,
-                position_ids,
-                position_embeddings=position_embeddings,
-                layer_kv_cache=kv_cache.layers[i] if kv_cache is not None else None,
-                cache_position=kv_cache.cur_len if isinstance(kv_cache, KVCache) else 0,
-                cache_slots=cache_slots,
-                cache_positions=cache_positions,
-            )
+        if isinstance(paged_kv_cache, PagedKVCache):
+            for i, layer in enumerate(self.layers):
+                hidden_states = layer(
+                    hidden_states,
+                    position_ids,
+                    position_embeddings=position_embeddings,
+                    paged_kv_cache=paged_kv_cache,
+                    layer_idx=i if paged_kv_cache is not None else None,
+                    request_ids=request_ids,
+                    is_prefill=is_prefill,
+                )
+        else:
+            for i, layer in enumerate(self.layers):
+                hidden_states = layer(
+                    hidden_states,
+                    position_ids,
+                    position_embeddings=position_embeddings,
+                    layer_kv_cache=kv_cache.layers[i] if kv_cache is not None else None,
+                    cache_position=kv_cache.cur_len if isinstance(kv_cache, KVCache) else 0,
+                    cache_slots=cache_slots,
+                    cache_positions=cache_positions,
+                )
 
         # Step 3: final RMSNorm。
         # 这是 Qwen3Model 输出前的最后归一化；lm_head/logits 会在后续 T8 接在它后面。
@@ -339,6 +362,9 @@ class Qwen3ForCausalLM(nn.Module):
         kv_cache: KVCache | None = None,
         cache_slots: torch.Tensor | None = None,
         cache_positions: torch.Tensor | None = None,
+        paged_kv_cache: PagedKVCache | None = None,
+        request_ids: list[str] | None = None,
+        is_prefill: bool = False,
     ) -> torch.Tensor:
         """执行 CausalLM 前向，返回每个位置的 vocab logits。
 
@@ -360,6 +386,9 @@ class Qwen3ForCausalLM(nn.Module):
             kv_cache=kv_cache,
             cache_slots=cache_slots,
             cache_positions=cache_positions,
+            paged_kv_cache=paged_kv_cache,
+            request_ids=request_ids,
+            is_prefill=is_prefill,
         )
         if logits_to_keep is not None:
             hidden_states = hidden_states[:, -logits_to_keep:, :]

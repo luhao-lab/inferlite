@@ -58,6 +58,9 @@ class LLMModel(Protocol):
         kv_cache: object = None,
         cache_slots: torch.Tensor | None = None,
         cache_positions: torch.Tensor | None = None,
+        paged_kv_cache: object = None,  # M4-T5 新增
+        request_ids: list[str] | None = None,  # M4-T5 新增
+        is_prefill: bool = False,  # M4-T5 新增
     ) -> torch.Tensor:
         """返回 logits。
 

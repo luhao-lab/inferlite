@@ -24,11 +24,11 @@ T5 是 **engine 集成任务**。T4 只证明单层 attention 能用 paged KV；
 
 - 新增 `batch_generate_paged()` 或等价 paged batch generation 入口。
 - 保持 M3 fixed-slot `batch_generate` 路径可作为 oracle，不删除旧实现。
-- prefill 阶段为 admitted request 调 `PagedKVCache.allocate_request(request_id, prompt_len)`。
+- prefill 阶段为 admitted request 调 `PagedKVCache.allocate_request(request_id, prompt_len)`。多个 admitted 请求合并为一次 batched prefill 前向（pad 到最长 prompt 长度，T4 attention 层已支持变长 mask）。
 - 将 `paged_kv_cache`、`request_ids`、`is_prefill` 透传到每层 attention（`layer_idx` 由 `Qwen3Model` 的 `enumerate` 自动生成，不需要顶层传入）。
 - decode 阶段每轮对 running requests 先调 `PagedKVCache.append_token(request_id)`，再走 paged attention decode。
 - finished / EOS / max_new_tokens 时调用 `PagedKVCache.free_request(request_id)`。
-- 做最小 block admission：`cache.can_allocate(prompt_len)` 为真才 admit；不足则留在 waiting。admission 在 `paged_core.py` 内 inline 实现，不新建 scheduler 文件。
+- 做 block-aware admission：`cache.can_allocate(prompt_len)` 为真才 admit；不足则留在 waiting。decode 按需分配新 block，block 不足时优雅结束请求。admission 在 `paged_core.py` 内 inline 实现，不新建 scheduler 文件。
 - 证明 paged path 输出 token 语义对齐 M3 fixed-slot path（最小闭环验证，全面 token 级等价留 T6）。
 
 ### 明确不做
@@ -108,18 +108,32 @@ T5 的最小 admission 策略：
 
 ### 2. Prefill
 
-admitted request 进入 running 前或进入 running 当轮：
+admitted request 进入 running 前或进入 running 当轮，合并为一次 batched prefill：
 
 ```python
-paged_cache.allocate_request(request_id, prompt_len)
-model(..., paged_kv_cache=paged_cache, request_ids=[request_id], is_prefill=True)
+if admitted:
+    max_prompt_len = max(req.prompt_ids.shape[1] for req in admitted)
+    batch_input_ids = pad_and_cat([req.prompt_ids for req in admitted], max_prompt_len)
+    batch_position_ids = make_position_ids([req.prompt_ids.shape[1] for req in admitted], max_prompt_len)
+    batch_request_ids = [req.request_id for req in admitted]
+
+    for req in admitted:
+        paged_cache.allocate_request(req.request_id, req.prompt_ids.shape[1])
+
+    logits = model(
+        batch_input_ids,
+        position_ids=batch_position_ids,
+        paged_kv_cache=paged_cache,
+        request_ids=batch_request_ids,
+        is_prefill=True,
+    )
 ```
 
 边界：
 
-- `allocate_request` 只调用一次。
+- `allocate_request` 每个请求只调用一次。
 - T5 负责生成稳定唯一的 `request_id`。
-- prefill 可先按单请求逐个做，M4 不要求 chunked/batched prefill。
+- prefill 采用 batched 前向：多个 admitted 请求 pad 到最长 prompt 长度，一次前向完成。T4 attention 层的 `_build_valid_lens_mask` 已支持变长 mask，padding 部分不会写入 KV cache。
 - 如果 prefill 失败，必须释放已分配 block 或保证异常前未注册成功；不得泄漏。
 
 ### 3. Decode
@@ -140,7 +154,7 @@ model(..., paged_kv_cache=paged_cache, request_ids=request_ids, is_prefill=False
 
 - `append_token` 必须在写当前 token K/V 前调用。
 - `request_ids` 顺序必须与 batch input 行顺序完全一致。
-- 任一 append 因 block 不足失败时，T5 暂不做抢占，抛 RuntimeError。默认策略：admission 只按 `can_allocate(prompt_len)` 准入，不预留 decode blocks。这意味着测试需要保证 `num_blocks` 足以容纳所有请求的 prompt + max_new_tokens。如果未来需要更激进的 admission（预留 decode 容量），在完成总结里记录策略变化。
+- 任一 append 因 block 不足失败时，T5 暂不做抢占，优雅结束该请求（保留已生成 token，mark_finished）。高并发场景的动态分配 + preemption 留后续里程碑对齐 vLLM V1 时处理。
 
 ### 4. Finish / Free
 
@@ -233,13 +247,13 @@ def _paged_admit(scheduler: FCFSScheduler,
 
     与 M3 FCFSScheduler.admit_until_full() 的区别：
     - M3 只看 max_num_seqs（slot 数量）
-    - M4 额外检查 can_allocate(prompt_len)（block 数量）
+    - M4 检查 can_allocate(prompt_len)，decode 按需分配新 block
     """
     admitted = []
     while scheduler.waiting:
         req = scheduler.waiting[0]
-        prompt_len = req.prompt_ids.shape[1]
-        if not paged_cache.can_allocate(prompt_len):
+        total_len = req.prompt_ids.shape[1]  # 只为 prompt 预留，decode 按需分配
+        if not paged_cache.can_allocate(total_len):
             break  # FCFS：队首不够空间就停，不跳过头部请求
         scheduler.waiting.popleft()
         req.status = RequestStatus.RUNNING
@@ -252,15 +266,21 @@ T7/T8 再考虑是否抽象公共 admission 接口。
 
 ## Block admission 策略
 
-M4 最小策略：只检查 prompt prefill 所需 blocks：
+M4 策略：admission 时只按 `prompt_len` 预留，decode 阶段按需分配新 block：
 
 ```text
+# admission
 needed = ceil(prompt_len / block_size)
+
+# decode（每步）
+if table.needs_new_block():
+    block_id = pool.allocate()  # pool 空时抛 RuntimeError
+    table.append_block(block_id)
 ```
 
-**不预留 decode blocks**。admission 只保证 prompt 能放下，decode 阶段 block 不足时抛 RuntimeError。测试必须保证 `num_blocks` 足以容纳所有请求的 `prompt + max_new_tokens`。
+这体现了 paged attention 相对于 M3 fixed-slot 的核心价值：**按需分配，不为未生成的 token 预留空间**。
 
-这一策略与 vLLM V1 不同：vLLM V1 在 schedule 阶段为每个请求的 `num_new_tokens`（含 decode）统一调 `allocate_slots`，失败时抢占低优先级请求。T5 不做抢占，不预留，保持最小闭环。如果未来需要更智能的 admission，在完成总结里记录策略变化。
+decode 阶段 block 不足时优雅结束请求（保留已生成 token），不做抢占。高并发场景的动态分配 + preemption 留后续里程碑对齐 vLLM V1 时处理。
 
 本任务不做 chunked prefill，不做复杂 token budget。
 
@@ -272,7 +292,7 @@ needed = ceil(prompt_len / block_size)
 4. 新建 `engine/paged_core.py`，实现 `batch_generate_paged()` 入口。
 5. 实现 inline `_paged_admit()`：`can_allocate(prompt_len)` 不满足则 waiting。
 6. 实现 paged cache 初始化与 request_id 生成/传递。
-7. 实现 prefill：`allocate_request` + paged prefill 参数透传。
+7. 实现 batched prefill：多个 admitted 请求 pad + 一次前向 + paged 参数透传。
 8. 实现 decode：`append_token` + per-request position_ids + paged decode 参数透传。
 9. 实现 finish/free：EOS / max_new_tokens 后 `free_request`。
 10. 保留/转发 metrics 基本字段，并新增 paged 相关最小指标（`allocated_blocks` / `free_blocks`）。
@@ -330,6 +350,7 @@ uv run pytest tests/unit/test_batched_attention.py tests/unit/test_paged_attenti
 7. **block 不足时状态半更新**：append/allocate 失败时不能让 request 状态和 cache 状态不一致。
 8. **is_prefill 靠 seq_len 猜**：T5 应显式传 `is_prefill`，不靠 token 维度推断。
 9. **T5 顺手做 benchmark/attention 重构/文档收口**：这些留给 T6/T7/T8，避免任务失焦。
+10. **admission 预留策略的选择**：M4 采用 `prompt_len` 准入 + decode 按需分配，体现 paged 按需分配价值。vLLM V1 的做法是每步动态分配 + 分配失败时抢占低优先级请求（preemption），解决高并发场景的 block 不足问题。动态分配 + preemption 留后续里程碑（M5 prefix cache 或 M10 长上下文调度）对齐 vLLM V1 时引入。
 
 ## 与后续任务的衔接
 
