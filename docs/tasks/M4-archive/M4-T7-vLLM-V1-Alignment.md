@@ -13,7 +13,7 @@
 | 后续 | M4-T8 Docs & Tag |
 | 估时 | 5～6h |
 | 核心文件 | `engine/forward_context.py`（新建）、`cache/adapter.py`（新建，5 个 adapter）、`engine/loop.py`（新建） |
-| 改造文件 | `engine/batch_core.py`、`engine/paged_core.py`、`engine/core.py`、`engine/protocol.py`、`model/qwen3.py`、`model/attention.py` |
+| 改造文件 | `engine/batch_core.py`、`engine/paged_core.py`、`engine/core.py`、`engine/protocol.py`、`model/qwen3.py`、`model/attention.py`、`cache/paged_kv_cache.py` |
 | 测试文件 | 既有 M1-M4 全量测试 |
 | 产物 | ForwardContext + CacheAdapter + 统一 engine loop + 瘦身模型链 |
 
@@ -430,6 +430,7 @@ M1-M4 全量回归必须全绿（270 tests）。
 - [ ] `Qwen3ForCausalLM.forward(input_ids, positions)` 2 参数 + `compute_logits`。
 - [ ] `LLMModel` Protocol 瘦身到 2 参数 + `compute_logits`。
 - [ ] M1（无 cache）/ M2（单序列 cache）/ M3（batched）/ M4（paged）行为不变，全量测试通过。
+- [ ] `PagedKVCache` 接口对齐 vLLM：`write` / `gather` 消费 `block_table` tensor，不再需要 `request_ids`。
 - [ ] M5 只需新增一个 `PrefixCacheAdapter` 即可接入 engine loop。
 - [ ] 任务卡完成总结记录真实命令、结果和 commit。
 
@@ -444,6 +445,7 @@ M1-M4 全量回归必须全绿（270 tests）。
 7. **M2 `generate()` 单请求入口**：`core.py` 的 `generate()` 直接调 model，不走 ForwardContext。需要适配或保持独立路径。
 8. **一次性改太多**：Phase 1 先改 engine 层（adapter + loop），跑通后再改 Phase 2 模型层。不要同时改。
 9. **RoPE 计算位置变化**：vLLM 在每个 `Qwen3Attention.forward` 里调 `self.rotary_emb(positions, q, k)`，是 per-layer 计算。我们之前是 Model 层统一算一次。T7 对齐 vLLM per-layer 计算，牺牲少量效率换架构一致性。
+10. **PagedKVCache 接口改造**：`write_prefill` / `write_decode` / `gather_kv` 都要从 `request_ids` 参数改成消费 `block_table` tensor。adapter 负责把 `request_ids` → tensor 的转换吃掉，attention 层只看到 tensor。改完要确保 M4 所有测试（`test_paged_attention.py`、`test_paged_batch_engine.py`、`test_paged_batch_generate.py`）全绿。
 
 ## M1-M3 适配设计
 
@@ -570,6 +572,38 @@ cache/adapter.py
 - `prepare_decode` / `decode_positions` / `commit_decode`
 - `make_prefill_metadata` / `make_decode_metadata` → `AttentionMetadata`
 - `bind_kv_cache(model)` → 绑定 cache 到每层 `Attention`
+
+### PagedKVCache 接口对齐（消除 request_ids）
+
+**现状**：`_paged_cache_rw` 需要 `request_ids: list[str]` 来查找 `BlockTable`，attention 层知道请求身份。
+
+**T7 对齐 vLLM**：attention 层只看 tensor，不知道 request_id。
+
+```
+改造前（request_ids 贯穿）：
+    cache.write_prefill(layer_idx, request_ids, k, v)
+    k, v, valid_lens = cache.gather_kv(layer_idx, request_ids)
+
+改造后（block_table tensor 贯穿）：
+    metadata = get_forward_context().attn_metadata
+    cache.write(layer_idx, metadata, k, v)
+    k, v, valid_lens = cache.gather(layer_idx, metadata.block_table, metadata.seq_lens)
+```
+
+**`PagedKVCache` 需要改的接口**：
+
+| 旧接口 | 新接口 | 说明 |
+|---|---|---|
+| `write_prefill(layer_idx, request_ids, k, v)` | `write(layer_idx, metadata, k, v)` | metadata 含写入位置信息 |
+| `write_decode(layer_idx, request_ids, k, v)` | 同上，`write` 统一 | prefill/decode 由 metadata 区分 |
+| `gather_kv(layer_idx, request_ids)` | `gather(layer_idx, block_table, seq_lens)` | 直接用 tensor 索引物理 block |
+
+**`PagedCacheAdapter.make_*_metadata` 负责**：
+- 从 `PagedKVCache.block_tables` 提取 `block_table: [num_seqs, max_blocks]` tensor
+- 从 `PagedKVCache.block_tables[rid].seq_len` 提取 `seq_lens: [num_seqs]` tensor
+- 写入位置（prefill 偏移 / decode 位置）由 adapter 计算并编码到 metadata
+
+**效果**：`Attention.forward` 和 `_paged_cache_rw` 完全不知道 `request_ids` 的存在，只看 tensor。
 
 ### `engine/core.py` 改造后
 
