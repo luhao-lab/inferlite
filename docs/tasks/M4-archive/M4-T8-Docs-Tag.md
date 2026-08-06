@@ -1,15 +1,15 @@
-# M4-T9 — Docs & Tag
+# M4-T8 — Docs & Tag
 
-> 在 T4～T8 代码、E2E、benchmark、engine loop 统一和 attention/模型链重构都完成后，做 M4 里程碑闭环：更新 README / PROGRESS / M4 plan / knowledge，检查任务卡完成总结和最终门禁，准备 annotated tag `m4/paged-attention`。
+> 在 T4～T7 代码、E2E、benchmark、engine loop 统一、attention/模型链重构和 vLLM V1 架构对齐都完成后，做 M4 里程碑闭环：更新 README / PROGRESS / M4 plan / knowledge，检查任务卡完成总结和最终门禁，准备 annotated tag `m4/paged-attention`。
 
 ## 元信息
 
 | 字段 | 内容 |
 |---|---|
-| 任务 ID | M4-T9 |
+| 任务 ID | M4-T8 |
 | 里程碑 | M4 — PagedAttention |
 | 状态 | ⬜ pending |
-| 前置 | M4-T8 Attention Backend Refactor + 模型链瘦身 ✅ |
+| 前置 | M4-T7 vLLM V1 Alignment ✅ |
 | 后续 | M5 — Prefix Caching |
 | 估时 | 2～3h |
 | 核心文件 | `README.md`、`docs/plan/PROGRESS.md`、`docs/plan/M4.md`、`docs/knowledge/` |
@@ -17,7 +17,7 @@
 
 ## 范围冻结
 
-T9 是 **文档与里程碑收口任务**，不再实现新能力。它的职责是把 T4～T8 已经完成并验证过的事实沉淀到项目文档、进度记录和 tag 中。
+T8 是 **文档与里程碑收口任务**，不再实现新能力。它的职责是把 T4～T7 已经完成并验证过的事实沉淀到项目文档、进度记录和 tag 中。
 
 ### 明确做
 
