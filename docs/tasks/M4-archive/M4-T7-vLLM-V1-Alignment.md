@@ -238,63 +238,56 @@ class Qwen3Attention(nn.Module):
 
 class CacheAdapter(Protocol):
     """Engine loop 与 cache 实现之间的适配层。
-    对齐 vLLM V1 的 KVCacheManager 接口。
+    对齐 vLLM V1 的 KVCacheManager 接口（简化版）。
+    decode 时序（append → 读 position → +1）由各 adapter 在 make_decode_metadata 内部处理。
     """
     # ── 生命周期 ──
-    def can_admit(self, request) -> bool: ...
-    def allocate(self, request) -> None: ...
+    def can_admit(self, prompt_len: int) -> bool: ...
+    def allocate(self, request_id: str, prompt_len: int) -> None: ...
     def free(self, request_id: str) -> None: ...
 
-    # ── decode 三步时序 ──
-    def prepare_decode(self, request_id: str) -> None: ...    # 分配空间（不 +1）
-    def decode_positions(self, request_ids: list[str]) -> list[int]: ...  # 读 position
-    def commit_decode(self, request_ids: list[str]) -> None: ...  # +1
-
-    # ── 元数据构造 ──
+    # ── 元数据构造（decode 时序封装在 make_decode_metadata 内部）──
     def make_prefill_metadata(self, requests) -> AttentionMetadata: ...
     def make_decode_metadata(self, requests) -> AttentionMetadata: ...
 
     # ── cache 绑定 ──
     def bind_kv_cache(self, model) -> None:
         """初始化时将 cache 绑定到模型的每个 Attention 层。
-        对齐 vLLM V1 的 bind_kv_cache 模式。
+        对齐 vLLM V1 的 kv_cache 直接赋值模式。
         """
         ...
 
 class NoCacheAdapter:
     """M1 无 cache 的 adapter。所有 cache 操作为空，只构造 metadata。"""
-    def can_admit(self, request) -> bool: return True
-    def allocate(self, request) -> None: pass
+    def can_admit(self, prompt_len: int) -> bool: return True
+    def allocate(self, request_id: str, prompt_len: int) -> None: pass
     def free(self, request_id: str) -> None: pass
-    def prepare_decode(self, request_id: str) -> None: pass
-    def decode_positions(self, request_ids) -> list[int]: ...  # 返回 cur_len
-    def commit_decode(self, request_ids) -> None: pass
     def bind_kv_cache(self, model):
-        for layer in model.layers:
-            layer.self_attn.attn.bind_kv_cache(None)  # M1 无 cache
+        for layer in model.model.layers:
+            layer.self_attn.attn.kv_cache = None  # M1 无 cache
 
 class SingleCacheAdapter:
     """M2 单序列 KVCache 的 adapter。"""
     def __init__(self, cache: KVCache): ...
+    def can_admit(self, prompt_len: int) -> bool: return True
     def bind_kv_cache(self, model):
-        for i, layer in enumerate(model.layers):
-            layer.self_attn.attn.bind_kv_cache(self.cache.layers[i])
+        for i, layer in enumerate(model.model.layers):
+            layer.self_attn.attn.kv_cache = self.cache.layers[i]
 
 class BatchedCacheAdapter:
     """M3 fixed-slot BatchedKVCache 的 adapter。"""
-    def __init__(self, cache: BatchedKVCache, max_num_seqs: int): ...
-
+    def __init__(self, cache: BatchedKVCache): ...
     def bind_kv_cache(self, model):
-        for i, layer in enumerate(model.layers):
-            layer.self_attn.attn.bind_kv_cache(self.cache.layers[i])
+        for i, layer in enumerate(model.model.layers):
+            layer.self_attn.attn.kv_cache = self.cache.layers[i]
 
 class PagedCacheAdapter:
     """M4 paged PagedKVCache 的 adapter。"""
     def __init__(self, cache: PagedKVCache): ...
-
     def bind_kv_cache(self, model):
-        for i, layer in enumerate(model.layers):
-            layer.self_attn.attn.bind_kv_cache(self.cache, layer_idx=i)
+        for i, layer in enumerate(model.model.layers):
+            layer.self_attn.attn.kv_cache = self.cache
+            layer.self_attn.attn.layer_idx = i
 ```
 
 ### 5. Engine Loop（对齐 vLLM execute_model）
@@ -310,6 +303,7 @@ def batch_generate_loop(model, sampler, scheduler, adapter, prompts,
     初始化时调用 adapter.bind_kv_cache(model) 绑定 cache 到 Attention 层。
     每次 forward 前用 set_forward_context(metadata) 设置元数据。
     model forward 只接收 (input_ids, positions)。
+    decode 时序（append → 读 position → +1）封装在各 adapter 的 make_decode_metadata 内部。
     """
     # ── 初始化：绑定 cache 到模型 ──
     adapter.bind_kv_cache(model)
@@ -318,29 +312,26 @@ def batch_generate_loop(model, sampler, scheduler, adapter, prompts,
         # ── 1. Admit + Allocate ──
         admitted = _admit(scheduler, adapter)
         for req in admitted:
-            adapter.allocate(req)
+            adapter.allocate(req.request_id, req.prompt_ids.shape[1])
 
         # ── 2. Batched Prefill ──
         if admitted:
-            metadata = adapter.make_prefill_metadata(admitted)
             input_ids, positions = _build_prefill_batch(admitted, device)
+            metadata = adapter.make_prefill_metadata(admitted)
             with set_forward_context(metadata):
                 hidden_states = model(input_ids, positions=positions)
             logits = model.compute_logits(hidden_states)
             _sample_prefill(logits, admitted, sampler, metadata, metrics)
 
-        # ── 3. Decode ──
+        # ── 3. Decode（时序由 make_decode_metadata 内部处理）──
         running = list(scheduler.running.values())
         if not running:
             break
-        for req in running:
-            adapter.prepare_decode(req.request_id)
         metadata = adapter.make_decode_metadata(running)
         next_tokens, positions = _build_decode_batch(running, device)
         with set_forward_context(metadata):
             hidden_states = model(next_tokens, positions=positions)
         logits = model.compute_logits(hidden_states)
-        adapter.commit_decode([r.request_id for r in running])
         _sample_decode(logits, running, sampler, adapter, metrics)
 ```
 
@@ -361,7 +352,7 @@ class LLMModel(Protocol):
 | `FlashAttentionMetadata` | `AttentionMetadata` | 纯 tensor，无 cache 对象 |
 | `set_forward_context()` | `set_forward_context()` | 同名 context manager |
 | `get_forward_context()` | `get_forward_context()` | 同名 |
-| `Attention.bind_kv_cache()` | `Attention.bind_kv_cache()` | 同名，cache 绑定到层 |
+| `Attention.kv_cache` 直接赋值 | `adapter.bind_kv_cache()` 设置 `attn.kv_cache` | 同效果，inferlite 用显式方法 |
 | `Attention.forward(q, k, v)` | `Attention.forward(q, k, v)` | 同名，3 参数 |
 | `Qwen3Attention.forward(positions, hidden_states)` | `Qwen3Attention.forward(positions, hidden_states)` | 同名同签名 |
 | `Qwen3DecoderLayer.forward(positions, hidden_states)` | `Qwen3DecoderLayer.forward(positions, hidden_states)` | 同名同签名 |
