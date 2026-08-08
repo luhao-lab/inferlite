@@ -51,7 +51,8 @@ import torch.nn as nn
 
 from inferlite.cache import KVCache, LayerKVCache, PagedKVCache
 from inferlite.config import ModelConfig
-from inferlite.model.attention import GQAAttention
+from inferlite.engine.forward_context import AttentionMetadata, set_forward_context
+from inferlite.model.attention import Qwen3Attention
 from inferlite.model.layers import RMSNorm, RotaryEmbedding, SwiGLUMLP
 
 
@@ -72,7 +73,7 @@ class DecoderLayer(nn.Module):
 
         # self_attn 对应 transformers.Qwen3DecoderLayer.self_attn。
         # 命名对齐很重要：T7 加载 HF 权重时会依赖 state_dict key 的模块路径。
-        self.self_attn: GQAAttention = GQAAttention(config)
+        self.self_attn: Qwen3Attention = Qwen3Attention(config)
 
         # MLP 是 attention 后的前馈网络，对每个 token 独立作用，不做 token 间通信。
         self.mlp: SwiGLUMLP = SwiGLUMLP(config.hidden_size, config.intermediate_size)
@@ -131,19 +132,29 @@ class DecoderLayer(nn.Module):
         # self_attn 内部会执行：q/k/v projection -> q/k norm -> RoPE -> GQA attention -> o_proj。
         # M2 路径：RoPE 后写入 cache，从 cache 读取完整历史 K/V。
         # 输出仍是 [B, T, H]，表示 attention 子层计算出的“增量”。
-        hidden_states = self.self_attn(
-            hidden_states,
-            position_ids,
-            position_embeddings,
-            layer_kv_cache=layer_kv_cache,
-            cache_position=cache_position,
-            cache_slots=cache_slots,
-            cache_positions=cache_positions,
-            paged_kv_cache=paged_kv_cache,
-            layer_idx=layer_idx,
-            request_ids=request_ids,
-            is_prefill=is_prefill,
-        )
+        # ── 过渡期：从旧参数绑定 cache 到 Attention 层 ──
+        # A4 后由 adapter.bind_kv_cache() 在初始化时完成，此处可删除。
+        if layer_kv_cache is not None:
+            self.self_attn.attn.kv_cache = layer_kv_cache
+        elif paged_kv_cache is not None:
+            self.self_attn.attn.kv_cache = paged_kv_cache
+            if layer_idx is not None:
+                self.self_attn.attn.layer_idx = layer_idx
+        if hasattr(self.self_attn, "attn") and self.self_attn.attn.kv_cache is not None:
+            metadata = self._build_metadata(
+                hidden_states,
+                position_ids,
+                layer_kv_cache,
+                cache_position,
+                cache_slots,
+                cache_positions,
+                paged_kv_cache,
+                is_prefill,
+            )
+            with set_forward_context(metadata):
+                hidden_states = self.self_attn(position_ids, hidden_states)
+        else:
+            hidden_states = self.self_attn(position_ids, hidden_states)
         # residual add：把 attention 增量加回主干。
         hidden_states = residual + hidden_states
 
@@ -160,6 +171,48 @@ class DecoderLayer(nn.Module):
         # 第二次 residual add：把 MLP 增量加回主干。
         hidden_states = residual + hidden_states
         return hidden_states
+
+    def _build_metadata(
+        self,
+        hidden_states,
+        position_ids,
+        layer_kv_cache,
+        cache_position,
+        cache_slots,
+        cache_positions,
+        paged_kv_cache,
+        is_prefill,
+    ):
+        """过渡期 helper：从旧参数构造 AttentionMetadata。A4 后由 adapter 负责。"""
+        seq_len = hidden_states.shape[1]
+
+        if paged_kv_cache is not None:
+            # M4: seq_lens 从 request_ids 推导（暂时）
+            num_seqs = 1 if is_prefill else len(cache_slots or [1])
+            seq_lens = torch.zeros(num_seqs, dtype=torch.long, device=hidden_states.device)
+            return AttentionMetadata(num_seqs=num_seqs, seq_lens=seq_lens)
+
+        if isinstance(layer_kv_cache, LayerKVCache) and not isinstance(layer_kv_cache, type(None)):
+            # M2: 单序列
+            if is_prefill or cache_position == 0:
+                seq_lens = torch.tensor([seq_len], device=hidden_states.device)
+            else:
+                seq_lens = torch.tensor([cache_position + 1], device=hidden_states.device)
+            return AttentionMetadata(num_seqs=1, seq_lens=seq_lens)
+
+        # M3: batched
+        if cache_positions is not None:
+            # decode
+            seq_lens = cache_positions + 1
+        else:
+            # prefill
+            num_seqs = hidden_states.shape[0]
+            seq_lens = torch.full((num_seqs,), seq_len, device=hidden_states.device)
+        return AttentionMetadata(
+            num_seqs=len(seq_lens),
+            seq_lens=seq_lens,
+            slot_mapping=cache_slots,  # ← 传 slot 映射
+        )
 
 
 class Qwen3Model(nn.Module):

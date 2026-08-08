@@ -1,4 +1,4 @@
-"""Unit tests for inferlite.model.attention.GQAAttention.
+"""Unit tests for inferlite.model.attention.Qwen3Attention.
 
 T4 目标：手写 Qwen3 GQA Attention，并在小尺寸配置上对齐
 transformers.models.qwen3.modeling_qwen3.Qwen3Attention。
@@ -10,7 +10,9 @@ transformers.models.qwen3.modeling_qwen3.Qwen3Attention。
 import torch
 from transformers import Qwen3Config
 from transformers.models.qwen3.modeling_qwen3 import (
-    Qwen3Attention,
+    Qwen3Attention as RefQwen3Attention,
+)
+from transformers.models.qwen3.modeling_qwen3 import (
     Qwen3RotaryEmbedding,
 )
 from transformers.models.qwen3.modeling_qwen3 import (
@@ -18,7 +20,7 @@ from transformers.models.qwen3.modeling_qwen3 import (
 )
 
 from inferlite.config import ModelConfig
-from inferlite.model.attention import GQAAttention, repeat_kv
+from inferlite.model.attention import Qwen3Attention, repeat_kv
 from inferlite.model.layers import RotaryEmbedding
 
 
@@ -59,7 +61,7 @@ def _tiny_qwen3_config() -> Qwen3Config:
     )
 
 
-def _copy_attention_weights(mine: GQAAttention, ref: Qwen3Attention) -> None:
+def _copy_attention_weights(mine: Qwen3Attention, ref: RefQwen3Attention) -> None:
     """把 transformers attention 的权重复制到 inferlite attention。"""
     mine.q_proj.weight.data.copy_(ref.q_proj.weight.data)
     mine.k_proj.weight.data.copy_(ref.k_proj.weight.data)
@@ -92,10 +94,10 @@ def test_repeat_kv_noop_when_n_rep_is_one():
 def test_qwen3_0_6b_projection_shapes():
     """Qwen3-0.6B 的 head_dim=128，不能误用 hidden_size / num_heads。"""
     cfg = ModelConfig.qwen3_0_6b()
-    attn = GQAAttention(cfg)
+    attn = Qwen3Attention(cfg)
 
     assert attn.head_dim == 128
-    assert attn.num_key_value_groups == 2
+    assert attn.attn.num_key_value_groups == 2
     assert tuple(attn.q_proj.weight.shape) == (16 * 128, 1024)
     assert tuple(attn.k_proj.weight.shape) == (8 * 128, 1024)
     assert tuple(attn.v_proj.weight.shape) == (8 * 128, 1024)
@@ -103,26 +105,26 @@ def test_qwen3_0_6b_projection_shapes():
 
 
 def test_gqa_attention_output_shape():
-    """GQAAttention 输入/输出都保持 residual stream 的 [B, T, H] 形状。"""
+    """Qwen3Attention 输入/输出都保持 residual stream 的 [B, T, H] 形状。"""
     torch.manual_seed(0)
     cfg = _tiny_model_config()
-    attn = GQAAttention(cfg).eval()
+    attn = Qwen3Attention(cfg).eval()
     hidden_states = torch.randn(2, 5, cfg.hidden_size)
     position_ids = torch.arange(5).unsqueeze(0).expand(2, -1)
 
     with torch.no_grad():
-        output = attn(hidden_states, position_ids)
+        output = attn(position_ids, hidden_states)
 
     assert output.shape == hidden_states.shape
 
 
 def test_gqa_attention_vs_transformers_qwen3_attention_fp32():
-    """小尺寸 fp32 下，GQAAttention 应与 transformers.Qwen3Attention 对齐。"""
+    """小尺寸 fp32 下，Qwen3Attention 应与 transformers.Qwen3Attention 对齐。"""
     torch.manual_seed(0)
     cfg = _tiny_model_config()
     ref_cfg = _tiny_qwen3_config()
-    mine = GQAAttention(cfg).eval()
-    ref = Qwen3Attention(ref_cfg, layer_idx=0).eval()
+    mine = Qwen3Attention(cfg).eval()
+    ref = RefQwen3Attention(ref_cfg, layer_idx=0).eval()
     _copy_attention_weights(mine, ref)
 
     batch_size = 2
@@ -144,7 +146,7 @@ def test_gqa_attention_vs_transformers_qwen3_attention_fp32():
             position_embeddings=(cos_ref, sin_ref),
             attention_mask=causal_mask,
         )
-        output_mine = mine(hidden_states, position_ids)
+        output_mine = mine(position_ids, hidden_states)
 
     assert output_mine.shape == output_ref.shape
     assert torch.allclose(output_mine, output_ref, atol=1e-5, rtol=1e-5)
@@ -154,7 +156,7 @@ def test_gqa_attention_causal_mask_blocks_future_tokens():
     """修改未来 token 不应影响过去 token 的 attention 输出。"""
     torch.manual_seed(0)
     cfg = _tiny_model_config()
-    attn = GQAAttention(cfg).eval()
+    attn = Qwen3Attention(cfg).eval()
     seq_len = 5
     position_ids = torch.arange(seq_len).unsqueeze(0)
     hidden_states = torch.randn(1, seq_len, cfg.hidden_size)
@@ -162,8 +164,8 @@ def test_gqa_attention_causal_mask_blocks_future_tokens():
     changed_future[:, 3:, :] = torch.randn_like(changed_future[:, 3:, :]) * 10
 
     with torch.no_grad():
-        output = attn(hidden_states, position_ids)
-        output_changed = attn(changed_future, position_ids)
+        output = attn(position_ids, hidden_states)
+        output_changed = attn(position_ids, changed_future)
 
     # 第 0~2 个位置只能看见自己和过去，因此不应被第 3~4 个未来 token 影响。
     assert torch.allclose(output[:, :3, :], output_changed[:, :3, :], atol=1e-5, rtol=1e-5)

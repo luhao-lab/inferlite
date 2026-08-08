@@ -36,7 +36,7 @@ def get_forward_context() -> ForwardContext:
 @contextmanager
 def set_forward_context(attn_metadata: AttentionMetadata):
     global _forward_context
-    _forward_context: ForwardContext = ForwardContext(attn_metadata)
+    _forward_context = ForwardContext(attn_metadata)
     try:
         yield
     finally:

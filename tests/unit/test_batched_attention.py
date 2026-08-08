@@ -16,7 +16,8 @@ import torch
 from inferlite.cache.batched_kv_cache import BatchedLayerKVCache
 from inferlite.cache.kv_cache import LayerKVCache
 from inferlite.config import ModelConfig
-from inferlite.model.attention import GQAAttention
+from inferlite.engine.forward_context import AttentionMetadata, set_forward_context
+from inferlite.model.attention import Qwen3Attention
 from inferlite.model.qwen3 import Qwen3Model
 
 # ---------------------------------------------------------------------------
@@ -64,17 +65,67 @@ def _make_single_layer_cache(
     return LayerKVCache(k=k, v=v)
 
 
+def _call_batched(attn, hidden, position_ids, cache, cache_slots, cache_positions=None):
+    """Helper: 用新签名调用 Qwen3Attention，支持 M3 batched 和 M2 single cache。
+
+    Args:
+        attn: Qwen3Attention 实例
+        hidden: [B, T, H]
+        position_ids: [B, T] or [B, 1]
+        cache: BatchedLayerKVCache 或 LayerKVCache
+        cache_slots: [B] slot 映射（M3）
+        cache_positions: [B] 写入位置（M3 decode），None 表示 prefill
+    """
+    # 绑定 cache
+    attn.attn.kv_cache = cache
+
+    # 构造 metadata
+    T = hidden.shape[1]
+    if isinstance(cache, BatchedLayerKVCache):
+        if cache_positions is not None:
+            # M3 decode
+            seq_lens = cache_positions + 1
+        else:
+            # M3 prefill
+            B = hidden.shape[0]
+            seq_lens = torch.full((B,), T, device=hidden.device)
+        metadata = AttentionMetadata(
+            num_seqs=len(seq_lens),
+            seq_lens=seq_lens,
+            slot_mapping=cache_slots,
+        )
+    elif isinstance(cache, LayerKVCache):
+        # M2: cache_position 隐含在 seq_lens 中
+        if cache_positions is not None:
+            cp = (
+                int(cache_positions[0])
+                if hasattr(cache_positions, "__len__")
+                else int(cache_positions)
+            )
+            seq_lens = torch.tensor([cp + T], device=hidden.device)
+        else:
+            seq_lens = torch.tensor([T], device=hidden.device)
+        metadata = AttentionMetadata(num_seqs=1, seq_lens=seq_lens)
+
+    with set_forward_context(metadata):
+        out = attn(position_ids, hidden)
+
+    # 恢复
+    attn.attn.kv_cache = None
+    return out
+
+
 # ===========================================================================
 # Attention 层测试
 # ===========================================================================
 
 
 class TestBatchedAttentionLayer:
-    """GQAAttention + BatchedLayerKVCache 的 batched decode。"""
+    """Qwen3Attention + BatchedLayerKVCache 的 batched decode。"""
 
-    def _make_attn(self) -> GQAAttention:
+    def _make_attn(self) -> Qwen3Attention:
         config = _tiny_config(num_hidden_layers=1)
-        return GQAAttention(config)
+        return Qwen3Attention(config)
 
     def test_batched_decode_output_shape(self):
         """L0-1: batched decode 输出 shape [B, 1, hidden_size]。"""
@@ -87,13 +138,7 @@ class TestBatchedAttentionLayer:
         cache_positions = torch.tensor([5, 10, 3])
         position_ids = cache_positions[:, None]  # [B, 1]
 
-        out = attn(
-            hidden,
-            position_ids=position_ids,
-            layer_kv_cache=cache,
-            cache_slots=cache_slots,
-            cache_positions=cache_positions,
-        )
+        out = _call_batched(attn, hidden, position_ids, cache, cache_slots, cache_positions)
         assert out.shape == (B, 1, 32)
 
     def test_cache_slot_write_position(self):
@@ -106,13 +151,7 @@ class TestBatchedAttentionLayer:
         cache_positions = torch.tensor([5, 10])
         position_ids = cache_positions[:, None]
 
-        attn(
-            hidden,
-            position_ids=position_ids,
-            layer_kv_cache=cache,
-            cache_slots=cache_slots,
-            cache_positions=cache_positions,
-        )
+        _call_batched(attn, hidden, position_ids, cache, cache_slots, cache_positions)
 
         # slot 0, pos 5 应该有非零值
         assert cache.k[0, :, 5, :].abs().sum() > 0
@@ -131,41 +170,42 @@ class TestBatchedAttentionLayer:
         cache = _make_batched_layer_cache()
 
         # 给 slot 0 填一些 KV 数据（模拟历史）
-        cache.k[0, :, :8, :] = torch.randn(2, 8, 8)  # slot 0 有 8 个 token
+        cache.k[0, :, :8, :] = torch.randn(2, 8, 8)
         cache.v[0, :, :8, :] = torch.randn(2, 8, 8)
         # 给 slot 1 填不同的 KV 数据
-        cache.k[1, :, :3, :] = torch.randn(2, 3, 8)  # slot 1 有 3 个 token
+        cache.k[1, :, :3, :] = torch.randn(2, 3, 8)
         cache.v[1, :, :3, :] = torch.randn(2, 3, 8)
 
-        # 分别用两个请求 decode
         hidden_a = torch.randn(1, 1, 32)
         hidden_b = torch.randn(1, 1, 32)
 
         # 请求 A: slot 0, pos 8
-        out_a = attn(
+        out_a = _call_batched(
+            attn,
             hidden_a,
-            position_ids=torch.tensor([[8]]),
-            layer_kv_cache=cache,
-            cache_slots=torch.tensor([0]),
-            cache_positions=torch.tensor([8]),
+            torch.tensor([[8]]),
+            cache,
+            torch.tensor([0]),
+            torch.tensor([8]),
         )
 
-        # 请求 B: slot 1, pos 3（需要新的 cache 副本，因为 A 已修改了 cache）
+        # 请求 B: slot 1, pos 3（需要新的 cache 副本）
         cache2 = _make_batched_layer_cache()
         cache2.k[0, :, :8, :] = cache.k[0, :, :8, :].clone()
         cache2.v[0, :, :8, :] = cache.v[0, :, :8, :].clone()
         cache2.k[1, :, :3, :] = cache.k[1, :, :3, :].clone()
         cache2.v[1, :, :3, :] = cache.v[1, :, :3, :].clone()
 
-        out_b = attn(
+        out_b = _call_batched(
+            attn,
             hidden_b,
-            position_ids=torch.tensor([[3]]),
-            layer_kv_cache=cache2,
-            cache_slots=torch.tensor([1]),
-            cache_positions=torch.tensor([3]),
+            torch.tensor([[3]]),
+            cache2,
+            torch.tensor([1]),
+            torch.tensor([3]),
         )
 
-        # 如果两个请求互不干扰，分别 decode 的结果应该和合批 decode 一致
+        # 合批 decode
         cache3 = _make_batched_layer_cache()
         cache3.k[0, :, :8, :] = cache.k[0, :, :8, :].clone()
         cache3.v[0, :, :8, :] = cache.v[0, :, :8, :].clone()
@@ -173,12 +213,13 @@ class TestBatchedAttentionLayer:
         cache3.v[1, :, :3, :] = cache.v[1, :, :3, :].clone()
 
         hidden_batch = torch.cat([hidden_a, hidden_b], dim=0)
-        out_batch = attn(
+        out_batch = _call_batched(
+            attn,
             hidden_batch,
-            position_ids=torch.tensor([[8], [3]]),
-            layer_kv_cache=cache3,
-            cache_slots=torch.tensor([0, 1]),
-            cache_positions=torch.tensor([8, 3]),
+            torch.tensor([[8], [3]]),
+            cache3,
+            torch.tensor([0, 1]),
+            torch.tensor([8, 3]),
         )
 
         assert torch.allclose(out_a, out_batch[0:1], atol=1e-5)
@@ -189,16 +230,15 @@ class TestBatchedAttentionLayer:
         attn = self._make_attn()
         cache = _make_batched_layer_cache()
 
-        # 在 pos=5 做 decode，query 应该能 attend 到 pos=0..5（包括自己）
         hidden = torch.randn(1, 1, 32)
-        out = attn(
+        out = _call_batched(
+            attn,
             hidden,
-            position_ids=torch.tensor([[5]]),
-            layer_kv_cache=cache,
-            cache_slots=torch.tensor([0]),
-            cache_positions=torch.tensor([5]),
+            torch.tensor([[5]]),
+            cache,
+            torch.tensor([0]),
+            torch.tensor([5]),
         )
-        # 输出不应为全零（说明 attention 确实 attend 到了东西）
         assert out.abs().sum() > 0
 
     def test_padding_positions_masked(self):
@@ -206,22 +246,19 @@ class TestBatchedAttentionLayer:
         attn = self._make_attn()
         cache = _make_batched_layer_cache()
 
-        # 两个请求：pos=3 和 pos=10
-        # gather 后 max_len=11，slot 0 只有 4 个有效 KV，后 7 个是 padding
         hidden = torch.randn(2, 1, 32)
         cache_slots = torch.tensor([0, 1])
         cache_positions = torch.tensor([3, 10])
 
-        out = attn(
+        out = _call_batched(
+            attn,
             hidden,
-            position_ids=cache_positions[:, None],
-            layer_kv_cache=cache,
-            cache_slots=cache_slots,
-            cache_positions=cache_positions,
+            cache_positions[:, None],
+            cache,
+            cache_slots,
+            cache_positions,
         )
-        # 输出不为 NaN（mask 正常工作）
         assert not torch.isnan(out).any()
-        # 输出不为 inf
         assert not torch.isinf(out).any()
 
     def test_nan_padding_does_not_contaminate_short_request(self):
@@ -236,20 +273,20 @@ class TestBatchedAttentionLayer:
         long_k = torch.randn(2, long_pos, 8)
         long_v = torch.randn(2, long_pos, 8)
 
-        # Oracle：短请求单独 decode，不存在 batch padding。
+        # Oracle：短请求单独 decode
         single_cache = _make_batched_layer_cache()
         single_cache.k[0, :, :short_pos] = short_k
         single_cache.v[0, :, :short_pos] = short_v
-        single_out = attn(
+        single_out = _call_batched(
+            attn,
             short_hidden.clone(),
-            position_ids=torch.tensor([[short_pos]]),
-            layer_kv_cache=single_cache,
-            cache_slots=torch.tensor([0]),
-            cache_positions=torch.tensor([short_pos]),
+            torch.tensor([[short_pos]]),
+            single_cache,
+            torch.tensor([0]),
+            torch.tensor([short_pos]),
         )
 
-        # 合批路径：短请求无效尾部显式填 NaN，稳定模拟 torch.empty
-        # 复用到含 NaN/Inf 历史内存的情况。
+        # 合批路径：短请求无效尾部显式填 NaN
         batch_cache = _make_batched_layer_cache()
         batch_cache.k.fill_(float("nan"))
         batch_cache.v.fill_(float("nan"))
@@ -258,12 +295,13 @@ class TestBatchedAttentionLayer:
         batch_cache.k[1, :, :long_pos] = long_k
         batch_cache.v[1, :, :long_pos] = long_v
 
-        batch_out = attn(
+        batch_out = _call_batched(
+            attn,
             torch.cat((short_hidden, long_hidden), dim=0),
-            position_ids=torch.tensor([[short_pos], [long_pos]]),
-            layer_kv_cache=batch_cache,
-            cache_slots=torch.tensor([0, 1]),
-            cache_positions=torch.tensor([short_pos, long_pos]),
+            torch.tensor([[short_pos], [long_pos]]),
+            batch_cache,
+            torch.tensor([0, 1]),
+            torch.tensor([short_pos, long_pos]),
         )
 
         assert torch.isfinite(batch_out).all()
@@ -272,36 +310,37 @@ class TestBatchedAttentionLayer:
     def test_b1_equivalent_to_m2_decode(self):
         """L0-6: B=1 batched decode 和 M2 single decode 结果等价。"""
         config = _tiny_config(num_hidden_layers=1)
-        attn = GQAAttention(config)
+        attn = Qwen3Attention(config)
 
         hidden = torch.randn(1, 1, 32)
         pos = 5
 
         # M2 路径：LayerKVCache
         m2_cache = _make_single_layer_cache(batch_size=1)
-        # 先填一些历史 KV（模拟 prefill 后）
         m2_cache.k[:, :, :pos, :] = torch.randn(1, 2, pos, 8)
         m2_cache.v[:, :, :pos, :] = torch.randn(1, 2, pos, 8)
 
-        out_m2 = attn(
+        out_m2 = _call_batched(
+            attn,
             hidden.clone(),
-            position_ids=torch.tensor([[pos]]),
-            layer_kv_cache=m2_cache,
-            cache_position=pos,
+            torch.tensor([[pos]]),
+            m2_cache,
+            torch.tensor([0]),
+            torch.tensor([pos]),
         )
 
         # M3 路径：BatchedLayerKVCache, B=1
         m3_cache = _make_batched_layer_cache()
-        # 填同样的历史 KV 到 slot 0
         m3_cache.k[0, :, :pos, :] = m2_cache.k[0, :, :pos, :].clone()
         m3_cache.v[0, :, :pos, :] = m2_cache.v[0, :, :pos, :].clone()
 
-        out_m3 = attn(
+        out_m3 = _call_batched(
+            attn,
             hidden.clone(),
-            position_ids=torch.tensor([[pos]]),
-            layer_kv_cache=m3_cache,
-            cache_slots=torch.tensor([0]),
-            cache_positions=torch.tensor([pos]),
+            torch.tensor([[pos]]),
+            m3_cache,
+            torch.tensor([0]),
+            torch.tensor([pos]),
         )
 
         assert torch.allclose(out_m2, out_m3, atol=1e-4)
@@ -309,9 +348,8 @@ class TestBatchedAttentionLayer:
     def test_mixed_positions_equivalent_to_sequential(self):
         """L0-7: 不同 cache_positions 混 batch 结果等价逐条 decode。"""
         config = _tiny_config(num_hidden_layers=1)
-        attn = GQAAttention(config)
+        attn = Qwen3Attention(config)
 
-        # 3 个请求，不同历史长度
         positions = [3, 7, 12]
         slots = [0, 1, 2]
         hiddens = [torch.randn(1, 1, 32) for _ in range(3)]
@@ -320,19 +358,19 @@ class TestBatchedAttentionLayer:
         seq_outputs = []
         for i in range(3):
             cache = _make_batched_layer_cache()
-            # 填历史 KV
             cache.k[slots[i], :, : positions[i], :] = torch.randn(2, positions[i], 8)
             cache.v[slots[i], :, : positions[i], :] = torch.randn(2, positions[i], 8)
-            out = attn(
+            out = _call_batched(
+                attn,
                 hiddens[i].clone(),
-                position_ids=torch.tensor([[positions[i]]]),
-                layer_kv_cache=cache,
-                cache_slots=torch.tensor([slots[i]]),
-                cache_positions=torch.tensor([positions[i]]),
+                torch.tensor([[positions[i]]]),
+                cache,
+                torch.tensor([slots[i]]),
+                torch.tensor([positions[i]]),
             )
             seq_outputs.append(out)
 
-        # 合批 decode（用同样的历史 KV）
+        # 合批 decode
         torch.manual_seed(42)
         histories_k = [torch.randn(2, p, 8) for p in positions]
         histories_v = [torch.randn(2, p, 8) for p in positions]
@@ -343,12 +381,13 @@ class TestBatchedAttentionLayer:
             batch_cache.v[slots[i], :, : positions[i], :] = histories_v[i]
 
         hidden_batch = torch.cat([h.clone() for h in hiddens], dim=0)
-        batch_out = attn(
+        batch_out = _call_batched(
+            attn,
             hidden_batch,
-            position_ids=torch.tensor([[p] for p in positions]),
-            layer_kv_cache=batch_cache,
-            cache_slots=torch.tensor(slots),
-            cache_positions=torch.tensor(positions),
+            torch.tensor([[p] for p in positions]),
+            batch_cache,
+            torch.tensor(slots),
+            torch.tensor(positions),
         )
 
         # 逐条用同样的历史重新跑
@@ -356,12 +395,13 @@ class TestBatchedAttentionLayer:
             single_cache = _make_batched_layer_cache()
             single_cache.k[slots[i], :, : positions[i], :] = histories_k[i]
             single_cache.v[slots[i], :, : positions[i], :] = histories_v[i]
-            single_out = attn(
+            single_out = _call_batched(
+                attn,
                 hiddens[i].clone(),
-                position_ids=torch.tensor([[positions[i]]]),
-                layer_kv_cache=single_cache,
-                cache_slots=torch.tensor([slots[i]]),
-                cache_positions=torch.tensor([positions[i]]),
+                torch.tensor([[positions[i]]]),
+                single_cache,
+                torch.tensor([slots[i]]),
+                torch.tensor([positions[i]]),
             )
             assert torch.allclose(
                 single_out, batch_out[i : i + 1], atol=1e-4
@@ -377,15 +417,14 @@ class TestBatchedAttentionLayer:
         cache_slots = torch.tensor([0, 1, 2])
         cache_positions = torch.tensor([5, 10, 3])
 
-        # forward 内部会做 repeat_kv，如果 shape 不对会报错
-        out = attn(
+        out = _call_batched(
+            attn,
             hidden,
-            position_ids=cache_positions[:, None],
-            layer_kv_cache=cache,
-            cache_slots=cache_slots,
-            cache_positions=cache_positions,
+            cache_positions[:, None],
+            cache,
+            cache_slots,
+            cache_positions,
         )
-        # 输出 shape 正确说明 repeat_kv 正常工作
         assert out.shape == (B, 1, 32)
 
 

@@ -1,6 +1,6 @@
 """M4-T4 PagedAttention 单元测试。
 
-覆盖 GQAAttention + PagedKVCache 的 M4 路径，以 M2 single cache 作为 oracle。
+覆盖 Qwen3Attention + PagedKVCache 的 M4 路径，以 M2 single cache 作为 oracle。
 
 测试清单（对应任务卡 DoD）：
   1. B=1 prefill 输出 shape 正确 + 数值与 M2 oracle 对齐
@@ -17,7 +17,7 @@ import torch
 from inferlite.cache.kv_cache import LayerKVCache
 from inferlite.cache.paged_kv_cache import PagedKVCache
 from inferlite.config import ModelConfig
-from inferlite.model.attention import GQAAttention
+from inferlite.model.attention import Qwen3Attention
 
 # ---------------------------------------------------------------------------
 # fixtures
@@ -47,8 +47,8 @@ def config() -> ModelConfig:
 
 
 @pytest.fixture
-def attn(config: ModelConfig) -> GQAAttention:
-    return GQAAttention(config)
+def attn(config: ModelConfig) -> Qwen3Attention:
+    return Qwen3Attention(config)
 
 
 def _make_paged_cache(
@@ -101,7 +101,7 @@ def _position_embeddings(
 class TestPagedPrefill:
     """B=1 prefill：单请求整段 prompt 写入 paged cache。"""
 
-    def test_prefill_output_shape(self, attn: GQAAttention, config: ModelConfig):
+    def test_prefill_output_shape(self, attn: Qwen3Attention, config: ModelConfig):
         """prefill 输出 shape 与 hidden_states 一致。"""
         cache = _make_paged_cache(config)
         prompt_len = 5
@@ -121,7 +121,7 @@ class TestPagedPrefill:
         assert out.shape == (1, prompt_len, config.hidden_size)
         assert torch.isfinite(out).all()
 
-    def test_prefill_matches_m2_oracle(self, attn: GQAAttention, config: ModelConfig):
+    def test_prefill_matches_m2_oracle(self, attn: Qwen3Attention, config: ModelConfig):
         """M4 paged prefill 与 M2 single cache prefill 数值对齐。
 
         两者 cache 策略不同（分页 vs 连续），但 attention 数学完全相同：
@@ -169,7 +169,7 @@ class TestPagedPrefill:
 class TestPagedDecode:
     """B=1 decode：单请求单 token decode 步进。"""
 
-    def test_decode_output_shape(self, attn: GQAAttention, config: ModelConfig):
+    def test_decode_output_shape(self, attn: Qwen3Attention, config: ModelConfig):
         """decode 输出 shape [1, 1, hidden_size]。"""
         cache = _make_paged_cache(config)
         prompt_len = 3
@@ -203,7 +203,7 @@ class TestPagedDecode:
         assert out.shape == (1, 1, config.hidden_size)
         assert torch.isfinite(out).all()
 
-    def test_decode_matches_m2_oracle(self, attn: GQAAttention, config: ModelConfig):
+    def test_decode_matches_m2_oracle(self, attn: Qwen3Attention, config: ModelConfig):
         """M4 paged decode 与 M2 single cache decode 数值对齐。"""
         torch.manual_seed(42)
         prompt_len = 3
@@ -262,7 +262,7 @@ class TestPagedDecode:
 class TestPagedBatchDecode:
     """B>1 变长 decode：多请求合批，长度不同。"""
 
-    def test_batch_decode_equivalent_to_sequential(self, attn: GQAAttention, config: ModelConfig):
+    def test_batch_decode_equivalent_to_sequential(self, attn: Qwen3Attention, config: ModelConfig):
         """合批 paged decode 结果等价逐条 paged decode。"""
         torch.manual_seed(42)
         lengths = [3, 7]
@@ -344,7 +344,7 @@ class TestPagedBatchDecode:
 class TestCrossBlockBoundary:
     """跨 block 边界：prompt 超过 block_size 时 prefill/decode 正确。"""
 
-    def test_prefill_across_blocks(self, attn: GQAAttention, config: ModelConfig):
+    def test_prefill_across_blocks(self, attn: Qwen3Attention, config: ModelConfig):
         """prompt 跨多个 block 时 prefill 数值与 M2 oracle 对齐。"""
         torch.manual_seed(42)
         block_size = 4
@@ -380,7 +380,7 @@ class TestCrossBlockBoundary:
             out_paged, out_m2, atol=1e-4
         ), f"max diff: {(out_paged - out_m2).abs().max()}"
 
-    def test_decode_after_cross_block_prefill(self, attn: GQAAttention, config: ModelConfig):
+    def test_decode_after_cross_block_prefill(self, attn: Qwen3Attention, config: ModelConfig):
         """跨 block prefill 后 decode 一步，数值与 M2 oracle 对齐。"""
         torch.manual_seed(42)
         block_size = 4
@@ -443,7 +443,7 @@ class TestCrossBlockBoundary:
 class TestNaNSafety:
     """block 对齐 padding 区即使含 NaN，也不污染输出。"""
 
-    def test_nan_padding_does_not_contaminate(self, attn: GQAAttention, config: ModelConfig):
+    def test_nan_padding_does_not_contaminate(self, attn: Qwen3Attention, config: ModelConfig):
         """短请求的 block padding 区显式填 NaN，输出仍然有限。"""
         torch.manual_seed(42)
         block_size = 4
@@ -476,7 +476,7 @@ class TestNaNSafety:
         # 输出必须全有限，NaN 不得泄漏
         assert torch.isfinite(out).all(), "NaN leaked from block padding"
 
-    def test_nan_in_unused_blocks(self, attn: GQAAttention, config: ModelConfig):
+    def test_nan_in_unused_blocks(self, attn: Qwen3Attention, config: ModelConfig):
         """gather_kv 中 block_table padding 的无效 block 含 NaN，不影响输出。
 
         当 batch 中请求 block 数不同时，block_table 短请求用 0 填充。
@@ -520,7 +520,7 @@ class TestNaNSafety:
 class TestParameterContracts:
     """M4 路径的参数校验。"""
 
-    def test_missing_request_ids_raises(self, attn: GQAAttention, config: ModelConfig):
+    def test_missing_request_ids_raises(self, attn: Qwen3Attention, config: ModelConfig):
         """paged_kv_cache 存在但 request_ids=None 时抛 ValueError。"""
         cache = _make_paged_cache(config)
         cache.allocate_request("a", 3)
@@ -537,7 +537,7 @@ class TestParameterContracts:
                 is_prefill=True,
             )
 
-    def test_missing_layer_idx_raises(self, attn: GQAAttention, config: ModelConfig):
+    def test_missing_layer_idx_raises(self, attn: Qwen3Attention, config: ModelConfig):
         """paged_kv_cache 存在但 layer_idx=None 时抛 ValueError。"""
         cache = _make_paged_cache(config)
         cache.allocate_request("a", 3)
@@ -556,7 +556,7 @@ class TestParameterContracts:
 
     def test_kv_cache_written_after_prefill(self, config: ModelConfig):
         """prefill 后 cache 中确实写入了 K/V 数据。"""
-        attn = GQAAttention(config)
+        attn = Qwen3Attention(config)
         cache = _make_paged_cache(config)
         prompt_len = 5
         cache.allocate_request("a", prompt_len)
@@ -580,7 +580,7 @@ class TestParameterContracts:
 
     def test_kv_cache_written_after_decode(self, config: ModelConfig):
         """decode 一步后 cache 中新增了 K/V 数据。"""
-        attn = GQAAttention(config)
+        attn = Qwen3Attention(config)
         cache = _make_paged_cache(config)
         prompt_len = 3
         cache.allocate_request("a", prompt_len)

@@ -1,4 +1,4 @@
-"""M2-T2 GQAAttention KV Cache 接口测试。
+"""M2-T2 Qwen3Attention KV Cache 接口测试。
 
 测试分两大类：
 1. Cache 读写正确性：写入槽位、追加位置、历史拼接
@@ -10,7 +10,8 @@ import torch
 
 from inferlite.cache.kv_cache import KVCache
 from inferlite.config import ModelConfig
-from inferlite.model.attention import GQAAttention
+from inferlite.engine.forward_context import AttentionMetadata, set_forward_context
+from inferlite.model.attention import Qwen3Attention
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -26,9 +27,9 @@ def config() -> ModelConfig:
 
 
 @pytest.fixture
-def attn(config: ModelConfig) -> GQAAttention:
+def attn(config: ModelConfig) -> Qwen3Attention:
     torch.manual_seed(42)
-    return GQAAttention(config).eval()
+    return Qwen3Attention(config).eval()
 
 
 @pytest.fixture
@@ -42,11 +43,41 @@ def cache(config: ModelConfig) -> KVCache:
     )
 
 
-def _pos_emb(attn: GQAAttention, x: torch.Tensor, start: int) -> tuple[torch.Tensor, torch.Tensor]:
-    """生成从 start 开始的 position_embeddings。"""
-    T = x.shape[1]
-    pos_ids = torch.arange(start, start + T).unsqueeze(0)
-    return attn.rotary_emb(x, pos_ids)
+def _call_attn(
+    attn: Qwen3Attention,
+    x: torch.Tensor,
+    pos_start: int,
+    layer_kv_cache=None,
+    cache_position: int = 0,
+) -> torch.Tensor:
+    """Helper：用新签名调用 Qwen3Attention，自动设置 ForwardContext。
+
+    Args:
+        attn: Qwen3Attention 实例
+        x: [B, T, H] hidden states
+        pos_start: position_ids 起始位置
+        layer_kv_cache: 当前层 LayerKVCache（None 走 M1）
+        cache_position: 写入 cache 的起始位置
+    """
+    B, T, _ = x.shape
+    position_ids = torch.arange(pos_start, pos_start + T).unsqueeze(0).expand(B, -1)
+
+    if layer_kv_cache is not None:
+        # 绑定 cache 到 Attention 层
+        attn.attn.kv_cache = layer_kv_cache
+        # 构造 metadata
+        if cache_position == 0:
+            seq_lens = torch.tensor([T], device=x.device)
+        else:
+            seq_lens = torch.tensor([cache_position + T], device=x.device)
+        metadata = AttentionMetadata(num_seqs=1, seq_lens=seq_lens)
+        with set_forward_context(metadata):
+            out = attn(position_ids, x)
+        # 调用后恢复（避免影响后续 M1 调用）
+        attn.attn.kv_cache = None
+        return out
+    else:
+        return attn(position_ids, x)
 
 
 # ---------------------------------------------------------------------------
@@ -54,16 +85,11 @@ def _pos_emb(attn: GQAAttention, x: torch.Tensor, start: int) -> tuple[torch.Ten
 # ---------------------------------------------------------------------------
 
 
-def test_prefill_writes_cache(attn: GQAAttention, cache: KVCache, config: ModelConfig) -> None:
+def test_prefill_writes_cache(attn: Qwen3Attention, cache: KVCache, config: ModelConfig) -> None:
     T_p = 5
     x = torch.randn(BATCH, T_p, config.hidden_size)
     with torch.no_grad():
-        attn(
-            x,
-            position_embeddings=_pos_emb(attn, x, 0),
-            layer_kv_cache=cache.layers[0],
-            cache_position=0,
-        )
+        _call_attn(attn, x, pos_start=0, layer_kv_cache=cache.layers[0], cache_position=0)
 
     # prefill 写完后，槽位 [0:T_p] 应全部非零
     assert cache.layers[0].k[:, :, :T_p, :].abs().sum() > 0
@@ -78,17 +104,12 @@ def test_prefill_writes_cache(attn: GQAAttention, cache: KVCache, config: ModelC
 
 
 def test_decode_appends_at_position(
-    attn: GQAAttention, cache: KVCache, config: ModelConfig
+    attn: Qwen3Attention, cache: KVCache, config: ModelConfig
 ) -> None:
     T_p = 4
     x_p = torch.randn(BATCH, T_p, config.hidden_size)
     with torch.no_grad():
-        attn(
-            x_p,
-            position_embeddings=_pos_emb(attn, x_p, 0),
-            layer_kv_cache=cache.layers[0],
-            cache_position=0,
-        )
+        _call_attn(attn, x_p, pos_start=0, layer_kv_cache=cache.layers[0], cache_position=0)
 
     # 记录 prefill 写入的 k（后续验证没被覆盖）
     k_prefill = cache.layers[0].k[:, :, :T_p, :].clone()
@@ -98,12 +119,7 @@ def test_decode_appends_at_position(
 
     x_d = torch.randn(BATCH, 1, config.hidden_size)
     with torch.no_grad():
-        attn(
-            x_d,
-            position_embeddings=_pos_emb(attn, x_d, T_p),
-            layer_kv_cache=cache.layers[0],
-            cache_position=T_p,
-        )
+        _call_attn(attn, x_d, pos_start=T_p, layer_kv_cache=cache.layers[0], cache_position=T_p)
 
     # decode 写入后，位置 T_p 应非零
     assert cache.layers[0].k[:, :, T_p, :].abs().sum() > 0
@@ -117,7 +133,7 @@ def test_decode_appends_at_position(
 
 
 def test_cache_output_equals_full_attention(
-    attn: GQAAttention, cache: KVCache, config: ModelConfig
+    attn: Qwen3Attention, cache: KVCache, config: ModelConfig
 ) -> None:
     T = 6
     T_p = 5
@@ -126,24 +142,16 @@ def test_cache_output_equals_full_attention(
 
     # M1 路径：全量 input 一次跑完
     with torch.no_grad():
-        out_full = attn(x, position_ids=torch.arange(T).unsqueeze(0))
+        out_full = _call_attn(attn, x, pos_start=0)
 
     # M2 路径：prefill T_p 个 token
     with torch.no_grad():
-        attn(
-            x[:, :T_p],
-            position_embeddings=_pos_emb(attn, x[:, :T_p], 0),
-            layer_kv_cache=cache.layers[0],
-            cache_position=0,
-        )
+        _call_attn(attn, x[:, :T_p], pos_start=0, layer_kv_cache=cache.layers[0], cache_position=0)
 
     # M2 路径：decode 第 T_p 个 token
     with torch.no_grad():
-        out_decode = attn(
-            x[:, T_p:],
-            position_embeddings=_pos_emb(attn, x[:, T_p:], T_p),
-            layer_kv_cache=cache.layers[0],
-            cache_position=T_p,
+        out_decode = _call_attn(
+            attn, x[:, T_p:], pos_start=T_p, layer_kv_cache=cache.layers[0], cache_position=T_p
         )
 
     # decode 步的输出应与 full attention 的对应位置一致
@@ -157,13 +165,12 @@ def test_cache_output_equals_full_attention(
 # ---------------------------------------------------------------------------
 
 
-def test_m1_compat_no_cache(attn: GQAAttention, config: ModelConfig) -> None:
+def test_m1_compat_no_cache(attn: Qwen3Attention, config: ModelConfig) -> None:
     T = 4
     x = torch.randn(BATCH, T, config.hidden_size)
-    pos_ids = torch.arange(T).unsqueeze(0)
     with torch.no_grad():
-        out1 = attn(x, position_ids=pos_ids)
-        out2 = attn(x, position_ids=pos_ids)
+        out1 = _call_attn(attn, x, pos_start=0)
+        out2 = _call_attn(attn, x, pos_start=0)
     # 同输入两次调用结果完全相同（无随机性）
     assert torch.equal(out1, out2)
 
@@ -173,25 +180,17 @@ def test_m1_compat_no_cache(attn: GQAAttention, config: ModelConfig) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_decode_output_is_finite(attn: GQAAttention, cache: KVCache, config: ModelConfig) -> None:
+def test_decode_output_is_finite(attn: Qwen3Attention, cache: KVCache, config: ModelConfig) -> None:
     """decode 步 T=1 不构建 causal mask，输出不含 nan/inf。"""
     T_p = 3
     x_p = torch.randn(BATCH, T_p, config.hidden_size)
     with torch.no_grad():
-        attn(
-            x_p,
-            position_embeddings=_pos_emb(attn, x_p, 0),
-            layer_kv_cache=cache.layers[0],
-            cache_position=0,
-        )
+        _call_attn(attn, x_p, pos_start=0, layer_kv_cache=cache.layers[0], cache_position=0)
 
     x_d = torch.randn(BATCH, 1, config.hidden_size)
     with torch.no_grad():
-        out = attn(
-            x_d,
-            position_embeddings=_pos_emb(attn, x_d, T_p),
-            layer_kv_cache=cache.layers[0],
-            cache_position=T_p,
+        out = _call_attn(
+            attn, x_d, pos_start=T_p, layer_kv_cache=cache.layers[0], cache_position=T_p
         )
 
     assert torch.isfinite(out).all(), "decode 步输出含 nan/inf，可能 causal mask 误加"
@@ -203,18 +202,15 @@ def test_decode_output_is_finite(attn: GQAAttention, cache: KVCache, config: Mod
 
 
 def test_q_is_from_current_token_only(
-    attn: GQAAttention, cache: KVCache, config: ModelConfig
+    attn: Qwen3Attention, cache: KVCache, config: ModelConfig
 ) -> None:
     """同一个 decode 输入，不管 cache 里有什么，输出的 shape 都是 [B, 1, H]。"""
     x_d = torch.randn(BATCH, 1, config.hidden_size)
 
     # cache 空（cur_len=0）
     with torch.no_grad():
-        out_empty = attn(
-            x_d,
-            position_embeddings=_pos_emb(attn, x_d, 0),
-            layer_kv_cache=cache.layers[0],
-            cache_position=0,
+        out_empty = _call_attn(
+            attn, x_d, pos_start=0, layer_kv_cache=cache.layers[0], cache_position=0
         )
     assert out_empty.shape == (BATCH, 1, config.hidden_size)
 
@@ -222,16 +218,8 @@ def test_q_is_from_current_token_only(
     cache.reset()
     x_p = torch.randn(BATCH, 5, config.hidden_size)
     with torch.no_grad():
-        attn(
-            x_p,
-            position_embeddings=_pos_emb(attn, x_p, 0),
-            layer_kv_cache=cache.layers[0],
-            cache_position=0,
-        )
-        out_with_hist = attn(
-            x_d,
-            position_embeddings=_pos_emb(attn, x_d, 5),
-            layer_kv_cache=cache.layers[0],
-            cache_position=5,
+        _call_attn(attn, x_p, pos_start=0, layer_kv_cache=cache.layers[0], cache_position=0)
+        out_with_hist = _call_attn(
+            attn, x_d, pos_start=5, layer_kv_cache=cache.layers[0], cache_position=5
         )
     assert out_with_hist.shape == (BATCH, 1, config.hidden_size)
