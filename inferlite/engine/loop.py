@@ -22,6 +22,8 @@
 Part B 改完后 model(input_ids, positions) 才会生效。
 """
 
+import time
+
 import torch
 
 from inferlite.engine.forward_context import set_forward_context
@@ -137,27 +139,37 @@ def batch_generate_loop(
     adapter.bind_kv_cache(model)
 
     while scheduler.has_unfinished():
-        # ── 1. Admit + Allocate ──
-        # 从 waiting 取请求到 running，同时为每个新请求分配 cache 空间
-        admitted = _admit(scheduler, adapter)
-        for req in admitted:
-            adapter.allocate(req.request_id, req.prompt_ids.shape[1])
-
-        # ── 2. Prefill ──
-        # 如果有新 admit 的请求：拼 batch → 一次 forward 处理所有 prompt → 采样首个 token
-        if admitted:
-            input_ids, positions = _build_prefill_batch(admitted, device)
-            metadata = adapter.make_prefill_metadata(input_ids, positions)
-            # set_forward_context: 把 metadata 设到全局上下文，Attention 层通过 get_forward_context() 读取
+        # ── 1. Admit + Allocate + Prefill（逐条交替，确保 slot_mapping 正确）──
+        # 每个请求：检查容量 → admit → allocate → prefill，然后再处理下一个。
+        # 这避免了 _admit 批量 admit 后 allocate 发现容量不够的问题。
+        admitted = []
+        while scheduler.waiting:
+            req = scheduler.waiting[0]
+            prompt_len = req.prompt_ids.shape[1]
+            if not adapter.can_admit(prompt_len):
+                break
+            scheduler.waiting.popleft()
+            req.status = RequestStatus.RUNNING
+            scheduler.running[req.request_id] = req
+            admitted.append(req)
+            if metrics:
+                metrics.record_arrival(req.request_id)
+                metrics.record_prompt_tokens(req.request_id, prompt_len)
+            # 立即分配 + prefill
+            adapter.allocate(req.request_id, prompt_len)
+            input_ids = req.prompt_ids  # [1, T]
+            position_ids = torch.arange(prompt_len, device=input_ids.device).unsqueeze(0)  # [1, T]
+            metadata = adapter.make_prefill_metadata(input_ids, position_ids)
             with set_forward_context(metadata):
-                logits = model(input_ids, positions=positions)
-            # 逐请求采样：变长 prefill 时取 logits[i, plen-1]（最后一个真实 token 的 logits）
-            for i, req in enumerate(admitted):
-                plen = req.prompt_ids.shape[1]
-                req.last_token = sampler(logits[i, plen - 1, :].unsqueeze(0))  # [1, 1]
-                req.generated_tokens.append(req.last_token)
-                req.num_generated = 1
-                req.seq_len = plen  # 记录已处理的 token 数
+                logits = model(input_ids, positions=position_ids)
+            req.last_token = sampler(logits[:, -1, :])  # [1, 1]
+            req.generated_tokens.append(req.last_token)
+            req.num_generated = 1
+            req.seq_len = prompt_len
+            adapter.set_seq_lens([req])
+            if metrics:
+                metrics.record_scheduled(req.request_id)
+                metrics.record_first_token(req.request_id)
 
         # ── 3. Decode ──
         # 所有 running 请求（包括刚 prefill 完的）并行执行一步 decode
@@ -173,8 +185,10 @@ def batch_generate_loop(
         metadata = adapter.make_decode_metadata(next_tokens, positions)
 
         # 3c. model forward（metadata 通过 ForwardContext 传给 Attention 层）
+        decode_start = time.perf_counter()
         with set_forward_context(metadata):
             logits = model(next_tokens, positions=positions)
+        decode_ms = (time.perf_counter() - decode_start) * 1000
 
         # 3d. 采样 + 更新状态 + 完成检查
         sampled = sampler(logits[:, -1, :])
@@ -190,6 +204,22 @@ def batch_generate_loop(
             if is_done:
                 scheduler.mark_finished(req)
                 adapter.free(req.request_id)  # 释放 cache 空间
+                if metrics:
+                    metrics.record_output_tokens(req.request_id, req.num_generated)
+                    metrics.record_finished(req.request_id)
+
+        if metrics:
+            step_idx = len(metrics.step_metrics)
+            metrics.record_step(
+                step_idx=step_idx,
+                batch_size=len(running),
+                max_seq_len=int(positions.max().item()),
+                decode_ms=decode_ms,
+                output_tokens=len(running),
+                running_count=len(scheduler.running),
+                waiting_count=len(scheduler.waiting),
+                occupied_slots=len(running),
+            )
 
     # ── 收集结果（按 request_id 排序，保证与输入 prompts 顺序一致）──
     return [

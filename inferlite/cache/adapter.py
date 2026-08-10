@@ -159,7 +159,10 @@ class SingleCacheAdapter:
         self.cur_len = 0
 
     def free(self, request_id):
-        pass  # M2 cache 在 generate() 结束时自然释放，不需要显式 free
+        pass  # M2 cache 在 generate() 结束时自然释放
+
+    def set_seq_lens(self, requests) -> None:
+        pass  # M2: cur_len 由 make_decode_metadata 管理
 
 
 # ── 4. BatchedCacheAdapter (M3) ──
@@ -192,7 +195,23 @@ class BatchedCacheAdapter:
             layer.self_attn.attn.layer_idx = i
 
     def prepare_decode(self, request_ids: list[str]) -> None:
-        pass  # M3 slot 固定分配，seq_lens 由 Attention 层 forward 时自动更新
+        # M3: 同步 cache.seq_lens 到请求的实际 seq_len
+        # 这样 make_decode_metadata 读取的 seq_lens 就是正确的「写入后长度」
+        for rid in request_ids:
+            slot = self.cache.slot_manager.req_to_slot[rid]
+            # seq_lens 应该已经由外部（loop.py）更新到最新值，
+            # 这里 +1 对齐旧 batch_core 的 cache_positions+1 语义
+            self.cache.seq_lens[slot] += 1
+
+    def set_seq_lens(self, requests) -> None:
+        """Prefill 后同步请求的 seq_len 到 cache.seq_lens。
+
+        Args:
+            requests: RequestState 列表，每个需有 request_id 和 seq_len
+        """
+        for req in requests:
+            slot = self.cache.slot_manager.req_to_slot[req.request_id]
+            self.cache.seq_lens[slot] = req.seq_len
 
     def allocate(self, request_id, prompt_len):
         # 从 SlotManager 分配一个空闲 slot，记录 request_id → slot_id 映射
@@ -263,10 +282,11 @@ class PagedCacheAdapter:
 
     def prepare_decode(self, request_ids: list[str]) -> None:
         # decode forward 前：为每个请求的下一个 token 分配 cache 空间
-        # append_token 内部检查当前 block 是否已满，满了就自动分配新 block
-        # 对齐 vLLM V1 scheduler.allocate_slots(request, num_new_tokens=1) 的角色
         for rid in request_ids:
             self.cache.append_token(rid)
+
+    def set_seq_lens(self, requests) -> None:
+        pass  # M4: seq_lens 由 block_table.seq_len 管理，不需要额外同步
 
     def allocate(self, request_id, prompt_len):
         # 新请求到来时：按 prompt 长度分配初始 block（decode 阶段按需追加）
