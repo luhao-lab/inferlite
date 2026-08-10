@@ -2,7 +2,7 @@
 
 | 字段 | 内容 |
 |---|---|
-| 状态 | 🟡 进行中（T1 BlockPool 已完成实现验证） |
+| 状态 | ✅ 完成（tag: `m4/paged-attention`，2026-08-11） |
 | 作者 | luhao |
 | 基于 | M3 tag `m3/continuous-batching` |
 | 作战地图 | [M4.md](../plan/M4.md) |
@@ -348,3 +348,52 @@ batch 内多个请求 gather 后 padding 到同一个块对齐长度 `L_pad = ma
 | M4/M5 边界混淆 | M4 不实现 hash/LRU/CoW；M5 再增加共享与淘汰 |
 | gather padding 读到垃圾或 NaN | score mask 保证语义；无效 K/V 尾部清零保证数值安全 |
 | M3 回归被破坏 | fixed-slot 路径不动，M4 新类型分派 |
+
+---
+
+## 8. 完成总结（2026-08-11）
+
+### 最终架构
+
+M4 完成后，inferlite 引擎层经过 T7 vLLM V1 对齐 + 架构优化，形成以下结构：
+
+```
+engine/（~800L，4 文件）
+├── context.py    ForwardContext + AttentionMetadata + LLMModel Protocol
+├── engine.py     M1/M2/M3/M4 generate 统一入口
+├── loop.py       统一 batch 主循环（admit → prefill → decode → free）
+└── metrics.py    性能指标采集
+
+cache/（~1,250L，5 文件）
+├── adapter.py    CacheAdapter Protocol + M2/M3/M4 三种 adapter
+├── kv_cache.py   M2 单序列 LayerKVCache
+├── batched_kv_cache.py  M3 固定 slot BatchedKVCache
+├── block_pool.py        物理 block 分配池
+└── paged_kv_cache.py    M4 PagedKVCache + BlockTable
+```
+
+### T7 关键设计决策
+
+1. **ForwardContext**：cache 和 metadata 不经过模型参数传递，通过全局上下文 `set_forward_context()` 设置
+2. **CacheAdapter Protocol**：3 种 cache 实现统一接口（`can_admit`/`allocate`/`free`/`bind_kv_cache`/`make_*_metadata`），engine 代码不关心底层是 slot 还是 block
+3. **统一 loop.py**：M3/M4 共享 `batch_generate_loop()`，消除 80% 重复代码
+4. **Attention 两层拆分**：`Qwen3Attention`（projection + QK-norm + RoPE）+ `Attention`（cache RW + attention 计算），cache 分支通过 `isinstance` 分发
+5. **M3 batched prefill**：多请求 padded 成 batch → 一次 forward → 逐请求采样，`torch.equal` 数值等价
+
+### 修复的隐藏 bug
+
+| bug | 根因 | 修复 |
+|-----|------|------|
+| slot_mapping 始终指向最后分配的 slot | 批量 admit 后才逐个 prefill | 改为逐条 admit-allocate-prefill 交替 |
+| _admit 超额分配 | can_admit 检查不占用 slot | 同上，每条请求分配后才检查下一条 |
+| sampler 3D 输入 | `logits[:, -1:, :]` 是 3D | 改为 `logits[:, -1, :]`（2D） |
+| Metrics 未记录 | loop.py 未调 record_step | 补充 record_step/record_output_tokens/record_finished |
+| padded prefill cache 写入越界 | `k[i]` 是 padded 长度 | 改为 `k[i, :, :plen, :]` 只写有效位置 |
+
+### 测试覆盖
+
+270 tests 全绿（5/5 稳定性验证），包含：
+- M1/M2/M3/M4 四条路径的 unit tests
+- PagedAttention scatter/gather 正确性
+- Batched prefill padded mask
+- E2E serial vs batch `torch.equal` 等价验证
