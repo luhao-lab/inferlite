@@ -139,9 +139,7 @@ def batch_generate_loop(
     adapter.bind_kv_cache(model)
 
     while scheduler.has_unfinished():
-        # ── 1. Admit + Allocate + Prefill（逐条交替，确保 slot_mapping 正确）──
-        # 每个请求：检查容量 → admit → allocate → prefill，然后再处理下一个。
-        # 这避免了 _admit 批量 admit 后 allocate 发现容量不够的问题。
+        # ── 1. Admit + Allocate（逐条检查容量，避免超额分配）──
         admitted = []
         while scheduler.waiting:
             req = scheduler.waiting[0]
@@ -152,24 +150,32 @@ def batch_generate_loop(
             req.status = RequestStatus.RUNNING
             scheduler.running[req.request_id] = req
             admitted.append(req)
+            adapter.allocate(req.request_id, prompt_len)
             if metrics:
                 metrics.record_arrival(req.request_id)
                 metrics.record_prompt_tokens(req.request_id, prompt_len)
-            # 立即分配 + prefill
-            adapter.allocate(req.request_id, prompt_len)
-            input_ids = req.prompt_ids  # [1, T]
-            position_ids = torch.arange(prompt_len, device=input_ids.device).unsqueeze(0)  # [1, T]
-            metadata = adapter.make_prefill_metadata(input_ids, position_ids)
-            with set_forward_context(metadata):
-                logits = model(input_ids, positions=position_ids)
-            req.last_token = sampler(logits[:, -1, :])  # [1, 1]
-            req.generated_tokens.append(req.last_token)
-            req.num_generated = 1
-            req.seq_len = prompt_len
-            adapter.set_seq_lens([req])
-            if metrics:
                 metrics.record_scheduled(req.request_id)
-                metrics.record_first_token(req.request_id)
+
+        # ── 2. Batched Prefill（所有新请求 padded 成 batch，一次 forward）──
+        if admitted:
+            input_ids, positions = _build_prefill_batch(admitted, device)
+            batch_request_ids = [req.request_id for req in admitted]
+            metadata = adapter.make_prefill_metadata(
+                input_ids, positions, request_ids=batch_request_ids
+            )
+            with set_forward_context(metadata):
+                logits = model(input_ids, positions=positions)
+            # 逐请求采样：取每个请求最后一个真实 token 的 logits
+            for i, req in enumerate(admitted):
+                plen = req.prompt_ids.shape[1]
+                req.last_token = sampler(logits[i, plen - 1, :].unsqueeze(0))  # [1, 1]
+                req.generated_tokens.append(req.last_token)
+                req.num_generated = 1
+                req.seq_len = plen
+            adapter.set_seq_lens(admitted)
+            if metrics:
+                for req in admitted:
+                    metrics.record_first_token(req.request_id)
 
         # ── 3. Decode ──
         # 所有 running 请求（包括刚 prefill 完的）并行执行一步 decode

@@ -196,11 +196,16 @@ class Attention(nn.Module):
                 torch.finfo(attn_weights.dtype).min,
             )
 
-        # valid_lens mask（M4 paged 或 M3 batched decode）
+        # valid_lens mask（M4 paged 或 M3 batched decode/prefill）
         if paged_valid_lens is not None:
             attn_weights = self._build_valid_lens_mask(attn_weights, paged_valid_lens)
         elif cache_positions is not None:
-            attn_weights = self._build_batched_mask(attn_weights, cache_positions)
+            if seq_len == 1:
+                # M3 decode: cache_positions 是写入位置，valid_lens = cache_positions + 1
+                attn_weights = self._build_batched_mask(attn_weights, cache_positions)
+            else:
+                # M3 batched prefill: cache_positions 是 seq_lens，直接用作 valid_lens
+                attn_weights = self._build_valid_lens_mask(attn_weights, cache_positions)
 
         # softmax（fp32 精度）
         attn_weights = torch.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q.dtype)
@@ -268,13 +273,14 @@ class Attention(nn.Module):
             # prefill: 写整段到 slot
             slot_mapping = metadata.slot_mapping  # [B] tensor
             for i in range(k.shape[0]):
-                slot = int(slot_mapping[i])  # ← 真实 slot
+                slot = int(slot_mapping[i])
                 plen = int(seq_lens[i])
-                cache.k[slot, :, :plen, :] = k[i]
-                cache.v[slot, :, :plen, :] = v[i]
+                cache.k[slot, :, :plen, :] = k[i, :, :plen, :]  # 只写有效位置
+                cache.v[slot, :, :plen, :] = v[i, :, :plen, :]
             k = cache.k[slot_mapping, :, : int(seq_lens.max()), :]
             v = cache.v[slot_mapping, :, : int(seq_lens.max()), :]
-            return k, v, None
+            # 返回 seq_lens 触发 valid_lens mask（padded 时屏蔽无效位置）
+            return k, v, seq_lens
 
     # ── M4: paged cache RW ──
     def _paged_cache_rw(self, k, v, metadata):

@@ -223,15 +223,33 @@ class BatchedCacheAdapter:
         self.cache.free_slot(request_id)
         self._current_request_ids.remove(request_id)
 
-    def make_prefill_metadata(self, input_ids, positions):
-        # prefill：单请求，seq_len = prompt 长度
-        # slot_mapping: 当前 prefill 请求的 slot_id（由 allocate 时记录）
+    def make_prefill_metadata(self, input_ids, positions, request_ids=None):
+        # prefill：支持多请求（batched prefill）
+        # request_ids: 显式传入请求 ID 列表；不传时用 _current_request_ids 的最后 B 个
+        B = input_ids.shape[0]
+        if request_ids is None:
+            request_ids = self._current_request_ids[-B:]
         T = input_ids.shape[1]
-        slot = self.cache.slot_manager.req_to_slot[self._current_request_ids[-1]]
+        slots = torch.tensor([self.cache.slot_manager.req_to_slot[rid] for rid in request_ids])
+        # seq_lens: 每个请求的实际 prompt 长度（非 padded 长度）
+        # 当所有请求 prompt 长度相同时，直接用 T；否则需要从 request 获取
+        # 这里简化：用 positions 中每行的实际非零长度
+        if positions.dim() == 2:
+            # positions [B, T]: 每行的有效长度 = 最后一个非零位置 + 1
+            seq_lens = []
+            for i in range(B):
+                nonzero = positions[i].nonzero(as_tuple=True)[0]
+                if len(nonzero) > 0:
+                    seq_lens.append(int(nonzero[-1]) + 1)
+                else:
+                    seq_lens.append(1)  # 单 token prompt
+            seq_lens = torch.tensor(seq_lens)
+        else:
+            seq_lens = torch.full((B,), T)
         return AttentionMetadata(
-            num_seqs=1,
-            seq_lens=torch.tensor([T]),
-            slot_mapping=torch.tensor([slot]),
+            num_seqs=B,
+            seq_lens=seq_lens,
+            slot_mapping=slots,
         )
 
     def make_decode_metadata(self, next_tokens, positions):
