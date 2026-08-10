@@ -22,7 +22,7 @@
 import torch
 
 from inferlite.config import ModelConfig
-from inferlite.engine.engines import batch_generate_paged
+from inferlite.engine.engine import batch_generate_paged
 from inferlite.sampler.greedy import GreedySampler
 
 
@@ -527,7 +527,7 @@ def test_cross_block_decode():
 
 def test_m3_batch_generate_regression():
     """M3 batch_generate 路径不受 paged 改动影响，继续正常工作。"""
-    from inferlite.engine.engines import batch_generate
+    from inferlite.engine.engine import batch_generate
 
     config = _tiny_config()
 

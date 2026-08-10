@@ -12,7 +12,7 @@
 import torch
 
 from inferlite.config import ModelConfig
-from inferlite.engine.engines import batch_generate
+from inferlite.engine.engine import batch_generate
 from inferlite.sampler.greedy import GreedySampler
 
 

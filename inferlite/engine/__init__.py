@@ -6,12 +6,12 @@
 
 而不是依赖内部文件路径：
 
-    from inferlite.engine.core import EngineCore, generate
+    from inferlite.engine.engine import EngineCore, generate
     from inferlite.engine.context import LLMModel
 """
 
 from inferlite.engine.context import LLMModel
-from inferlite.engine.core import EngineCore, generate
+from inferlite.engine.engine import EngineCore, generate
 from inferlite.engine.metrics import MetricsCollector
 
 __all__ = ["EngineCore", "LLMModel", "generate", "MetricsCollector"]

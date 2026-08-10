@@ -8,7 +8,7 @@ T12-pre: 验证 LLMModel 和 Engine 的 logits_to_keep 支持。
 
 import torch
 
-from inferlite.engine.core import EngineCore
+from inferlite.engine.engine import EngineCore
 from inferlite.sampler import GreedySampler
 
 
