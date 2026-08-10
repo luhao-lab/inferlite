@@ -8,7 +8,7 @@
 |---|---|
 | 任务 ID | M4-T7 |
 | 里程碑 | M4 — PagedAttention |
-| 状态 | ⬜ pending |
+| 状态 | ✅ done |
 | 前置 | M4-T6 E2E Correctness & Benchmark ✅ |
 | 后续 | M4-T8 Docs & Tag |
 | 估时 | 5～6h |

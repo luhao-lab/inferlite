@@ -8,7 +8,7 @@
 |---|---|
 | 任务 ID | M4-T5 |
 | 里程碑 | M4 — PagedAttention |
-| 状态 | ⬜ pending |
+| 状态 | ✅ done |
 | 前置 | M4-T4 PagedAttention PyTorch ✅ |
 | 后续 | M4-T6 — E2E Correctness & Benchmark |
 | 估时 | 4～6h |

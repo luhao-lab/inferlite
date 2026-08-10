@@ -8,7 +8,7 @@
 |---|---|
 | 任务 ID | M4-T4 |
 | 里程碑 | M4 — PagedAttention |
-| 状态 | ⬜ pending |
+| 状态 | ✅ done |
 | 前置 | M4-T1 BlockPool ✅、M4-T2 BlockTable ✅、M4-T3 PagedKVCache ✅ |
 | 后续 | M4-T5 — BatchEngine Integration |
 | 估时 | 3～4h |
