@@ -434,17 +434,22 @@ class TestBatchedAttentionLayer:
 
 
 class TestBatchedAttentionModel:
-    """Qwen3Model + BatchedKVCache 的 batched decode。"""
+    """Qwen3Model + ForwardContext 的 batched decode / M2 验证。"""
 
     def test_model_batched_decode_shape(self):
-        """L0-1: model batched decode 输出 shape [B, 1, hidden_size]。"""
+        """L0-1: model batched decode 输出 shape [B, 1, hidden_size]（ForwardContext 路径）。"""
         from inferlite.cache.batched_kv_cache import BatchedKVCache
+        from inferlite.engine.forward_context import AttentionMetadata, set_forward_context
 
         config = _tiny_config(num_hidden_layers=2)
         model = Qwen3Model(config)
         cache = BatchedKVCache.from_config(
             config, max_num_slots=4, max_seq_len=32, dtype=torch.float32, device="cpu"
         )
+        # 手动绑定 cache 到每层 Attention
+        for i, layer in enumerate(model.layers):
+            layer.self_attn.attn.kv_cache = cache.layers[i]
+            layer.self_attn.attn.layer_idx = i
 
         B = 3
         input_ids = torch.randint(0, 100, (B, 1))
@@ -452,26 +457,34 @@ class TestBatchedAttentionModel:
         cache_positions = torch.tensor([5, 10, 3])
         position_ids = cache_positions[:, None]
 
-        out = model(
-            input_ids,
-            position_ids=position_ids,
-            kv_cache=cache,
-            cache_slots=cache_slots,
-            cache_positions=cache_positions,
+        metadata = AttentionMetadata(
+            num_seqs=B,
+            seq_lens=cache_positions + 1,
+            slot_mapping=cache_slots,
         )
+        with set_forward_context(metadata):
+            out = model(input_ids, position_ids=position_ids)
         assert out.shape == (B, 1, 32)
 
     def test_model_m2_not_broken(self):
-        """M2 generate 路径不受影响（kv_cache=KVCache, 无 cache_slots）。"""
+        """M2 generate 路径不受影响（ForwardContext + SingleCacheAdapter）。"""
         from inferlite.cache.kv_cache import KVCache
+        from inferlite.engine.forward_context import set_forward_context
 
         config = _tiny_config(num_hidden_layers=2)
         model = Qwen3Model(config)
         cache = KVCache.from_config(
             config, batch_size=1, max_seq_len=32, dtype=torch.float32, device="cpu"
         )
+        # 手动绑定 cache 到每层 Attention（Qwen3Model 没有 .model 属性）
+        for i, layer in enumerate(model.layers):
+            layer.self_attn.attn.kv_cache = cache.layers[i]
+            layer.self_attn.attn.layer_idx = i
 
         # M2 prefill
         input_ids = torch.randint(0, 100, (1, 5))
-        out = model(input_ids, kv_cache=cache)
+        position_ids = torch.arange(5).unsqueeze(0)
+        metadata = AttentionMetadata(num_seqs=1, seq_lens=torch.tensor([5]))
+        with set_forward_context(metadata):
+            out = model(input_ids, position_ids=position_ids)
         assert out.shape == (1, 5, 32)

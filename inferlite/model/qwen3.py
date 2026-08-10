@@ -49,13 +49,7 @@ from typing import override
 import torch
 import torch.nn as nn
 
-from inferlite.cache import KVCache, LayerKVCache, PagedKVCache
 from inferlite.config import ModelConfig
-from inferlite.engine.forward_context import (
-    AttentionMetadata,
-    has_forward_context,
-    set_forward_context,
-)
 from inferlite.model.attention import Qwen3Attention
 from inferlite.model.layers import RMSNorm, RotaryEmbedding, SwiGLUMLP
 
@@ -98,75 +92,31 @@ class DecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         position_ids: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        layer_kv_cache: LayerKVCache | None = None,
-        cache_position: int = 0,
-        cache_slots: torch.Tensor | None = None,
-        cache_positions: torch.Tensor | None = None,
-        paged_kv_cache: PagedKVCache | None = None,
-        layer_idx: int | None = None,
-        request_ids: list[str] | None = None,
-        is_prefill: bool = False,
     ) -> torch.Tensor:
         """执行一个 Qwen3 decoder block：self-attention + MLP。
+
+        ForwardContext 由调用方（adapter.bind_kv_cache + set_forward_context）设好，
+        本层不关心 cache 类型，直接走 Qwen3Attention -> Attention.forward。
 
         Args:
             hidden_states: [B, T, hidden_size]
                 当前层输入的 residual stream。
             position_ids: [B, T]
                 M1 兼容路径：传给 attention 内部 RoPE。
-                M2 路径使用 position_embeddings，但 position_ids 仍保留即 M1 单测继续可用。
+                M2+ 路径使用 position_embeddings，但 position_ids 仍保留即 M1 单测继续可用。
             position_embeddings: (cos, sin)，由 Qwen3Model 统一计算后传入。
                 None 时 Attention 内部自己根据 position_ids 计算（M1 兼容）。
-            layer_kv_cache: 当前层的 LayerKVCache。
-                None 时走 M1 无 cache 路径，非 None 时启用 cache 读写。
-            cache_position: 当前 token(s) 写入 cache 的起始槽位，= kv_cache.cur_len。
 
         Returns:
             [B, T, hidden_size]
         """
-        # 1. Attention 子层：pre-norm -> self-attn -> residual add。
-        #
-        # 为什么先保存 residual？
-        # residual 是“未经本子层变换”的主干信号，最后要和 attention 的增量相加。
-        # pre-norm 中，norm 只作用在送进子层的分支上，不修改 residual 主干。
-        # ── Attention 子层 ──
+        # ── Attention 子层：pre-norm -> self-attn -> residual add ──
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        # ── cache 绑定 + ForwardContext ──
-        # 新路径（adapter.bind_kv_cache 已设好 kv_cache，ForwardContext 已设好 metadata）：
-        #   直接复用已有 ForwardContext，不重建 metadata。
-        # 旧路径（cache 通过 layer_kv_cache/paged_kv_cache 参数传入）：
-        #   绑定 cache 到 Attention 层，从参数重建 metadata。
-        if layer_kv_cache is not None:
-            self.self_attn.attn.kv_cache = layer_kv_cache
-        elif paged_kv_cache is not None:
-            self.self_attn.attn.kv_cache = paged_kv_cache
-            if layer_idx is not None:
-                self.self_attn.attn.layer_idx = layer_idx
-        # 判断 ForwardContext 是否需要本层设置
-        kv_cache_bound = (
-            hasattr(self.self_attn, "attn") and self.self_attn.attn.kv_cache is not None
-        )
-        if kv_cache_bound and not has_forward_context():
-            # 旧路径：从参数重建 metadata 并设 ForwardContext
-            metadata = self._build_metadata(
-                hidden_states,
-                position_ids,
-                layer_kv_cache,
-                cache_position,
-                cache_slots,
-                cache_positions,
-                paged_kv_cache,
-                is_prefill,
-                request_ids,
-                layer_idx,
-            )
-            with set_forward_context(metadata):
-                hidden_states = self.self_attn(position_ids, hidden_states)
-        else:
-            # 新路径（ForwardContext 已由调用方设好）或 M1 无 cache 路径
-            hidden_states = self.self_attn(position_ids, hidden_states)
-        # residual add：把 attention 增量加回主干。
+        # Attention forward：cache 已通过 adapter.bind_kv_cache 绑定，
+        # ForwardContext 已通过 set_forward_context 设好。
+        # M1 无 cache 时 ForwardContext 未设，Attention 走 full attention 路径。
+        hidden_states = self.self_attn(position_ids, hidden_states)
         hidden_states = residual + hidden_states
 
         # 2. MLP 子层：重新记录 residual，再 pre-norm -> MLP -> residual add。
@@ -182,61 +132,6 @@ class DecoderLayer(nn.Module):
         # 第二次 residual add：把 MLP 增量加回主干。
         hidden_states = residual + hidden_states
         return hidden_states
-
-    def _build_metadata(
-        self,
-        hidden_states,
-        position_ids,
-        layer_kv_cache,
-        cache_position,
-        cache_slots,
-        cache_positions,
-        paged_kv_cache,
-        is_prefill,
-        request_ids=None,
-        layer_idx=None,
-    ):
-        """过渡期 helper：从旧参数构造 AttentionMetadata。A4 后由 adapter 负责。"""
-        seq_len = hidden_states.shape[1]
-
-        if paged_kv_cache is not None:
-            # M4: paged cache - 从 request_ids 构造 block_table + seq_lens
-            if request_ids is None:
-                raise ValueError("request_ids required for paged path")
-            tables = [paged_kv_cache.block_tables[rid] for rid in request_ids]
-            B = len(tables)
-            max_blocks = max(t.num_blocks for t in tables)
-            block_table = torch.zeros(B, max_blocks, dtype=torch.long, device=hidden_states.device)
-            for i, t in enumerate(tables):
-                block_table[i, : t.num_blocks] = torch.tensor(
-                    t.block_ids, dtype=torch.long, device=hidden_states.device
-                )
-            seq_lens = torch.tensor(
-                [t.seq_len for t in tables], dtype=torch.long, device=hidden_states.device
-            )
-            return AttentionMetadata(num_seqs=B, seq_lens=seq_lens, block_table=block_table)
-
-        if isinstance(layer_kv_cache, LayerKVCache) and not isinstance(layer_kv_cache, type(None)):
-            # M2: 单序列
-            if is_prefill or cache_position == 0:
-                seq_lens = torch.tensor([seq_len], device=hidden_states.device)
-            else:
-                seq_lens = torch.tensor([cache_position + 1], device=hidden_states.device)
-            return AttentionMetadata(num_seqs=1, seq_lens=seq_lens)
-
-        # M3: batched
-        if cache_positions is not None:
-            # decode
-            seq_lens = cache_positions + 1
-        else:
-            # prefill
-            num_seqs = hidden_states.shape[0]
-            seq_lens = torch.full((num_seqs,), seq_len, device=hidden_states.device)
-        return AttentionMetadata(
-            num_seqs=len(seq_lens),
-            seq_lens=seq_lens,
-            slot_mapping=cache_slots,  # ← 传 slot 映射
-        )
 
 
 class Qwen3Model(nn.Module):
@@ -297,22 +192,12 @@ class Qwen3Model(nn.Module):
         self,
         input_ids: torch.Tensor,
         position_ids: torch.Tensor | None = None,
-        kv_cache: KVCache | None = None,
-        cache_slots: torch.Tensor | None = None,
-        cache_positions: torch.Tensor | None = None,
-        paged_kv_cache: PagedKVCache | None = None,
-        request_ids: list[str] | None = None,
-        is_prefill: bool = False,
     ) -> torch.Tensor:
         """Qwen3 backbone 前向，返回最后一层 hidden states。
 
         Args:
             input_ids: [B, T]  token ids。
-                M2 prefill: T = prompt 长度；
-                M2 decode:  T = 1（只传当前新 token，历史从 kv_cache 读取）。
             position_ids: [B, T]。不传时按 0..T-1 自动生成。
-                M2 decode 步需传入绝对位置（不是从 0 重新开始），由 generate loop 负责传入。
-            kv_cache: 全模型 KVCache 容器。None 时走 M1 full attention 路径。
 
         Returns:
             last_hidden_state: [B, T, hidden_size]
@@ -339,30 +224,14 @@ class Qwen3Model(nn.Module):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # Step 2: 逐层通过 decoder blocks。
-        # M2 路径：传入 position_embeddings + kv_cache.layers[i]，每层 Attention 自动读写 cache。
-        # kv_cache=None 时（M1 路径）：layer_kv_cache=None，行为与原屙实现完全相同。
-        if isinstance(paged_kv_cache, PagedKVCache):
-            for i, layer in enumerate(self.layers):
-                hidden_states = layer(
-                    hidden_states,
-                    position_ids,
-                    position_embeddings=position_embeddings,
-                    paged_kv_cache=paged_kv_cache,
-                    layer_idx=i if paged_kv_cache is not None else None,
-                    request_ids=request_ids,
-                    is_prefill=is_prefill,
-                )
-        else:
-            for i, layer in enumerate(self.layers):
-                hidden_states = layer(
-                    hidden_states,
-                    position_ids,
-                    position_embeddings=position_embeddings,
-                    layer_kv_cache=kv_cache.layers[i] if kv_cache is not None else None,
-                    cache_position=kv_cache.cur_len if isinstance(kv_cache, KVCache) else 0,
-                    cache_slots=cache_slots,
-                    cache_positions=cache_positions,
-                )
+        # ForwardContext 已由调用方（adapter + set_forward_context）设好，
+        # DecoderLayer 直接走 ForwardContext 路径。
+        for layer in self.layers:
+            hidden_states = layer(
+                hidden_states,
+                position_ids,
+                position_embeddings=position_embeddings,
+            )
 
         # Step 3: final RMSNorm。
         # 这是 Qwen3Model 输出前的最后归一化；lm_head/logits 会在后续 T8 接在它后面。
@@ -438,43 +307,22 @@ class Qwen3ForCausalLM(nn.Module):
         *,
         positions: torch.Tensor | None = None,
         logits_to_keep: int | None = None,
-        kv_cache: KVCache | None = None,
-        cache_slots: torch.Tensor | None = None,
-        cache_positions: torch.Tensor | None = None,
-        paged_kv_cache: PagedKVCache | None = None,
-        request_ids: list[str] | None = None,
-        is_prefill: bool = False,
     ) -> torch.Tensor:
         """执行 CausalLM 前向，返回每个位置的 vocab logits。
 
         Args:
-            input_ids: [B, T]。M2 decode 步只传 1 个 token。
-            position_ids: [B, T]，可选。M2 decode 步需传入绝对位置。
+            input_ids: [B, T]。
+            position_ids: [B, T]，可选。
             positions: position_ids 的别名（对齐 vLLM V1 + loop.py 新接口）。
-                如果同时传了 position_ids 和 positions，优先使用 positions。
-            logits_to_keep: 只保留最后 N 个位置的 logits，减少 lm_head 计算量。
-                decode 步传 1 可节省 vocab-size 级忾小计算。
-            kv_cache: 全模型 KVCache。None 时走 M1 路径。
+            logits_to_keep: 只保留最后 N 个位置的 logits。
 
         Returns:
             logits: [B, T, vocab_size]
         """
-        # positions 是 position_ids 的别名（对齐 vLLM V1 命名）
         if positions is not None:
             position_ids = positions
 
-        # Step 1: 先走 backbone，得到每个 token 的上下文表示。
-        # 这里用关键字传 position_ids，避免未来 Qwen3Model.forward 参数顺序变化造成误传。
-        hidden_states = self.model(
-            input_ids,
-            position_ids=position_ids,
-            kv_cache=kv_cache,
-            cache_slots=cache_slots,
-            cache_positions=cache_positions,
-            paged_kv_cache=paged_kv_cache,
-            request_ids=request_ids,
-            is_prefill=is_prefill,
-        )
+        hidden_states = self.model(input_ids, position_ids=position_ids)
         if logits_to_keep is not None:
             hidden_states = hidden_states[:, -logits_to_keep:, :]
 
