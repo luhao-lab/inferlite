@@ -306,3 +306,345 @@ model/attention.py
 - `test_paged_batch_engine.py` — paged batch 生命周期、EOS、block 耗尽
 - `test_batch_generate.py` — serial vs batch `torch.equal` 等价
 - `test_real_qwen3_batch_matches_serial` — 真实 Qwen3 模型端到端等价
+
+---
+
+## 12. 代码架构详解
+
+> 本节从调用入口到模型 forward 逐层走读代码，帮助读者理解数据如何在层间流转。
+
+### 12.1 入口：三条调用路径
+
+用户通过 `cli.py` 或直接调用 `engine/engine.py` 中的三个函数启动推理：
+
+```python
+# M1/M2 单请求
+engine = EngineCore(model, sampler)
+result = generate(engine, input_ids, max_new_tokens=10, kv_cache=cache)
+
+# M3 multi-request batched
+results = batch_generate(model, sampler, prompts, max_num_slots=4, ...)
+
+# M4 paged
+results = batch_generate_paged(model, sampler, prompts, num_blocks=8, block_size=16, ...)
+```
+
+三条路径在 `engine/engine.py`（248L）中定义。`generate()` 处理 M1（无 cache）和 M2（单序列 cache）；`batch_generate()` 和 `batch_generate_paged()` 是 M3/M4 的薄包装，创建对应的 cache + adapter + scheduler 后委托给 `loop.batch_generate_loop()`。
+
+**EngineCore.step()** 是最小推理单元：
+
+```python
+def step(self, input_ids):
+    logits = self.model(input_ids, logits_to_keep=1)  # [B, 1, V]
+    return self.sampler(logits[:, -1, :])              # [B, 1]
+```
+
+**generate() M2 路径**展示了 ForwardContext 的完整用法：
+
+```python
+adapter = SingleCacheAdapter(kv_cache)
+adapter.bind_kv_cache(engine.model)        # 把 cache 注入每层 Attention.kv_cache
+
+# Prefill
+position_ids = torch.arange(T_p).unsqueeze(0)
+metadata = adapter.make_prefill_metadata(input_ids, position_ids)
+with set_forward_context(metadata):        # 全局上下文
+    logits = engine.model(input_ids, positions=position_ids)
+
+# Decode（循环）
+pos = torch.tensor([[kv_cache.cur_len]])
+metadata = adapter.make_decode_metadata(next_token, pos)
+with set_forward_context(metadata):
+    logits = engine.model(next_token, positions=pos, logits_to_keep=1)
+```
+
+### 12.2 统一主循环：loop.py
+
+M3 和 M4 都进入 `batch_generate_loop()`（234L），这是整个引擎的核心：
+
+```python
+def batch_generate_loop(model, sampler, scheduler, adapter, prompts, ...):
+    adapter.bind_kv_cache(model)
+
+    while scheduler.has_unfinished():
+        # ── 1. Admit + Allocate ──
+        admitted = []
+        while scheduler.waiting:
+            req = scheduler.waiting[0]
+            if not adapter.can_admit(req.prompt_ids.shape[1]):
+                break
+            scheduler.waiting.popleft()
+            req.status = RequestStatus.RUNNING
+            scheduler.running[req.request_id] = req
+            adapter.allocate(req.request_id, prompt_len)
+            admitted.append(req)
+
+        # ── 2. Batched Prefill ──
+        if admitted:
+            input_ids, positions = _build_prefill_batch(admitted, device)  # padded batch
+            metadata = adapter.make_prefill_metadata(input_ids, positions, request_ids=...)
+            with set_forward_context(metadata):
+                logits = model(input_ids, positions=positions)
+            for i, req in enumerate(admitted):
+                plen = req.prompt_ids.shape[1]
+                req.last_token = sampler(logits[i, plen - 1, :].unsqueeze(0))
+            adapter.set_seq_lens(admitted)
+
+        # ── 3. Decode ──
+        running = list(scheduler.running.values())
+        adapter.prepare_decode([req.request_id for req in running])
+        next_tokens, positions = _build_decode_batch(running, device)
+        metadata = adapter.make_decode_metadata(next_tokens, positions)
+        with set_forward_context(metadata):
+            logits = model(next_tokens, positions=positions)
+        sampled = sampler(logits[:, -1, :])
+
+        # ── 4. Update + Finish ──
+        for req, tok in zip(running, sampled):
+            req.last_token = tok.unsqueeze(0)
+            req.num_generated += 1
+            req.seq_len += 1
+            if req.num_generated >= req.max_new_tokens or (eos and tok == eos):
+                scheduler.mark_finished(req)
+                adapter.free(req.request_id)
+
+    return collect_results(scheduler)
+```
+
+关键设计点：
+
+1. **admit-allocate 交替**：每条请求先检查容量 `can_admit()`，再 `allocate()`，然后才检查下一条。这避免了批量 admit 后 allocate 发现容量不够的问题。
+
+2. **batched prefill**：所有新请求 padded 到最长 prompt 长度，一次 forward 处理。每请求取 `logits[i, plen-1, :]` 采样（跳过 padding 位置）。
+
+3. **adapter 多态**：loop.py 不区分 M3 slot 还是 M4 block，所有 cache 操作通过 adapter 接口。
+
+### 12.3 CacheAdapter：统一 cache 差异
+
+`cache/adapter.py`（315L）定义了 CacheAdapter Protocol 和三种实现。每个 adapter 封装了 cache 的创建、绑定、metadata 构造和生命周期管理。
+
+**CacheAdapter Protocol**（8 个方法）：
+
+```python
+class CacheAdapter(Protocol):
+    def can_admit(self, prompt_len: int) -> bool: ...
+    def allocate(self, request_id: str, prompt_len: int) -> None: ...
+    def free(self, request_id: str) -> None: ...
+    def bind_kv_cache(self, model) -> None: ...
+    def make_prefill_metadata(self, input_ids, positions, request_ids=None) -> AttentionMetadata: ...
+    def make_decode_metadata(self, next_tokens, positions) -> AttentionMetadata: ...
+    def prepare_decode(self, request_ids: list[str]) -> None: ...
+    def set_seq_lens(self, requests) -> None: ...
+```
+
+**BatchedCacheAdapter**（M3）核心逻辑：
+
+```python
+def allocate(self, request_id, prompt_len):
+    slot = self.cache.slot_manager.allocate_slot()           # 从空闲 slot 池取一个
+    self.cache.slot_manager.req_to_slot[request_id] = slot   # 记录 request_id → slot
+
+def bind_kv_cache(self, model):
+    for i, layer in enumerate(model.model.layers):
+        layer.self_attn.attn.kv_cache = self.cache.layers[i]  # BatchedLayerKVCache
+
+def make_prefill_metadata(self, input_ids, positions, request_ids=None):
+    slots = [self.cache.slot_manager.req_to_slot[rid] for rid in request_ids]
+    return AttentionMetadata(num_seqs=B, seq_lens=seq_lens, slot_mapping=slots)
+
+def prepare_decode(self, request_ids):
+    for rid in request_ids:
+        slot = self.cache.slot_manager.req_to_slot[rid]
+        self.cache.seq_lens[slot] += 1   # decode 前 seq_lens 自增
+```
+
+**PagedCacheAdapter**（M4）核心差异：
+
+```python
+def allocate(self, request_id, prompt_len):
+    self.cache.allocate_request(request_id, prompt_len)  # 内部分配 ceil(plen/bs) 个 block
+
+def prepare_decode(self, request_ids):
+    for rid in request_ids:
+        self.cache.append_token(rid)  # 如当前 block 满，分配新 block
+
+def make_decode_metadata(self, next_tokens, positions):
+    block_table = self.cache.gather_block_table(request_ids)  # [B, max_blocks]
+    return AttentionMetadata(num_seqs=B, seq_lens=seq_lens, block_table=block_table)
+```
+
+关键区别：M3 用 `slot_mapping` 直接索引物理位置；M4 用 `block_table` 间接寻址。
+
+### 12.4 Attention 层：cache RW 分发
+
+`model/attention.py`（433L）中 `Attention.forward()` 是 cache 读写发生的地方：
+
+```python
+def forward(self, q, k, v):
+    # 1. Cache RW（根据 kv_cache 类型分发）
+    if self.kv_cache is None:
+        pass                                        # M1: 无 cache
+    elif isinstance(self.kv_cache, PagedKVCache):
+        k, v, paged_valid_lens = self._paged_cache_rw(k, v, metadata)   # M4
+    elif isinstance(self.kv_cache, BatchedLayerKVCache):
+        k, v, cache_positions = self._batched_cache_rw(k, v, metadata)  # M3
+    elif isinstance(self.kv_cache, LayerKVCache):
+        k, v, cache_position = self._single_cache_rw(k, v, metadata)   # M2
+
+    # 2. GQA repeat_kv
+    k = repeat_kv(k, self.num_key_value_groups)
+
+    # 3. Attention 计算
+    attn_weights = torch.matmul(q, k.transpose(2, 3)) * self.scaling
+    # causal mask（seq_len > 1 时）
+    # valid_lens mask（paged/batched 时屏蔽 padding）
+    attn_weights = softmax(attn_weights, dim=-1, dtype=float32)
+    return matmul(attn_weights, v)
+```
+
+**M3 _batched_cache_rw** 的 prefill 路径：
+
+```python
+# prefill: 每个请求写整段 KV 到自己的 slot
+for i in range(B):
+    slot = int(slot_mapping[i])
+    plen = int(seq_lens[i])
+    cache.k[slot, :, :plen, :] = k[i, :, :plen, :]  # 只写有效位置（非 padded）
+    cache.v[slot, :, :plen, :] = v[i, :, :plen, :]
+
+# gather: 读取所有 slot 的 KV 拼成 batch
+k = cache.k[slot_mapping, :, :max_seq_lens, :]   # [B, n_kv, max_len, D]
+return k, v, seq_lens  # seq_lens 触发 valid_lens mask
+```
+
+**M4 _paged_cache_rw** 的 scatter/gather：
+
+```python
+# scatter: 把 padded batch 的 K/V 写入物理 block
+slot_mapping = paged_cache.make_slot_mapping(request_ids, seq_lens)
+flat_k = flatten_valid_kv(k, seq_lens)             # [total_tokens, n_kv, D]
+for layer_idx, layer_cache in enumerate(paged_cache.layers):
+    flat_cache = layer_cache.k.view(-1, n_kv, D)   # 展平前两维
+    flat_cache[slot_mapping] = flat_k               # scatter 到物理位置
+
+# gather: 按 block table 读取 KV 拼成连续序列
+block_table = metadata.block_table                 # [B, max_blocks]
+gathered_k = layer_cache.k[block_table]            # [B, max_blocks, bs, n_kv, D]
+k = gathered_k.reshape(B, max_blocks * bs, n_kv, D).transpose(1, 2)  # [B, n_kv, L_pad, D]
+
+# NaN 安全：清零 padding 位置
+k = k.masked_fill(~valid_mask, 0)
+return k, v, valid_lens
+```
+
+### 12.5 ForwardContext：全局上下文传递
+
+`engine/context.py`（110L）定义了两个核心数据结构和一个 context manager：
+
+```python
+@dataclass
+class AttentionMetadata:
+    num_seqs: int                       # batch 中请求数
+    seq_lens: torch.Tensor              # [B] 每请求序列长度
+    slot_mapping: torch.Tensor | None   # [B] M3 slot 映射
+    block_table: torch.Tensor | None    # [B, max_blocks] M4 block 表
+
+@dataclass
+class ForwardContext:
+    attn_metadata: AttentionMetadata
+
+_forward_context: ForwardContext | None = None
+
+@contextmanager
+def set_forward_context(attn_metadata):
+    global _forward_context
+    _forward_context = ForwardContext(attn_metadata)
+    try:
+        yield
+    finally:
+        _forward_context = None
+```
+
+模型 forward 签名只有 `(input_ids, positions)`，cache 和 metadata 完全不经过参数传递。Attention 层通过 `get_forward_context().attn_metadata` 获取当前轮的元数据。
+
+### 12.6 Scheduler + RequestState
+
+`scheduler/request.py`（75L）定义请求生命周期：
+
+```python
+class RequestStatus(Enum):
+    WAITING = 0    # 等待 admit
+    RUNNING = 1    # 在 running 队列中
+    FINISHED = 2   # 生成完毕
+
+@dataclass
+class RequestState:
+    request_id: str
+    prompt_ids: torch.Tensor      # [1, T_p]
+    max_new_tokens: int
+    eos_token_id: int | None
+    last_token: torch.Tensor | None = None
+    num_generated: int = 0
+    generated_tokens: list = field(default_factory=list)
+    status: RequestStatus = RequestStatus.WAITING
+    slot_id: int | None = None
+    seq_len: int = 0
+```
+
+`scheduler/fcfs.py`（100L）实现先来先服务调度：
+
+```python
+class FCFSScheduler:
+    def submit(self, req): self.waiting.append(req)
+    def has_unfinished(self): return self.waiting or self.running
+    def mark_finished(self, req):
+        req.status = RequestStatus.FINISHED
+        del self.running[req.request_id]
+        self.finished[req.request_id] = req
+```
+
+FCFS 策略：队首请求不够容量就停止 admit，不跳过头部请求（对齐 vLLM V1 的简化版，不做 preemption）。
+
+### 12.7 完整数据流追踪
+
+一个请求从输入到输出的完整路径（M3 batched 为例）：
+
+```
+1. batch_generate()
+   → 创建 BatchedKVCache([S, n_kv, max_seq_len, D])
+   → 创建 BatchedCacheAdapter + FCFSScheduler
+   → 提交 RequestState 到 waiting 队列
+
+2. batch_generate_loop() 第一轮迭代
+   → can_admit(5) = True → admit → allocate() 分配 slot=0
+   → _build_prefill_batch() → input_ids=[1,1,2,3,5], positions=[0,1,2,3,4]
+   → adapter.make_prefill_metadata() → AttentionMetadata(slot_mapping=[0], seq_lens=[5])
+   → set_forward_context(metadata)
+
+3. model(input_ids, positions=positions)
+   → Qwen3ForCausalLM.forward()
+     → 28 层 Qwen3DecoderLayer
+       → Qwen3Attention: q_proj → q_norm → rope → Attention
+         → Attention.forward(q, k, v)
+           → _batched_cache_rw: cache.k[0, :, :5, :] = k[:, :5, :]  # 写 slot 0
+           → gather: k = cache.k[[0], :, :5, :]                     # 读 slot 0
+           → causal mask → softmax → matmul → output
+       → SwiGLUMLP
+     → lm_head → logits [1, 5, V]
+
+4. sampler(logits[0, 4, :]) → next_token = 7
+   → req.last_token = 7, req.num_generated = 1, req.seq_len = 5
+
+5. 后续轮次 Decode
+   → prepare_decode(["0"]) → cache.seq_lens[0] += 1  (now 6)
+   → _build_decode_batch() → next_tokens=[[7]], positions=[[5]]
+   → make_decode_metadata() → AttentionMetadata(slot_mapping=[0], seq_lens=[6])
+   → model(next_tokens, positions)
+     → Attention._batched_cache_rw (decode path):
+       cache.k[0, :, 5, :] = k[0]  # 写位置 5
+       k = cache.k[0, :, :6, :]    # 读 [0:6]
+   → sampler → next_token = 42
+
+6. req.num_generated >= max_new_tokens
+   → mark_finished(req) → adapter.free("0") → slot 0 释放
+```
