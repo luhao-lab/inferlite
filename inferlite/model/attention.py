@@ -278,9 +278,58 @@ class Attention(nn.Module):
 
     # ── M4: paged cache RW ──
     def _paged_cache_rw(self, k, v, metadata):
-        """M4 分页 KV 读写。B2.5 实现。"""
-        # TODO: 从 metadata.block_table 实现 paged RW
-        raise NotImplementedError("M4 paged path needs B2.5 alignment")
+        """M4 paged: 用 block_table tensor 做 scatter/gather。"""
+        cache = self.kv_cache
+        layer = cache.layers[self.layer_idx]
+        block_table = metadata.block_table  # [B, max_blocks]
+        seq_lens = metadata.seq_lens  # [B]
+        B = k.shape[0]
+        is_prefill = k.shape[2] > 1
+
+        # ── Write: scatter k/v → physical blocks ──
+        # layer.k: [num_blocks, block_size, n_kv, D]
+        num_blocks, block_size, n_kv, D = layer.k.shape
+        flat_cache_k = layer.k.view(-1, n_kv, D)
+        flat_cache_v = layer.v.view(-1, n_kv, D)
+
+        if is_prefill:
+            # prefill: 写入整段 prompt
+            for i in range(B):
+                slen = int(seq_lens[i])
+                for pos in range(slen):
+                    block_idx = pos // block_size
+                    offset = pos % block_size
+                    phys = int(block_table[i, block_idx])
+                    flat_cache_k[phys * block_size + offset] = k[i, :, pos, :]
+                    flat_cache_v[phys * block_size + offset] = v[i, :, pos, :]
+        else:
+            # decode: 写入单个 token (pos = seq_lens - 1)
+            for i in range(B):
+                pos = int(seq_lens[i]) - 1
+                block_idx = pos // block_size
+                offset = pos % block_size
+                phys = int(block_table[i, block_idx])
+                flat_cache_k[phys * block_size + offset] = k[i, :, 0, :]
+                flat_cache_v[phys * block_size + offset] = v[i, :, 0, :]
+
+        # ── Read: gather from block_table ──
+        # block_table [B, nb] → layer.k[block_table] → [B, nb, bs, n_kv, D]
+        gathered_k = layer.k[block_table]
+        gathered_v = layer.v[block_table]
+        # reshape: [B, nb, bs, n_kv, D] → [B, nb*bs, n_kv, D] → [B, n_kv, L, D]
+        L = gathered_k.shape[1] * gathered_k.shape[2]
+        gathered_k = gathered_k.reshape(B, L, n_kv, D).transpose(1, 2)
+        gathered_v = gathered_v.reshape(B, L, n_kv, D).transpose(1, 2)
+
+        # 清零 valid_lens 之外的 K/V，防止 NaN padding 通过 matmul 传播
+        # 注意：不能用 * mask，因为 NaN * 0 = NaN（IEEE 754）
+        positions = torch.arange(L, device=gathered_k.device)
+        valid_mask = positions[None, :] < seq_lens[:, None]  # [B, L]
+        gathered_k = gathered_k.masked_fill(~valid_mask[:, None, :, None], 0.0)
+        gathered_v = gathered_v.masked_fill(~valid_mask[:, None, :, None], 0.0)
+
+        valid_lens = seq_lens
+        return gathered_k, gathered_v, valid_lens
 
     # ── mask helpers ──
     def _build_valid_lens_mask(self, scores, valid_lens):

@@ -150,6 +150,8 @@ class DecoderLayer(nn.Module):
                 cache_positions,
                 paged_kv_cache,
                 is_prefill,
+                request_ids,
+                layer_idx,
             )
             with set_forward_context(metadata):
                 hidden_states = self.self_attn(position_ids, hidden_states)
@@ -182,15 +184,28 @@ class DecoderLayer(nn.Module):
         cache_positions,
         paged_kv_cache,
         is_prefill,
+        request_ids=None,
+        layer_idx=None,
     ):
         """过渡期 helper：从旧参数构造 AttentionMetadata。A4 后由 adapter 负责。"""
         seq_len = hidden_states.shape[1]
 
         if paged_kv_cache is not None:
-            # M4: seq_lens 从 request_ids 推导（暂时）
-            num_seqs = 1 if is_prefill else len(cache_slots or [1])
-            seq_lens = torch.zeros(num_seqs, dtype=torch.long, device=hidden_states.device)
-            return AttentionMetadata(num_seqs=num_seqs, seq_lens=seq_lens)
+            # M4: paged cache - 从 request_ids 构造 block_table + seq_lens
+            if request_ids is None:
+                raise ValueError("request_ids required for paged path")
+            tables = [paged_kv_cache.block_tables[rid] for rid in request_ids]
+            B = len(tables)
+            max_blocks = max(t.num_blocks for t in tables)
+            block_table = torch.zeros(B, max_blocks, dtype=torch.long, device=hidden_states.device)
+            for i, t in enumerate(tables):
+                block_table[i, : t.num_blocks] = torch.tensor(
+                    t.block_ids, dtype=torch.long, device=hidden_states.device
+                )
+            seq_lens = torch.tensor(
+                [t.seq_len for t in tables], dtype=torch.long, device=hidden_states.device
+            )
+            return AttentionMetadata(num_seqs=B, seq_lens=seq_lens, block_table=block_table)
 
         if isinstance(layer_kv_cache, LayerKVCache) and not isinstance(layer_kv_cache, type(None)):
             # M2: 单序列

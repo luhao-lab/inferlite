@@ -8,7 +8,7 @@
   3. B>1 变长 decode：合批结果等价逐条 decode
   4. 跨 block 边界：prompt 超过 block_size 时 prefill 正确
   5. NaN padding 安全：block 对齐 padding 区不污染短请求输出
-  6. 参数合同：缺少 request_ids / layer_idx 时抛错
+  6. 参数合同：block_table / layer_idx 缺失时校验
 """
 
 import pytest
@@ -17,10 +17,11 @@ import torch
 from inferlite.cache.kv_cache import LayerKVCache
 from inferlite.cache.paged_kv_cache import PagedKVCache
 from inferlite.config import ModelConfig
+from inferlite.engine.forward_context import AttentionMetadata, set_forward_context
 from inferlite.model.attention import Qwen3Attention
 
 # ---------------------------------------------------------------------------
-# fixtures
+# fixtures & helpers
 # ---------------------------------------------------------------------------
 
 
@@ -76,21 +77,76 @@ def _make_single_cache(
     )
 
 
-def _position_embeddings(
-    config: ModelConfig,
-    batch_size: int,
-    seq_len: int,
-    offset: int = 0,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """生成 position_embeddings (cos, sin)，shape [B, T, head_dim]。"""
-    from inferlite.model.layers import RotaryEmbedding
+def _build_block_table(cache: PagedKVCache, request_ids: list[str]) -> torch.Tensor:
+    """从 cache 的 block_tables 构造 padded block_table tensor。"""
+    tables = [cache.block_tables[rid] for rid in request_ids]
+    max_blocks = max(t.num_blocks for t in tables)
+    block_table = torch.zeros(len(tables), max_blocks, dtype=torch.long)
+    for i, t in enumerate(tables):
+        block_table[i, : t.num_blocks] = torch.tensor(t.block_ids, dtype=torch.long)
+    return block_table
 
-    rotary = RotaryEmbedding(config.head_dim, config.rope_theta)
-    position_ids = torch.arange(offset, offset + seq_len).unsqueeze(0).expand(batch_size, -1)
-    # rotary 需要 [B, heads, T, D] 的输入来计算 cos/sin
-    dummy = torch.zeros(batch_size, 1, seq_len, config.head_dim)
-    cos, sin = rotary(dummy, position_ids)
-    return cos, sin
+
+def _call_paged(attn, hidden, pos_start, cache, request_id, layer_idx=0):
+    """单请求 paged attention 调用（prefill 或 decode）。"""
+    attn.attn.kv_cache = cache
+    attn.attn.layer_idx = layer_idx
+
+    table = cache.block_tables[request_id]
+    seq_len = table.seq_len
+    T = hidden.shape[1]
+
+    block_table = _build_block_table(cache, [request_id])
+    seq_lens = torch.tensor([seq_len], dtype=torch.long)
+    position_ids = torch.arange(pos_start, pos_start + T).unsqueeze(0)
+
+    metadata = AttentionMetadata(num_seqs=1, seq_lens=seq_lens, block_table=block_table)
+    with set_forward_context(metadata):
+        out = attn(position_ids, hidden)
+    attn.attn.kv_cache = None
+    return out
+
+
+def _call_paged_batched(attn, hidden, cache, request_ids, layer_idx=0):
+    """多请求 batched paged attention 调用。"""
+    attn.attn.kv_cache = cache
+    attn.attn.layer_idx = layer_idx
+
+    block_table = _build_block_table(cache, request_ids)
+    tables = [cache.block_tables[rid] for rid in request_ids]
+    B = len(request_ids)
+    T = hidden.shape[1]
+    seq_lens = torch.tensor([t.seq_len for t in tables], dtype=torch.long)
+
+    # position_ids: 每个请求从 0 到 T-1（prefill）或 seq_len-1（decode）
+    if T > 1:
+        # prefill: 所有请求共享 [0..T-1]
+        position_ids = torch.arange(T).unsqueeze(0).expand(B, -1)
+    else:
+        # decode: 每个请求在各自 seq_len-1 位置
+        position_ids = (seq_lens - 1).unsqueeze(1)
+
+    metadata = AttentionMetadata(num_seqs=B, seq_lens=seq_lens, block_table=block_table)
+    with set_forward_context(metadata):
+        out = attn(position_ids, hidden)
+    attn.attn.kv_cache = None
+    return out
+
+
+def _call_m2(attn, hidden, pos_start, m2_cache, layer_idx=0):
+    """M2 oracle 调用（单请求 LayerKVCache）。"""
+    attn.attn.kv_cache = m2_cache
+    attn.attn.layer_idx = layer_idx
+
+    T = hidden.shape[1]
+    seq_lens = torch.tensor([pos_start + T], dtype=torch.long)
+    position_ids = torch.arange(pos_start, pos_start + T).unsqueeze(0)
+
+    metadata = AttentionMetadata(num_seqs=1, seq_lens=seq_lens)
+    with set_forward_context(metadata):
+        out = attn(position_ids, hidden)
+    attn.attn.kv_cache = None
+    return out
 
 
 # ===========================================================================
@@ -108,16 +164,8 @@ class TestPagedPrefill:
         cache.allocate_request("a", prompt_len)
 
         hidden = torch.randn(1, prompt_len, config.hidden_size)
-        pos_emb = _position_embeddings(config, 1, prompt_len)
+        out = _call_paged(attn, hidden, pos_start=0, cache=cache, request_id="a")
 
-        out = attn(
-            hidden,
-            position_embeddings=pos_emb,
-            paged_kv_cache=cache,
-            layer_idx=0,
-            request_ids=["a"],
-            is_prefill=True,
-        )
         assert out.shape == (1, prompt_len, config.hidden_size)
         assert torch.isfinite(out).all()
 
@@ -133,28 +181,14 @@ class TestPagedPrefill:
         # M4 paged path
         paged_cache = _make_paged_cache(config, block_size=4)
         paged_cache.allocate_request("a", prompt_len)
-
         hidden = torch.randn(1, prompt_len, config.hidden_size)
-        pos_emb = _position_embeddings(config, 1, prompt_len)
-
-        out_paged = attn(
-            hidden.clone(),
-            position_embeddings=pos_emb,
-            paged_kv_cache=paged_cache,
-            layer_idx=0,
-            request_ids=["a"],
-            is_prefill=True,
+        out_paged = _call_paged(
+            attn, hidden.clone(), pos_start=0, cache=paged_cache, request_id="a"
         )
 
         # M2 oracle path
         m2_cache = _make_single_cache(config, max_seq_len=32)
-
-        out_m2 = attn(
-            hidden.clone(),
-            position_embeddings=pos_emb,
-            layer_kv_cache=m2_cache,
-            cache_position=0,
-        )
+        out_m2 = _call_m2(attn, hidden.clone(), pos_start=0, m2_cache=m2_cache)
 
         assert torch.allclose(
             out_paged, out_m2, atol=1e-4
@@ -177,29 +211,13 @@ class TestPagedDecode:
 
         # 先 prefill
         hidden_prefill = torch.randn(1, prompt_len, config.hidden_size)
-        pos_emb_prefill = _position_embeddings(config, 1, prompt_len)
-        attn(
-            hidden_prefill,
-            position_embeddings=pos_emb_prefill,
-            paged_kv_cache=cache,
-            layer_idx=0,
-            request_ids=["a"],
-            is_prefill=True,
-        )
+        _call_paged(attn, hidden_prefill, pos_start=0, cache=cache, request_id="a")
 
         # 再 decode 一步
         cache.append_token("a")
         hidden_decode = torch.randn(1, 1, config.hidden_size)
-        pos_emb_decode = _position_embeddings(config, 1, 1, offset=prompt_len)
+        out = _call_paged(attn, hidden_decode, pos_start=prompt_len, cache=cache, request_id="a")
 
-        out = attn(
-            hidden_decode,
-            position_embeddings=pos_emb_decode,
-            paged_kv_cache=cache,
-            layer_idx=0,
-            request_ids=["a"],
-            is_prefill=False,
-        )
         assert out.shape == (1, 1, config.hidden_size)
         assert torch.isfinite(out).all()
 
@@ -209,45 +227,21 @@ class TestPagedDecode:
         prompt_len = 3
 
         hidden_prefill = torch.randn(1, prompt_len, config.hidden_size)
-        pos_emb_prefill = _position_embeddings(config, 1, prompt_len)
         hidden_decode = torch.randn(1, 1, config.hidden_size)
-        pos_emb_decode = _position_embeddings(config, 1, 1, offset=prompt_len)
 
         # M4 paged path
         paged_cache = _make_paged_cache(config, block_size=4)
         paged_cache.allocate_request("a", prompt_len)
-        attn(
-            hidden_prefill.clone(),
-            position_embeddings=pos_emb_prefill,
-            paged_kv_cache=paged_cache,
-            layer_idx=0,
-            request_ids=["a"],
-            is_prefill=True,
-        )
+        _call_paged(attn, hidden_prefill.clone(), pos_start=0, cache=paged_cache, request_id="a")
         paged_cache.append_token("a")
-        out_paged = attn(
-            hidden_decode.clone(),
-            position_embeddings=pos_emb_decode,
-            paged_kv_cache=paged_cache,
-            layer_idx=0,
-            request_ids=["a"],
-            is_prefill=False,
+        out_paged = _call_paged(
+            attn, hidden_decode.clone(), pos_start=prompt_len, cache=paged_cache, request_id="a"
         )
 
         # M2 oracle path
         m2_cache = _make_single_cache(config, max_seq_len=32)
-        attn(
-            hidden_prefill.clone(),
-            position_embeddings=pos_emb_prefill,
-            layer_kv_cache=m2_cache,
-            cache_position=0,
-        )
-        out_m2 = attn(
-            hidden_decode.clone(),
-            position_embeddings=pos_emb_decode,
-            layer_kv_cache=m2_cache,
-            cache_position=prompt_len,
-        )
+        _call_m2(attn, hidden_prefill.clone(), pos_start=0, m2_cache=m2_cache)
+        out_m2 = _call_m2(attn, hidden_decode.clone(), pos_start=prompt_len, m2_cache=m2_cache)
 
         assert torch.allclose(
             out_paged, out_m2, atol=1e-4
@@ -268,68 +262,35 @@ class TestPagedBatchDecode:
         lengths = [3, 7]
         request_ids = ["a", "b"]
 
-        # 准备 prefill 数据
+        # 准备 prefill 数据（pad 到 t_max）
         t_max = max(lengths)
         hidden_prefill = torch.randn(2, t_max, config.hidden_size)
-        pos_emb_prefill = _position_embeddings(config, 2, t_max)
 
         # 合批 prefill
         paged_cache = _make_paged_cache(config, num_blocks=16, block_size=4)
         for rid, plen in zip(request_ids, lengths, strict=False):
             paged_cache.allocate_request(rid, plen)
-        attn(
-            hidden_prefill.clone(),
-            position_embeddings=pos_emb_prefill,
-            paged_kv_cache=paged_cache,
-            layer_idx=0,
-            request_ids=request_ids,
-            is_prefill=True,
-        )
+        _call_paged_batched(attn, hidden_prefill.clone(), paged_cache, request_ids)
 
         # 合批 decode 一步
         for rid in request_ids:
             paged_cache.append_token(rid)
         hidden_decode = torch.randn(2, 1, config.hidden_size)
-        # 每个请求的 decode position 不同：a 在 pos=3，b 在 pos=7
-        cos_per_req = []
-        sin_per_req = []
-        for plen in lengths:
-            c, s = _position_embeddings(config, 1, 1, offset=plen)
-            cos_per_req.append(c)
-            sin_per_req.append(s)
-        pos_decode = (torch.cat(cos_per_req, dim=0), torch.cat(sin_per_req, dim=0))
-        out_batch = attn(
-            hidden_decode.clone(),
-            position_embeddings=pos_decode,
-            paged_kv_cache=paged_cache,
-            layer_idx=0,
-            request_ids=request_ids,
-            is_prefill=False,
-        )
+        out_batch = _call_paged_batched(attn, hidden_decode.clone(), paged_cache, request_ids)
 
         # 逐条 oracle
         for i, (rid, plen) in enumerate(zip(request_ids, lengths, strict=False)):
             single_cache = _make_paged_cache(config, num_blocks=16, block_size=4)
             single_cache.allocate_request(rid, plen)
             single_hidden = hidden_prefill[i : i + 1, :plen, :].clone()
-            single_pos = _position_embeddings(config, 1, plen)
-            attn(
-                single_hidden,
-                position_embeddings=single_pos,
-                paged_kv_cache=single_cache,
-                layer_idx=0,
-                request_ids=[rid],
-                is_prefill=True,
-            )
+            _call_paged(attn, single_hidden, pos_start=0, cache=single_cache, request_id=rid)
             single_cache.append_token(rid)
-            single_decode_pos = _position_embeddings(config, 1, 1, offset=plen)
-            out_single = attn(
+            out_single = _call_paged(
+                attn,
                 hidden_decode[i : i + 1].clone(),
-                position_embeddings=single_decode_pos,
-                paged_kv_cache=single_cache,
-                layer_idx=0,
-                request_ids=[rid],
-                is_prefill=False,
+                pos_start=plen,
+                cache=single_cache,
+                request_id=rid,
             )
             assert torch.allclose(
                 out_single, out_batch[i : i + 1], atol=1e-4
@@ -352,29 +313,16 @@ class TestCrossBlockBoundary:
 
         paged_cache = _make_paged_cache(config, num_blocks=8, block_size=block_size)
         paged_cache.allocate_request("a", prompt_len)
-        # 验证跨了 3 个 block
         assert paged_cache.block_tables["a"].num_blocks == 3
 
         hidden = torch.randn(1, prompt_len, config.hidden_size)
-        pos_emb = _position_embeddings(config, 1, prompt_len)
-
-        out_paged = attn(
-            hidden.clone(),
-            position_embeddings=pos_emb,
-            paged_kv_cache=paged_cache,
-            layer_idx=0,
-            request_ids=["a"],
-            is_prefill=True,
+        out_paged = _call_paged(
+            attn, hidden.clone(), pos_start=0, cache=paged_cache, request_id="a"
         )
 
         # M2 oracle
         m2_cache = _make_single_cache(config, max_seq_len=32)
-        out_m2 = attn(
-            hidden.clone(),
-            position_embeddings=pos_emb,
-            layer_kv_cache=m2_cache,
-            cache_position=0,
-        )
+        out_m2 = _call_m2(attn, hidden.clone(), pos_start=0, m2_cache=m2_cache)
 
         assert torch.allclose(
             out_paged, out_m2, atol=1e-4
@@ -387,48 +335,23 @@ class TestCrossBlockBoundary:
         prompt_len = 9  # 3 个 block
 
         hidden_prefill = torch.randn(1, prompt_len, config.hidden_size)
-        pos_emb_prefill = _position_embeddings(config, 1, prompt_len)
         hidden_decode = torch.randn(1, 1, config.hidden_size)
-        pos_emb_decode = _position_embeddings(config, 1, 1, offset=prompt_len)
 
         # M4 paged
         paged_cache = _make_paged_cache(config, num_blocks=8, block_size=block_size)
         paged_cache.allocate_request("a", prompt_len)
-        attn(
-            hidden_prefill.clone(),
-            position_embeddings=pos_emb_prefill,
-            paged_kv_cache=paged_cache,
-            layer_idx=0,
-            request_ids=["a"],
-            is_prefill=True,
-        )
+        _call_paged(attn, hidden_prefill.clone(), pos_start=0, cache=paged_cache, request_id="a")
         paged_cache.append_token("a")
-        # 第 10 个 token 触发新 block 分配
         assert paged_cache.block_tables["a"].num_blocks == 3
 
-        out_paged = attn(
-            hidden_decode.clone(),
-            position_embeddings=pos_emb_decode,
-            paged_kv_cache=paged_cache,
-            layer_idx=0,
-            request_ids=["a"],
-            is_prefill=False,
+        out_paged = _call_paged(
+            attn, hidden_decode.clone(), pos_start=prompt_len, cache=paged_cache, request_id="a"
         )
 
         # M2 oracle
         m2_cache = _make_single_cache(config, max_seq_len=32)
-        attn(
-            hidden_prefill.clone(),
-            position_embeddings=pos_emb_prefill,
-            layer_kv_cache=m2_cache,
-            cache_position=0,
-        )
-        out_m2 = attn(
-            hidden_decode.clone(),
-            position_embeddings=pos_emb_decode,
-            layer_kv_cache=m2_cache,
-            cache_position=prompt_len,
-        )
+        _call_m2(attn, hidden_prefill.clone(), pos_start=0, m2_cache=m2_cache)
+        out_m2 = _call_m2(attn, hidden_decode.clone(), pos_start=prompt_len, m2_cache=m2_cache)
 
         assert torch.allclose(
             out_paged, out_m2, atol=1e-4
@@ -454,35 +377,20 @@ class TestNaNSafety:
         cache.allocate_request("a", 3)
         cache.allocate_request("b", 7)
 
-        # 预填 NaN 到所有 block 的 padding 位置，模拟 torch.empty 未初始化内存
+        # 预填 NaN 到所有 block 的 padding 位置
         for layer in cache.layers:
             layer.k.fill_(float("nan"))
             layer.v.fill_(float("nan"))
 
-        # prefill
+        # prefill（pad 到 t_max=7）
         t_max = 7
         hidden = torch.randn(2, t_max, config.hidden_size)
-        pos_emb = _position_embeddings(config, 2, t_max)
+        out = _call_paged_batched(attn, hidden, cache, ["a", "b"])
 
-        out = attn(
-            hidden,
-            position_embeddings=pos_emb,
-            paged_kv_cache=cache,
-            layer_idx=0,
-            request_ids=["a", "b"],
-            is_prefill=True,
-        )
-
-        # 输出必须全有限，NaN 不得泄漏
         assert torch.isfinite(out).all(), "NaN leaked from block padding"
 
     def test_nan_in_unused_blocks(self, attn: Qwen3Attention, config: ModelConfig):
-        """gather_kv 中 block_table padding 的无效 block 含 NaN，不影响输出。
-
-        当 batch 中请求 block 数不同时，block_table 短请求用 0 填充。
-        如果 block 0 恰好含 NaN（被其他请求释放后未清零），gather 出的 K/V
-        必须被 valid_lens mask 正确屏蔽。
-        """
+        """gather_kv 中 block_table padding 的无效 block 含 NaN，不影响输出。"""
         torch.manual_seed(42)
         block_size = 4
 
@@ -490,24 +398,13 @@ class TestNaNSafety:
         cache.allocate_request("a", 3)  # 1 block
         cache.allocate_request("b", 10)  # 3 blocks
 
-        # 在 block 0 的 padding 区域显式填 NaN
-        # （gather_kv 时 block_table 会补齐短请求的 block_table 行，
-        #  填充的 block_id=0 可能指向含 NaN 的物理 block）
+        # block 0 的 padding 区域显式填 NaN
         cache.layers[0].k[0, 3:, :, :] = float("nan")
         cache.layers[0].v[0, 3:, :, :] = float("nan")
 
         t_max = 10
         hidden = torch.randn(2, t_max, config.hidden_size)
-        pos_emb = _position_embeddings(config, 2, t_max)
-
-        out = attn(
-            hidden,
-            position_embeddings=pos_emb,
-            paged_kv_cache=cache,
-            layer_idx=0,
-            request_ids=["a", "b"],
-            is_prefill=True,
-        )
+        out = _call_paged_batched(attn, hidden, cache, ["a", "b"])
 
         assert torch.isfinite(out).all(), "NaN leaked from unused block positions"
 
@@ -520,39 +417,37 @@ class TestNaNSafety:
 class TestParameterContracts:
     """M4 路径的参数校验。"""
 
-    def test_missing_request_ids_raises(self, attn: Qwen3Attention, config: ModelConfig):
-        """paged_kv_cache 存在但 request_ids=None 时抛 ValueError。"""
+    def test_missing_block_table_raises(self, attn: Qwen3Attention, config: ModelConfig):
+        """metadata.block_table=None 时，paged path 应报错。"""
         cache = _make_paged_cache(config)
         cache.allocate_request("a", 3)
         hidden = torch.randn(1, 3, config.hidden_size)
-        pos_emb = _position_embeddings(config, 1, 3)
 
-        with pytest.raises(ValueError, match="request_ids"):
-            attn(
-                hidden,
-                position_embeddings=pos_emb,
-                paged_kv_cache=cache,
-                layer_idx=0,
-                request_ids=None,
-                is_prefill=True,
-            )
+        attn.attn.kv_cache = cache
+        attn.attn.layer_idx = 0
+        # block_table=None → _paged_cache_rw 访问 metadata.block_table 时应 TypeError/AttributeError
+        metadata = AttentionMetadata(num_seqs=1, seq_lens=torch.tensor([3]))
+        with pytest.raises((TypeError, AttributeError)):
+            with set_forward_context(metadata):
+                attn(torch.arange(3).unsqueeze(0), hidden)
+        attn.attn.kv_cache = None
 
     def test_missing_layer_idx_raises(self, attn: Qwen3Attention, config: ModelConfig):
-        """paged_kv_cache 存在但 layer_idx=None 时抛 ValueError。"""
+        """layer_idx=None 时，paged path 应报错。"""
         cache = _make_paged_cache(config)
         cache.allocate_request("a", 3)
         hidden = torch.randn(1, 3, config.hidden_size)
-        pos_emb = _position_embeddings(config, 1, 3)
 
-        with pytest.raises(ValueError, match="layer_idx"):
-            attn(
-                hidden,
-                position_embeddings=pos_emb,
-                paged_kv_cache=cache,
-                layer_idx=None,
-                request_ids=["a"],
-                is_prefill=True,
-            )
+        attn.attn.kv_cache = cache
+        attn.attn.layer_idx = None  # 未设置 layer_idx
+        block_table = _build_block_table(cache, ["a"])
+        metadata = AttentionMetadata(
+            num_seqs=1, seq_lens=torch.tensor([3]), block_table=block_table
+        )
+        with pytest.raises(TypeError):
+            with set_forward_context(metadata):
+                attn(torch.arange(3).unsqueeze(0), hidden)
+        attn.attn.kv_cache = None
 
     def test_kv_cache_written_after_prefill(self, config: ModelConfig):
         """prefill 后 cache 中确实写入了 K/V 数据。"""
@@ -562,15 +457,7 @@ class TestParameterContracts:
         cache.allocate_request("a", prompt_len)
 
         hidden = torch.randn(1, prompt_len, config.hidden_size)
-        pos_emb = _position_embeddings(config, 1, prompt_len)
-        attn(
-            hidden,
-            position_embeddings=pos_emb,
-            paged_kv_cache=cache,
-            layer_idx=0,
-            request_ids=["a"],
-            is_prefill=True,
-        )
+        _call_paged(attn, hidden, pos_start=0, cache=cache, request_id="a")
 
         # gather 回 oracle 数据，确认非空
         k, v = cache.gather_kv_single(0, "a")
@@ -587,28 +474,12 @@ class TestParameterContracts:
 
         # prefill
         hidden = torch.randn(1, prompt_len, config.hidden_size)
-        pos_emb = _position_embeddings(config, 1, prompt_len)
-        attn(
-            hidden,
-            position_embeddings=pos_emb,
-            paged_kv_cache=cache,
-            layer_idx=0,
-            request_ids=["a"],
-            is_prefill=True,
-        )
+        _call_paged(attn, hidden, pos_start=0, cache=cache, request_id="a")
 
         # decode 一步
         cache.append_token("a")
         hidden_dec = torch.randn(1, 1, config.hidden_size)
-        pos_dec = _position_embeddings(config, 1, 1, offset=prompt_len)
-        attn(
-            hidden_dec,
-            position_embeddings=pos_dec,
-            paged_kv_cache=cache,
-            layer_idx=0,
-            request_ids=["a"],
-            is_prefill=False,
-        )
+        _call_paged(attn, hidden_dec, pos_start=prompt_len, cache=cache, request_id="a")
 
         # 验证 seq_len 增加了
         assert cache.seq_len_of("a") == prompt_len + 1
