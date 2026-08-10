@@ -51,7 +51,11 @@ import torch.nn as nn
 
 from inferlite.cache import KVCache, LayerKVCache, PagedKVCache
 from inferlite.config import ModelConfig
-from inferlite.engine.forward_context import AttentionMetadata, set_forward_context
+from inferlite.engine.forward_context import (
+    AttentionMetadata,
+    has_forward_context,
+    set_forward_context,
+)
 from inferlite.model.attention import Qwen3Attention
 from inferlite.model.layers import RMSNorm, RotaryEmbedding, SwiGLUMLP
 
@@ -125,22 +129,26 @@ class DecoderLayer(nn.Module):
         # 为什么先保存 residual？
         # residual 是“未经本子层变换”的主干信号，最后要和 attention 的增量相加。
         # pre-norm 中，norm 只作用在送进子层的分支上，不修改 residual 主干。
+        # ── Attention 子层 ──
         residual = hidden_states
-        # input_layernorm: [B, T, H] -> [B, T, H]
-        # 这里归一化每个 token 的 hidden_size 维，让 attention 输入尺度更稳定。
         hidden_states = self.input_layernorm(hidden_states)
-        # self_attn 内部会执行：q/k/v projection -> q/k norm -> RoPE -> GQA attention -> o_proj。
-        # M2 路径：RoPE 后写入 cache，从 cache 读取完整历史 K/V。
-        # 输出仍是 [B, T, H]，表示 attention 子层计算出的“增量”。
-        # ── 过渡期：从旧参数绑定 cache 到 Attention 层 ──
-        # A4 后由 adapter.bind_kv_cache() 在初始化时完成，此处可删除。
+        # ── cache 绑定 + ForwardContext ──
+        # 新路径（adapter.bind_kv_cache 已设好 kv_cache，ForwardContext 已设好 metadata）：
+        #   直接复用已有 ForwardContext，不重建 metadata。
+        # 旧路径（cache 通过 layer_kv_cache/paged_kv_cache 参数传入）：
+        #   绑定 cache 到 Attention 层，从参数重建 metadata。
         if layer_kv_cache is not None:
             self.self_attn.attn.kv_cache = layer_kv_cache
         elif paged_kv_cache is not None:
             self.self_attn.attn.kv_cache = paged_kv_cache
             if layer_idx is not None:
                 self.self_attn.attn.layer_idx = layer_idx
-        if hasattr(self.self_attn, "attn") and self.self_attn.attn.kv_cache is not None:
+        # 判断 ForwardContext 是否需要本层设置
+        kv_cache_bound = (
+            hasattr(self.self_attn, "attn") and self.self_attn.attn.kv_cache is not None
+        )
+        if kv_cache_bound and not has_forward_context():
+            # 旧路径：从参数重建 metadata 并设 ForwardContext
             metadata = self._build_metadata(
                 hidden_states,
                 position_ids,
@@ -156,6 +164,7 @@ class DecoderLayer(nn.Module):
             with set_forward_context(metadata):
                 hidden_states = self.self_attn(position_ids, hidden_states)
         else:
+            # 新路径（ForwardContext 已由调用方设好）或 M1 无 cache 路径
             hidden_states = self.self_attn(position_ids, hidden_states)
         # residual add：把 attention 增量加回主干。
         hidden_states = residual + hidden_states

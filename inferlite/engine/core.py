@@ -109,21 +109,56 @@ def generate(
                 break
         return input_ids
 
-    # M2 路径：prefill/decode 两阶段，直接传 kv_cache 参数（保持数值等价性）。
-    # ForwardContext + adapter 路径用于 loop.py 的新引擎；core.py generate() 保持旧路径。
-    kv_cache.reset()
-    T_p = input_ids.shape[1]
-    position_ids = torch.arange(T_p, device=input_ids.device).unsqueeze(0)
-    logits = engine.model(input_ids, position_ids=position_ids, kv_cache=kv_cache)
-    kv_cache.cur_len = T_p
-    next_token = engine.sampler(logits[:, -1, :])
-    input_ids = torch.cat([input_ids, next_token], dim=1)
-    for _ in range(max_new_tokens - 1):
-        if eos_token_id is not None and (next_token == eos_token_id).all():
-            break
-        pos = torch.tensor([[kv_cache.cur_len]], device=input_ids.device)
-        logits = engine.model(next_token, position_ids=pos, kv_cache=kv_cache)
-        kv_cache.cur_len += 1
+    # M2 路径：prefill/decode 两阶段。
+    # 判断 model 是否支持 ForwardContext（真实模型有 .model.layers）
+    real_model = getattr(engine.model, "model", None)
+    has_layers = real_model is not None and hasattr(real_model, "layers")
+
+    if has_layers:
+        # 新路径：SingleCacheAdapter + ForwardContext
+        from inferlite.cache.adapter import SingleCacheAdapter
+        from inferlite.engine.forward_context import set_forward_context
+
+        adapter = SingleCacheAdapter(kv_cache)
+        adapter.bind_kv_cache(engine.model)
+        kv_cache.reset()  # 确保 cache 干净
+
+        # Prefill
+        T_p = input_ids.shape[1]
+        position_ids = torch.arange(T_p, device=input_ids.device).unsqueeze(0)
+        metadata = adapter.make_prefill_metadata(input_ids, position_ids)
+        with set_forward_context(metadata):
+            logits = engine.model(input_ids, positions=position_ids)
+        adapter.cur_len = T_p
+        kv_cache.cur_len = T_p
         next_token = engine.sampler(logits[:, -1, :])
         input_ids = torch.cat([input_ids, next_token], dim=1)
+
+        # Decode
+        for _ in range(max_new_tokens - 1):
+            if eos_token_id is not None and (next_token == eos_token_id).all():
+                break
+            pos = torch.tensor([[kv_cache.cur_len]], device=input_ids.device)
+            metadata = adapter.make_decode_metadata(next_token, pos)
+            with set_forward_context(metadata):
+                logits = engine.model(next_token, positions=pos, logits_to_keep=1)
+            next_token = engine.sampler(logits[:, -1, :])
+            input_ids = torch.cat([input_ids, next_token], dim=1)
+    else:
+        # 旧路径：直接传 kv_cache 参数（兼容 FakeModel）
+        kv_cache.reset()
+        T_p = input_ids.shape[1]
+        position_ids = torch.arange(T_p, device=input_ids.device).unsqueeze(0)
+        logits = engine.model(input_ids, position_ids=position_ids, kv_cache=kv_cache)
+        kv_cache.cur_len = T_p
+        next_token = engine.sampler(logits[:, -1, :])
+        input_ids = torch.cat([input_ids, next_token], dim=1)
+        for _ in range(max_new_tokens - 1):
+            if eos_token_id is not None and (next_token == eos_token_id).all():
+                break
+            pos = torch.tensor([[kv_cache.cur_len]], device=input_ids.device)
+            logits = engine.model(next_token, position_ids=pos, kv_cache=kv_cache)
+            kv_cache.cur_len += 1
+            next_token = engine.sampler(logits[:, -1, :])
+            input_ids = torch.cat([input_ids, next_token], dim=1)
     return input_ids

@@ -33,6 +33,11 @@ def get_forward_context() -> ForwardContext:
     return _forward_context
 
 
+def has_forward_context() -> bool:
+    """检查 ForwardContext 是否已设置（用于 DecoderLayer 判断新旧路径）。"""
+    return _forward_context is not None
+
+
 @contextmanager
 def set_forward_context(attn_metadata: AttentionMetadata):
     global _forward_context
