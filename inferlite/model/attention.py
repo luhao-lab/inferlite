@@ -53,7 +53,7 @@ import torch.nn as nn
 from inferlite.cache import BatchedLayerKVCache, PagedKVCache
 from inferlite.cache.kv_cache import LayerKVCache
 from inferlite.config import ModelConfig
-from inferlite.engine.forward_context import get_forward_context
+from inferlite.engine.context import get_forward_context
 from inferlite.model.layers import RMSNorm, RotaryEmbedding, apply_rotary_pos_emb
 
 

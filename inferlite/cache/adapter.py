@@ -26,7 +26,7 @@ import torch
 from inferlite.cache.batched_kv_cache import BatchedKVCache
 from inferlite.cache.kv_cache import KVCache
 from inferlite.cache.paged_kv_cache import PagedKVCache
-from inferlite.engine.forward_context import AttentionMetadata
+from inferlite.engine.context import AttentionMetadata
 
 
 # ── 1. CacheAdapter Protocol ──

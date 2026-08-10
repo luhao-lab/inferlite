@@ -22,7 +22,7 @@ from inferlite.cache.kv_cache import KVCache
 from inferlite.cache.paged_kv_cache import PagedKVCache
 from inferlite.config import ModelConfig
 from inferlite.engine.core import EngineCore, generate
-from inferlite.engine.paged_core import batch_generate_paged
+from inferlite.engine.engines import batch_generate_paged
 from inferlite.model.qwen3 import Qwen3ForCausalLM
 from inferlite.sampler.greedy import GreedySampler
 

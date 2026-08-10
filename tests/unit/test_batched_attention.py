@@ -16,7 +16,7 @@ import torch
 from inferlite.cache.batched_kv_cache import BatchedLayerKVCache
 from inferlite.cache.kv_cache import LayerKVCache
 from inferlite.config import ModelConfig
-from inferlite.engine.forward_context import AttentionMetadata, set_forward_context
+from inferlite.engine.context import AttentionMetadata, set_forward_context
 from inferlite.model.attention import Qwen3Attention
 from inferlite.model.qwen3 import Qwen3Model
 
@@ -439,7 +439,7 @@ class TestBatchedAttentionModel:
     def test_model_batched_decode_shape(self):
         """L0-1: model batched decode 输出 shape [B, 1, hidden_size]（ForwardContext 路径）。"""
         from inferlite.cache.batched_kv_cache import BatchedKVCache
-        from inferlite.engine.forward_context import AttentionMetadata, set_forward_context
+        from inferlite.engine.context import AttentionMetadata, set_forward_context
 
         config = _tiny_config(num_hidden_layers=2)
         model = Qwen3Model(config)
@@ -469,7 +469,7 @@ class TestBatchedAttentionModel:
     def test_model_m2_not_broken(self):
         """M2 generate 路径不受影响（ForwardContext + SingleCacheAdapter）。"""
         from inferlite.cache.kv_cache import KVCache
-        from inferlite.engine.forward_context import set_forward_context
+        from inferlite.engine.context import set_forward_context
 
         config = _tiny_config(num_hidden_layers=2)
         model = Qwen3Model(config)

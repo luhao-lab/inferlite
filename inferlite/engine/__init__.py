@@ -7,11 +7,11 @@
 而不是依赖内部文件路径：
 
     from inferlite.engine.core import EngineCore, generate
-    from inferlite.engine.protocol import LLMModel
+    from inferlite.engine.context import LLMModel
 """
 
+from inferlite.engine.context import LLMModel
 from inferlite.engine.core import EngineCore, generate
 from inferlite.engine.metrics import MetricsCollector
-from inferlite.engine.protocol import LLMModel
 
 __all__ = ["EngineCore", "LLMModel", "generate", "MetricsCollector"]

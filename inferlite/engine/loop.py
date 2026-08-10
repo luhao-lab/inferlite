@@ -25,7 +25,7 @@ import time
 
 import torch
 
-from inferlite.engine.forward_context import set_forward_context
+from inferlite.engine.context import set_forward_context
 from inferlite.scheduler.request import RequestStatus
 
 

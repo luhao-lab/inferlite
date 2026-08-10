@@ -32,7 +32,7 @@ T7-A4 改造：
 import torch
 
 from inferlite.cache.kv_cache import KVCache
-from inferlite.engine.protocol import LLMModel
+from inferlite.engine.context import LLMModel
 from inferlite.sampler.greedy import GreedySampler
 
 
@@ -117,7 +117,7 @@ def generate(
     if has_layers:
         # 新路径：SingleCacheAdapter + ForwardContext
         from inferlite.cache.adapter import SingleCacheAdapter
-        from inferlite.engine.forward_context import set_forward_context
+        from inferlite.engine.context import set_forward_context
 
         adapter = SingleCacheAdapter(kv_cache)
         adapter.bind_kv_cache(engine.model)

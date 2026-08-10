@@ -10,7 +10,7 @@ T9 只做 tensor 级别的 next-token 基础组件：
 
 import torch
 
-from inferlite.engine.protocol import LLMModel
+from inferlite.engine.context import LLMModel
 from inferlite.sampler import GreedySampler
 
 

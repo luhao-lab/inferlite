@@ -17,7 +17,7 @@ import torch
 from inferlite.cache.kv_cache import LayerKVCache
 from inferlite.cache.paged_kv_cache import PagedKVCache
 from inferlite.config import ModelConfig
-from inferlite.engine.forward_context import AttentionMetadata, set_forward_context
+from inferlite.engine.context import AttentionMetadata, set_forward_context
 from inferlite.model.attention import Qwen3Attention
 
 # ---------------------------------------------------------------------------
