@@ -13,7 +13,7 @@
 | 后续 | M4-T4 — PagedAttention |
 | 估时 | 3h |
 | 核心文件 | `inferlite/cache/paged_kv_cache.py`（与 T2 同文件） |
-| 深入文档 | [`docs/knowledge/m4-paged-kv-cache.md`](../../knowledge/m4-paged-kv-cache.md) |
+| 深入文档 | [`docs/knowledge/m4-paged-attention.md`](../../knowledge/m4-paged-attention.md) |
 
 ## 目标
 
@@ -597,7 +597,7 @@ uv run pytest tests/unit/test_paged_kv_cache.py -q
 
 ## 完成总结
 
-M4-T3 已完成真实 K/V tensor 的分页容器。更完整的实现原理、slot mapping / scatter / gather 数据流和 vLLM 对照见 [`docs/knowledge/m4-paged-kv-cache.md`](../../knowledge/m4-paged-kv-cache.md)。T1 `BlockPool` 管全局 block 的所有权与回收，T2 `BlockTable` 管每请求逻辑位置到物理 block 的顺序映射；本任务首次将 `block_id` 用作物理 tensor 的第 0 维下标，完成从编号到真实 K/V 存储的连接。
+M4-T3 已完成真实 K/V tensor 的分页容器。更完整的实现原理、slot mapping / scatter / gather 数据流和 vLLM 对照见 [`docs/knowledge/m4-paged-attention.md`](../../knowledge/m4-paged-attention.md)。T1 `BlockPool` 管全局 block 的所有权与回收，T2 `BlockTable` 管每请求逻辑位置到物理 block 的顺序映射；本任务首次将 `block_id` 用作物理 tensor 的第 0 维下标，完成从编号到真实 K/V 存储的连接。
 
 ### 主要实现
 

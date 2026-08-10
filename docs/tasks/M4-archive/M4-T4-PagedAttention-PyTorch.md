@@ -14,7 +14,7 @@
 | 估时 | 3～4h |
 | 核心文件 | `inferlite/model/attention.py` |
 | 测试文件 | `tests/unit/test_paged_attention.py` |
-| 参考文档 | `docs/knowledge/m4-paged-kv-cache.md`、`docs/knowledge/lessons.md` L5 |
+| 参考文档 | `docs/knowledge/m4-paged-attention.md`、`docs/knowledge/lessons.md` L5 |
 
 ## 范围冻结
 

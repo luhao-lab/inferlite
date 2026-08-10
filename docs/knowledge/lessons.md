@@ -256,7 +256,7 @@ v = v.masked_fill(invalid, 0)
 - `inferlite/model/attention.py::_batched_cache_rw`
 - `tests/unit/test_batched_attention.py::test_nan_padding_does_not_contaminate_short_request`
 - `docs/knowledge/m3-continuous-batching.md`
-- `docs/knowledge/m4-paged-kv-cache.md`
+- `docs/knowledge/m4-paged-attention.md`
 
 ---
 
