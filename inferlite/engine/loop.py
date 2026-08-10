@@ -18,8 +18,7 @@
   vLLM input_batch                   → _build_prefill_batch / _build_decode_batch
   vLLM set_forward_context()         → set_forward_context()（同名）
 
-注意：当前 model forward 签名还是旧版 (kv_cache=, cache_slots=...)，
-Part B 改完后 model(input_ids, positions) 才会生效。
+T7-A10 后：M3/M4 均使用 batched prefill（padded → 一次 forward）。
 """
 
 import time
