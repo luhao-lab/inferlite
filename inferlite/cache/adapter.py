@@ -206,15 +206,18 @@ class BatchedCacheAdapter:
 
     def make_prefill_metadata(self, input_ids, positions):
         # prefill：单请求，seq_len = prompt 长度
+        # slot_mapping: 当前 prefill 请求的 slot_id（由 allocate 时记录）
         T = input_ids.shape[1]
+        slot = self.cache.slot_manager.req_to_slot[self._current_request_ids[-1]]
         return AttentionMetadata(
             num_seqs=1,
             seq_lens=torch.tensor([T]),
+            slot_mapping=torch.tensor([slot]),
         )
 
     def make_decode_metadata(self, next_tokens, positions):
         # decode：B 个请求并行
-        # 从 SlotManager 查 request_id → slot_id，再从 cache.seq_lens 取各 slot 的当前长度
+        # slot_mapping: 每个请求的 slot_id
         B = next_tokens.shape[0]
         slots = torch.tensor(
             [self.cache.slot_manager.req_to_slot[rid] for rid in self._current_request_ids]
@@ -223,6 +226,7 @@ class BatchedCacheAdapter:
         return AttentionMetadata(
             num_seqs=B,
             seq_lens=seq_lens,
+            slot_mapping=slots,
         )
 
 
@@ -275,11 +279,12 @@ class PagedCacheAdapter:
         if request_id in self._current_request_ids:
             self._current_request_ids.remove(request_id)
 
-    def make_prefill_metadata(self, input_ids, positions):
+    def make_prefill_metadata(self, input_ids, positions, request_ids=None):
         # batched prefill：多个请求 pad 到最长 prompt 长度
         B = input_ids.shape[0]
-        # 取前 B 个 request_id（新 admit 的请求排在列表前面）
-        request_ids = self._current_request_ids[:B]
+        # 优先使用显式传入的 request_ids，否则用 _current_request_ids 最后 B 个
+        if request_ids is None:
+            request_ids = self._current_request_ids[-B:]
         # 从 BlockTable 获取每个请求的实际 prompt 长度
         prompt_lens = [self.cache.block_tables[rid].seq_len for rid in request_ids]
         seq_lens = torch.tensor(prompt_lens, dtype=torch.long)

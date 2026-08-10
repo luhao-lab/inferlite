@@ -7,6 +7,10 @@
   - M2 `generate()`：单请求，prefill + decode 两阶段
   - M3 `batch_generate()`：多请求，continuous batching
 
+T7-A6 改造：
+  - 真实模型使用 BatchedCacheAdapter + ForwardContext
+  - FakeModel 走旧参数路径兼容
+
 调用示例：
     outputs = batch_generate(
         model, sampler,
@@ -23,7 +27,9 @@ import time
 import torch
 
 from inferlite.cache import BatchedKVCache
+from inferlite.cache.adapter import BatchedCacheAdapter
 from inferlite.config import ModelConfig
+from inferlite.engine.forward_context import set_forward_context
 from inferlite.engine.metrics import MetricsCollector
 from inferlite.engine.protocol import LLMModel
 from inferlite.sampler.greedy import GreedySampler
@@ -63,8 +69,7 @@ def batch_generate(
         每个请求的生成结果列表（按 request_id 排序），
         每个元素为 prompt + generated token ids，shape [1, T_i + n_i]。
     """
-    # ── 初始化 scheduler：所有请求先进 waiting 队列 ──
-    # waiting 请求不占 KV slot，只有 admit 到 running 后才分配 slot。
+    # ── 初始化 scheduler ──
     scheduler = FCFSScheduler(max_num_seqs=max_num_slots)
     for i, prompt_ids in enumerate(prompts):
         req = RequestState(
@@ -78,7 +83,7 @@ def batch_generate(
             metrics.record_arrival(req.request_id)
             metrics.record_prompt_tokens(req.request_id, prompt_ids.shape[1])
 
-    # ── 创建 BatchedKVCache：固定 S 个 slot，每个 slot 存 max_seq_len 个 token ──
+    # ── 创建 BatchedKVCache + Adapter ──
     cache = BatchedKVCache.from_config(
         config=config,
         max_num_slots=max_num_slots,
@@ -86,14 +91,16 @@ def batch_generate(
         dtype=dtype,
         device=device,
     )
+    # 判断 model 是否支持 ForwardContext（真实模型有 .model.layers）
+    real_model = getattr(model, "model", None)
+    use_adapter = real_model is not None and hasattr(real_model, "layers")
+    adapter = BatchedCacheAdapter(cache) if use_adapter else None
+    if adapter:
+        adapter.bind_kv_cache(model)
 
-    # ── 主循环：iteration-level scheduling ──
-    # 每轮迭代：admit 新请求 → prefill → batched decode → 更新状态
-    # finished 请求在 step 3 释放 slot，下一轮 admit 时新请求自动进入。
+    # ── 主循环 ──
     while scheduler.has_unfinished():
         # ── 1. admit + prefill ──
-        # admit_until_full() 只返回本轮新 admit 的请求（之前已在 running 的不会重复返回）。
-        # 逐条 prefill：每个请求独立跑一次 full forward，KV 写入对应的 slot。
         admitted = scheduler.admit_until_full()
         for request in admitted:
             if metrics:
@@ -101,79 +108,88 @@ def batch_generate(
 
             slot = cache.allocate_slot(request.request_id)
             request.slot_id = slot
+            if adapter:
+                adapter._current_request_ids.append(request.request_id)
 
             prompt_len = request.prompt_ids.shape[1]
-            position_ids = torch.arange(prompt_len, device=device).unsqueeze(0)  # [1, T_p]
+            position_ids = torch.arange(prompt_len, device=device).unsqueeze(0)
 
             if metrics:
                 metrics.record_prefill_start(request.request_id)
-            # prefill：整条 prompt 一次前向，KV 写入 cache slot
-            # cache_slots=[slot]：告诉 attention 层写入哪个 slot（B=1）
-            logits = model(
-                request.prompt_ids,
-                position_ids=position_ids,
-                kv_cache=cache,
-                cache_slots=torch.tensor([slot]),
-            )
 
-            # prefill 后采样第一个 token（作为 decode 第一步的输入）
+            # prefill forward
+            if adapter:
+                metadata = adapter.make_prefill_metadata(request.prompt_ids, position_ids)
+                with set_forward_context(metadata):
+                    logits = model(request.prompt_ids, positions=position_ids)
+            else:
+                logits = model(
+                    request.prompt_ids,
+                    position_ids=position_ids,
+                    kv_cache=cache,
+                    cache_slots=torch.tensor([slot]),
+                )
+
             request.seq_len = prompt_len
-            request.last_token = sampler(logits[:, -1, :])  # [1, 1]
+            request.last_token = sampler(logits[:, -1, :])
             request.generated_tokens.append(request.last_token)
             request.num_generated = 1
             cache.seq_lens[slot] = prompt_len
             if metrics:
                 metrics.record_prefill_end(request.request_id)
-            if metrics:
-                metrics.record_first_token(request.request_id)  # 只记一次
+                metrics.record_first_token(request.request_id)
 
-        # ── 2. batched decode one step ──
-        # 把所有 running 请求组成一个 batch，并行执行一步 decode。
-        # 每个请求的 cache_position 独立（= 该请求的 seq_len），
-        # attention 层通过 cache_slots + cache_positions 分别读写各自的 KV。
+        # ── 2. batched decode ──
         if not scheduler.running:
             break
         running = list(scheduler.running.values())
         cache_slots = torch.tensor([req.slot_id for req in running])
-        # cache_positions，每个请求当前的写入位置（= seq_len）
-        cache_positions = cache.seq_lens[cache_slots]  # [B]
-        position_ids = cache_positions.unsqueeze(1)  # [B, 1]
-        # next_tokens: [B, 1]，拼接每个请求上一步的 last_token
+        cache_positions = cache.seq_lens[cache_slots]  # 当前写入位置
+        position_ids = cache_positions.unsqueeze(1)
         next_tokens = torch.cat(
             [req.last_token for req in running if req.last_token is not None], dim=0
         )
+        # 关键：adapter 路径需要在 make_decode_metadata 前将 cache.seq_lens 设为
+        # 「写入后长度」= cache_positions + 1，与 _build_metadata 中 cache_positions + 1 一致
+        if adapter:
+            for req in running:
+                cache.seq_lens[req.slot_id] += 1
+
         decode_start = time.perf_counter()
-        logits = model(
-            next_tokens,
-            position_ids=position_ids,
-            kv_cache=cache,
-            cache_slots=cache_slots,
-            cache_positions=cache_positions,
-        )
+        if adapter:
+            metadata = adapter.make_decode_metadata(next_tokens, position_ids)
+            with set_forward_context(metadata):
+                logits = model(next_tokens, positions=position_ids)
+        else:
+            logits = model(
+                next_tokens,
+                position_ids=position_ids,
+                kv_cache=cache,
+                cache_slots=cache_slots,
+                cache_positions=cache_positions,
+            )
         decode_ms = (time.perf_counter() - decode_start) * 1000
-        # ── 3. sample + update state + finish ──
+
+        # ── 3. sample + update + finish ──
         sampled = sampler(logits[:, -1, :])
         for request, next_token in zip(running, sampled, strict=False):
-            # next_token: [1]（1D），unsqueeze 为 [1, 1] 保持与 prefill 阶段一致
             request.last_token = next_token.unsqueeze(0)
             request.generated_tokens.append(next_token.unsqueeze(0))
             request.num_generated += 1
             request.seq_len += 1
             cache.seq_lens[request.slot_id] = request.seq_len
 
-            # 完成条件：max_new_tokens 到达 或 EOS
             is_max = request.num_generated >= request.max_new_tokens
             is_eos = eos_token_id is not None and next_token.item() == eos_token_id
             if is_max or is_eos:
                 scheduler.mark_finished(request)
-                # 释放 slot：下一轮循环 admit_until_full 就能看到空闲 slot
                 cache.free_slot(request.request_id)
-
+                if adapter:
+                    adapter._current_request_ids.remove(request.request_id)
                 if metrics:
                     metrics.record_output_tokens(request.request_id, request.num_generated)
-                if metrics:
                     metrics.record_finished(request.request_id)
-        # 记录本 step 指标
+
         if metrics:
             step_idx = len(metrics.step_metrics)
             max_seq_len_step = int(cache_positions.max().item()) + 1
@@ -188,7 +204,7 @@ def batch_generate(
                 occupied_slots=len(scheduler.running),
             )
 
-    # ── 收集结果（按 request_id 排序，保证与输入 prompts 顺序一致）──
+    # ── 收集结果 ──
     results = []
     for req_id in sorted(scheduler.finished.keys(), key=int):
         req = scheduler.finished[req_id]
