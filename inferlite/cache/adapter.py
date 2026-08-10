@@ -1,8 +1,8 @@
-"""CacheAdapter：统一 M1/M2/M3/M4 四种 cache 策略的适配层。
+"""CacheAdapter：统一 M2/M3/M4 三种 cache 策略的适配层。
 
 对齐 vLLM V1 的 KVCacheManager 模式，但更简化：
 - vLLM V1 只有一条路径（paged），cache 管理在 scheduler 层
-- inferlite 有 4 条路径（无 cache / 单序列 / batched slot / paged block），
+- inferlite 有 3 条路径（单序列 / batched slot / paged block），
   通过 CacheAdapter Protocol 统一接口，让 engine loop 不关心具体 cache 实现
 
 设计要点：
@@ -13,7 +13,6 @@
 
 文件结构：
   CacheAdapter (Protocol)  → 公共接口
-  NoCacheAdapter           → M1: 无 cache，每步 full forward
   SingleCacheAdapter       → M2: 单序列 KVCache，prefill + decode
   BatchedCacheAdapter      → M3: BatchedKVCache，fixed-slot continuous batching
   PagedCacheAdapter        → M4: PagedKVCache，paged block continuous batching
@@ -61,52 +60,7 @@ class CacheAdapter(Protocol):
     def bind_kv_cache(self, model) -> None: ...
 
 
-# ── 2. NoCacheAdapter (M1) ──
-# M1 模式：无 KV cache，每步都做 full forward（input_ids 包含全部历史 token）。
-# 最简单的路径，所有 cache 操作为空，metadata 只含 num_seqs 和 seq_lens。
-class NoCacheAdapter:
-    """M1 无 cache adapter。
-
-    对应 core.py generate() 的 M1 路径：
-    - 每步 full forward，不需要 cache 读写
-    - position_ids 从 0 到 T-1 连续编号，每步重跑全量
-
-    bind_kv_cache(None) → 每层 Attention.kv_cache = None
-    metadata 只含 num_seqs 和 seq_lens，slot_mapping/block_table 都是 None
-    """
-
-    def can_admit(self, prompt_len: int) -> bool:
-        return True  # M1 无容量限制
-
-    def bind_kv_cache(self, model) -> None:
-        # 遍历 28 层 DecoderLayer，把每层的 kv_cache 设为 None
-        # → Attention.forward 检测 kv_cache is None → 走 M1 无 cache 路径
-        for layer in model.model.layers:
-            layer.self_attn.attn.kv_cache = None
-            layer.self_attn.attn.layer_idx = None
-
-    def prepare_decode(self, request_ids: list[str]) -> None:
-        pass  # M1 无 cache，不需要分配空间
-
-    def make_prefill_metadata(self, input_ids, positions):
-        # M1 的 prefill 和 decode 相同：都是 full forward
-        # seq_lens 全部等于 input_ids 的序列长度（因为没 padding）
-        num_seqs = input_ids.shape[0]
-        seq_lens = torch.full((num_seqs,), input_ids.shape[1], dtype=torch.long)
-        return AttentionMetadata(num_seqs=num_seqs, seq_lens=seq_lens)
-
-    def make_decode_metadata(self, next_tokens, positions):
-        # M1 decode = 又跑一次 full forward（input_ids 已经包含了历史）
-        return self.make_prefill_metadata(next_tokens, positions)
-
-    def allocate(self, request_id, prompt_len):
-        pass  # M1 不需要分配 cache
-
-    def free(self, request_id):
-        pass  # M1 不需要释放 cache
-
-
-# ── 3. SingleCacheAdapter (M2) ──
+# ── 2. SingleCacheAdapter (M2) ──
 # M2 模式：单序列 KVCache，prefill 一次写入全部 prompt 的 KV，
 # decode 每步追加 1 个 token 的 KV，历史 KV 从 cache 读取（不重新计算）。
 class SingleCacheAdapter:
