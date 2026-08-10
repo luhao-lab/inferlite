@@ -14,6 +14,7 @@ dependencies = [
     "fastapi>=0.110,<1",
     "uvicorn>=0.30,<1",
     "modelscope>=1.18,<2",  # CN-friendly model hub; preflight uses it by default
+    "xxhash>=3.8.1",
 ]
 
 [project.scripts]
