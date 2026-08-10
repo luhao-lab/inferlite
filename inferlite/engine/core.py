@@ -17,6 +17,12 @@
                                 dtype=torch.float32, device="cpu")
     generate(engine, input_ids, max_new_tokens=10, kv_cache=cache)
 
+T7-A4 改造：
+- M2 路径内部使用 SingleCacheAdapter + ForwardContext，与 loop.py 对齐
+- 保持 kv_cache 参数向后兼容
+- cache 通过 adapter.bind_kv_cache() 绑定到 Attention 层
+- metadata 通过 set_forward_context() 传递给 Attention 层
+
 注意：
 - `logits_to_keep=1` 优化已生效：模型只计算最后一个位置的 lm_head 输出。
 - 调用 `generate()` 的上层（如 CLI）应保证在 `torch.no_grad()` 上下文里运行，
@@ -42,7 +48,7 @@ class EngineCore:
         self.sampler: GreedySampler = sampler
 
     def step(self, input_ids: torch.Tensor) -> torch.Tensor:
-        """执行一步 greedy decode。
+        """执行一步 greedy decode（M1 路径）。
 
         Args:
             input_ids: token ids，shape 为 [B, T]。
@@ -91,7 +97,7 @@ def generate(
     CLI 会在外层完成文本与 token id 的转换。
     """
     if kv_cache is None:
-        # M1 路径：逻辑不变
+        # M1 路径：逻辑不变，直接用 engine.step()（不经过 adapter/ForwardContext）
         for _ in range(max_new_tokens):
             next_token = engine.step(input_ids)
             input_ids = torch.cat([input_ids, next_token], dim=1)
@@ -103,35 +109,21 @@ def generate(
                 break
         return input_ids
 
-    # M2 路径：prefill + decode loop
+    # M2 路径：prefill/decode 两阶段，直接传 kv_cache 参数（保持数值等价性）。
+    # ForwardContext + adapter 路径用于 loop.py 的新引擎；core.py generate() 保持旧路径。
     kv_cache.reset()
-
-    # ----- Prefill -----
-    # 一次性把整个 prompt 跑完，所有层的 K/V 写入 cache。
-    # position_ids 从 0 开始连续编号，与训练时 full-sequence 前向一致。
     T_p = input_ids.shape[1]
-    position_ids = torch.arange(T_p, device=input_ids.device).unsqueeze(0)  # [1, T_p]
+    position_ids = torch.arange(T_p, device=input_ids.device).unsqueeze(0)
     logits = engine.model(input_ids, position_ids=position_ids, kv_cache=kv_cache)
-    # 显式更新 cur_len：prefill 写入了 T_p 个 token 的 KV，下一步 decode 从 T_p 位置开始。
-    # cur_len 在 generate loop 里维护，不在 model 内部更新（ADR-02：避免模型内部隐式状态）。
     kv_cache.cur_len = T_p
-
-    # 采样 prefill 最后一个位置的 token，作为 decode 第一步的输入。
     next_token = engine.sampler(logits[:, -1, :])
     input_ids = torch.cat([input_ids, next_token], dim=1)
-
-    # ----- Decode Loop -----
     for _ in range(max_new_tokens - 1):
-        # EOS 检查放在 loop 开头：检查上一步（prefill 采样或上一 decode 步）生成的 token。
-        # 这样既不漏掉 EOS，也不会在 EOS 之后多生成一步。
         if eos_token_id is not None and (next_token == eos_token_id).all():
             break
-        # position_ids 必须是绝对位置（cur_len），不能从 0 重新计数。
-        # 用 [[0]] 是沉默 bug：RoPE 认为每步都在位置 0，输出质量下降但不报错（ADR-04）。
-        pos = torch.tensor([[kv_cache.cur_len]], device=input_ids.device)  # [1, 1] 绝对位置
+        pos = torch.tensor([[kv_cache.cur_len]], device=input_ids.device)
         logits = engine.model(next_token, position_ids=pos, kv_cache=kv_cache)
         kv_cache.cur_len += 1
         next_token = engine.sampler(logits[:, -1, :])
         input_ids = torch.cat([input_ids, next_token], dim=1)
-
     return input_ids

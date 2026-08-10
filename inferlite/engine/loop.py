@@ -150,8 +150,7 @@ def batch_generate_loop(
             metadata = adapter.make_prefill_metadata(input_ids, positions)
             # set_forward_context: 把 metadata 设到全局上下文，Attention 层通过 get_forward_context() 读取
             with set_forward_context(metadata):
-                hidden_states = model(input_ids, positions=positions)
-            logits = model.compute_logits(hidden_states)
+                logits = model(input_ids, positions=positions)
             # 逐请求采样：变长 prefill 时取 logits[i, plen-1]（最后一个真实 token 的 logits）
             for i, req in enumerate(admitted):
                 plen = req.prompt_ids.shape[1]
@@ -175,8 +174,7 @@ def batch_generate_loop(
 
         # 3c. model forward（metadata 通过 ForwardContext 传给 Attention 层）
         with set_forward_context(metadata):
-            hidden_states = model(next_tokens, positions=positions)
-        logits = model.compute_logits(hidden_states)
+            logits = model(next_tokens, positions=positions)
 
         # 3d. 采样 + 更新状态 + 完成检查
         sampled = sampler(logits[:, -1, :])

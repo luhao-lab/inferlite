@@ -426,6 +426,8 @@ class Qwen3ForCausalLM(nn.Module):
         self,
         input_ids: torch.Tensor,
         position_ids: torch.Tensor | None = None,
+        *,
+        positions: torch.Tensor | None = None,
         logits_to_keep: int | None = None,
         kv_cache: KVCache | None = None,
         cache_slots: torch.Tensor | None = None,
@@ -439,6 +441,8 @@ class Qwen3ForCausalLM(nn.Module):
         Args:
             input_ids: [B, T]。M2 decode 步只传 1 个 token。
             position_ids: [B, T]，可选。M2 decode 步需传入绝对位置。
+            positions: position_ids 的别名（对齐 vLLM V1 + loop.py 新接口）。
+                如果同时传了 position_ids 和 positions，优先使用 positions。
             logits_to_keep: 只保留最后 N 个位置的 logits，减少 lm_head 计算量。
                 decode 步传 1 可节省 vocab-size 级忾小计算。
             kv_cache: 全模型 KVCache。None 时走 M1 路径。
@@ -446,6 +450,10 @@ class Qwen3ForCausalLM(nn.Module):
         Returns:
             logits: [B, T, vocab_size]
         """
+        # positions 是 position_ids 的别名（对齐 vLLM V1 命名）
+        if positions is not None:
+            position_ids = positions
+
         # Step 1: 先走 backbone，得到每个 token 的上下文表示。
         # 这里用关键字传 position_ids，避免未来 Qwen3Model.forward 参数顺序变化造成误传。
         hidden_states = self.model(
@@ -465,3 +473,12 @@ class Qwen3ForCausalLM(nn.Module):
         # lm_head 不混合 token 之间的信息；token 间信息已经在前面的 decoder layers 里完成。
         logits = self.lm_head(hidden_states)
         return logits
+
+    def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """从 hidden states 计算 logits（对齐 vLLM V1 的 logits 与 forward 分离模式）。
+
+        当前 forward 直接返回 logits，此方法供 loop.py 等使用 ForwardContext 的
+        调用方单独做 lm_head 投影。A5 阶段 forward 改为返回 hidden_states 后，
+        compute_logits 将成为唯一的 logits 计算入口。
+        """
+        return self.lm_head(hidden_states)
