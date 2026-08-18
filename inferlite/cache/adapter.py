@@ -118,6 +118,13 @@ class SingleCacheAdapter:
     def set_seq_lens(self, requests) -> None:
         pass  # M2: cur_len 由 make_decode_metadata 管理
 
+    # 在 SingleCacheAdapter 和 BatchedCacheAdapter 中加：
+    def can_admit_with_cache(self, prompt_ids):
+        return 0  # 不支持 prefix cache
+
+    def allocate_with_cache(self, request_id, prompt_ids, num_cached):
+        raise NotImplementedError  # 不会被调到（因为 can_admit_with_cache 返回 0）
+
 
 # ── 4. BatchedCacheAdapter (M3) ──
 # M3 模式：BatchedKVCache，固定 S 个 slot，每个 slot 存 max_seq_len 个 token。
@@ -219,6 +226,13 @@ class BatchedCacheAdapter:
             seq_lens=seq_lens,
             slot_mapping=slots,
         )
+
+    # 在 SingleCacheAdapter 和 BatchedCacheAdapter 中加：
+    def can_admit_with_cache(self, prompt_ids):
+        return 0  # 不支持 prefix cache
+
+    def allocate_with_cache(self, request_id, prompt_ids, num_cached):
+        raise NotImplementedError  # 不会被调到（因为 can_admit_with_cache 返回 0）
 
 
 # ── 5. PagedCacheAdapter (M4) ──

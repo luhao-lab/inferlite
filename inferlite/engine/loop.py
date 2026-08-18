@@ -143,13 +143,21 @@ def batch_generate_loop(
         while scheduler.waiting:
             req = scheduler.waiting[0]
             prompt_len = req.prompt_ids.shape[1]
-            if not adapter.can_admit(prompt_len):
+            if not adapter.can_admit(prompt_len):  # ← 先检查容量（M2/M3/M4 通用）
                 break
+            # M5: 先查 prefix cache
+            prompt_ids = req.prompt_ids.squeeze(0).tolist()
+            num_cached = adapter.can_admit_with_cache(prompt_ids)
+            if num_cached == -1:
+                break  # 容量不够
             scheduler.waiting.popleft()
             req.status = RequestStatus.RUNNING
             scheduler.running[req.request_id] = req
             admitted.append(req)
-            adapter.allocate(req.request_id, prompt_len)
+            if num_cached > 0:
+                adapter.allocate_with_cache(req.request_id, prompt_ids, num_cached)
+            else:
+                adapter.allocate(req.request_id, prompt_len)  # M4 路径
             if metrics:
                 metrics.record_arrival(req.request_id)
                 metrics.record_prompt_tokens(req.request_id, prompt_len)
