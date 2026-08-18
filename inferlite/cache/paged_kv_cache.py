@@ -268,6 +268,45 @@ class PagedKVCache:
             table.append_block(physical_block_id=block_id)
         table.extend(1)
 
+    def hash_blocks(self, request_id: str, token_ids: list[int]) -> None:
+        """prefill/decode 后注册填满 block 的 chain hash。"""
+        table = self.block_tables[request_id]
+        num_full_blocks = len(token_ids) // self.block_size
+        h = -1
+        for i in range(num_full_blocks):
+            block_id = table.block_ids[i]
+            block = self.block_pool.blocks[block_id]
+            if block.hash != -1:
+                h = block.hash  # 已注册，用已有 hash 继续链
+                continue
+            start = i * self.block_size
+            end = start + self.block_size
+            block_tokens = token_ids[start:end]
+            h = self.block_pool.compute_hash(block_tokens, h)
+            block.hash = h  # 注册完整 block 的 chain hash
+            block.token_ids = block_tokens
+            self.block_pool.hash_to_block_id[h] = block_id
+
+    def cow_if_shared(self, request_id: str, block_idx: int) -> int:
+        """shared block（ref>1）写入前拷贝独占副本，返回新 block_id。"""
+        table = self.block_tables[request_id]
+        old_bid = table.block_ids[block_idx]
+        block = self.block_pool.blocks[old_bid]
+        if block.ref_count <= 1:
+            return old_bid  # 独占，不需要 CoW
+        new_bid = self.block_pool.allocate()
+        for layer in self.layers:
+            layer.k[new_bid] = layer.k[old_bid].clone()
+            layer.v[new_bid] = layer.v[old_bid].clone()
+        if block.hash != -1:
+            new_block = self.block_pool.blocks[new_bid]
+            new_block.hash = block.hash
+            new_block.token_ids = block.token_ids
+            self.block_pool.hash_to_block_id[block.hash] = new_bid
+        self.block_pool.dec_ref(old_bid)
+        table.block_ids[block_idx] = new_bid
+        return new_bid
+
     def free_request(self, request_id: str) -> None:
         table = self.block_tables.pop(request_id)
         for block_id in table.block_ids:
