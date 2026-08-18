@@ -248,6 +248,19 @@ class PagedKVCache:
 
         self.block_tables[request_id] = table
 
+    def allocate_request_with_cache(
+        self, request_id: str, token_ids: list[int], num_cached: int
+    ) -> None:
+        """cache-aware 分配：touch cached block + allocate 新 block。"""
+        if request_id in self.block_tables:
+            raise ValueError(f"request_id {request_id} already allocated")
+        block_ids = self.block_pool.allocate_with_cache(token_ids, num_cached)
+        table = BlockTable(request_id=request_id, block_size=self.block_size)
+        for bid in block_ids:
+            table.append_block(physical_block_id=bid)
+        table.extend(num_tokens=len(token_ids))
+        self.block_tables[request_id] = table
+
     def append_token(self, request_id: str) -> None:
         table = self.block_tables[request_id]
         if table.needs_new_block():

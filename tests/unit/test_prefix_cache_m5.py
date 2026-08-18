@@ -136,25 +136,19 @@ class TestAllocateRequestWithCache:
         assert torch.equal(cache.layers[0].k[cached_bid], saved_k)
 
 
-# ── 2. PagedCacheAdapter cache-aware 接口 ──
+# ── 2. BlockPool can_allocate（cache 查找） ──
 
 
-class TestAdapterCacheAware:
-    """PagedCacheAdapter 层面的 cache-aware 接口测试。"""
+class TestBlockPoolCanAllocate:
+    """BlockPool 层面的 cache-aware can_allocate 测试（adapter 委托到这里）。"""
 
-    def test_can_admit_with_cache_no_hit(self, cache: PagedKVCache):
+    def test_no_cache_returns_zero(self, cache: PagedKVCache):
         """无 cached block 时返回 0。"""
-        from inferlite.cache.adapter import PagedCacheAdapter
-
-        adapter = PagedCacheAdapter(cache)
         tokens = _make_prompt(8)
-        assert adapter.can_admit_with_cache(tokens) == 0
+        assert cache.block_pool.can_allocate(tokens) == 0
 
-    def test_can_admit_with_cache_hit(self, cache: PagedKVCache):
+    def test_cache_hit(self, cache: PagedKVCache):
         """有 cached block 时返回命中数。"""
-        from inferlite.cache.adapter import PagedCacheAdapter
-
-        adapter = PagedCacheAdapter(cache)
         tokens = _make_prompt(8)
 
         # 先制造 cached block
@@ -162,38 +156,17 @@ class TestAdapterCacheAware:
         cache.block_pool.hash_blocks(cache.block_tables["a"].block_ids, tokens, num_full_blocks=2)
         cache.free_request("a")
 
-        assert adapter.can_admit_with_cache(tokens) == 2
+        assert cache.block_pool.can_allocate(tokens) == 2
 
-    def test_can_admit_with_cache_insufficient_space(self, cache: PagedKVCache):
+    def test_insufficient_space_returns_negative(self, cache: PagedKVCache):
         """空间不够时返回 -1。"""
-        from inferlite.cache.adapter import PagedCacheAdapter
-
-        adapter = PagedCacheAdapter(cache)
-        # 分配所有 8 个 block（block_size=4，共 32 token 容量）
+        # 分配所有 8 个 block
         for i in range(8):
             cache.allocate_request(f"r{i}", 4)
 
-        # 新请求需要 4 tokens（1 block），但无空闲
+        # 新请求需要 1 block，但无空闲
         tokens = _make_prompt(4, base=999)
-        assert adapter.can_admit_with_cache(tokens) == -1
-
-    def test_allocate_with_cache(self, cache: PagedKVCache):
-        """通过 adapter 分配，block table 正确。"""
-        from inferlite.cache.adapter import PagedCacheAdapter
-
-        adapter = PagedCacheAdapter(cache)
-        tokens = _make_prompt(8)
-
-        # 制造 cached block
-        cache.allocate_request("a", 8)
-        cache.block_pool.hash_blocks(cache.block_tables["a"].block_ids, tokens, num_full_blocks=2)
-        original_blocks = list(cache.block_tables["a"].block_ids)
-        cache.free_request("a")
-
-        # 通过 adapter 分配
-        adapter.allocate_with_cache("b", tokens, num_cached=2)
-        assert "b" in cache.block_tables
-        assert cache.block_tables["b"].block_ids == original_blocks
+        assert cache.block_pool.can_allocate(tokens) == -1
 
 
 # ── 3. Skip Prefill 正确性 ──

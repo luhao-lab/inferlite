@@ -245,6 +245,10 @@ class PagedCacheAdapter:
         # M4 容量 = BlockPool 是否有足够空闲 block 容纳 prompt_len 个 token
         return self.cache.can_allocate(prompt_len)
 
+    def can_admit_with_cache(self, prompt_ids: list[int]) -> int:
+        """返回 prefix cache 命中 block 数。-1 = 容量不够，0 = 无命中。"""
+        return self.cache.block_pool.can_allocate(prompt_ids)
+
     def bind_kv_cache(self, model) -> None:
         # PagedKVCache 是全局共享的（不是 per-layer），所以每层都绑定同一个 cache 实例
         # 通过 layer_idx 区分各层在 cache 中的写入位置
@@ -263,6 +267,11 @@ class PagedCacheAdapter:
     def allocate(self, request_id, prompt_len):
         # 新请求到来时：按 prompt 长度分配初始 block（decode 阶段按需追加）
         self.cache.allocate_request(request_id, prompt_len)
+        self._current_request_ids.append(request_id)
+
+    def allocate_with_cache(self, request_id: str, prompt_ids: list[int], num_cached: int) -> None:
+        """cache-aware 分配。"""
+        self.cache.allocate_request_with_cache(request_id, prompt_ids, num_cached)
         self._current_request_ids.append(request_id)
 
     def free(self, request_id):
