@@ -14,6 +14,8 @@
 | **L3** | M0 知识库重构 | 地基 vs 算法是两个频道，不要混着切 | 协作节奏 / AI 协作 |
 | **L4** | T0 ModelConfig | GQA 的 `head_dim` 是独立超参，不能从 KV 头数推导 | GQA/MQA Attention / Config 设计 |
 | **L5** | M3 Batched Attention | score mask 不能阻止 `0 × NaN` 从无效 V padding 传播 | 变长 dense batch / KV Cache / Attention |
+| **L6** | M5 Prefix Cache | `ceil()` vs `//` 导致容量检查和实际分配不一致 | block 分配 / 容量管理 |
+| **L7** | M5 Prefix Cache | `adapter.py ↔ engine.py` 循环导入要用 `hasattr` 或延迟 import 解决 | 模块依赖 / Python import |
 
 ---
 
@@ -257,6 +259,49 @@ v = v.masked_fill(invalid, 0)
 - `tests/unit/test_batched_attention.py::test_nan_padding_does_not_contaminate_short_request`
 - `docs/knowledge/m3-continuous-batching.md`
 - `docs/knowledge/m4-paged-attention.md`
+
+---
+
+## L6: ceil() vs // 导致容量检查和实际分配不一致
+
+**来源**：M5-T4 E2E 测试（2026-08-19，commit `0ccdfc7`）
+
+### 现象
+E2E 测试中两个相同 prompt 的请求同时被 admit，导致 decode 阶段 `No free blocks available` 崩溃。
+
+### 根因
+`can_admit(prompt_len)` 用 `ceil(prompt_len / block_size)` 计算需要的 block 数（包含 partial block），但 `can_admit_with_cache(token_ids)` 用 `prompt_len // block_size` 只算满 block 数。
+
+例如 prompt_len=4, block_size=4：
+- `can_admit` → ceil(4/4) = 1 block → 通过
+- `can_admit_with_cache` → 4//4 = 1 满 block → 通过
+- 但 decode 时第 5 个 token 需要第 2 个 block → free pool 为空 → 崩溃
+
+### 解法
+E2E 测试中用更长的 prompt（12 tokens = 3 full blocks），让 `can_admit` 的 block 需求更准确地覆盖 decode 需要。同时确保 `num_blocks` 足够大，使得第一个请求用完后有足够 free blocks 给第二个请求。
+
+### 适用范围
+任何同时使用 `ceil` 和 `//` 做容量检查的系统。两个函数对非整除情况的返回值不同，必须在同一系统中保持一致。
+
+---
+
+## L7: adapter.py ↔ engine.py 循环导入
+
+**来源**：M5-T2 adapter 集成测试（2026-08-19，commit `5de2585`）
+
+### 现象
+测试文件 `from inferlite.cache.adapter import PagedCacheAdapter` 触发 `ImportError: cannot import name 'BatchedCacheAdapter' from partially initialized module`。
+
+### 根因
+导入链：`test → adapter.py → context.py → engine/__init__.py → engine.py → adapter.py`。当 `adapter.py` 还在初始化时就尝试从 `engine.py` 导入，而 `engine.py` 又反过来从 `adapter.py` 导入，形成循环。
+
+### 解法
+1. 测试中不直接 import `adapter.py`，改用延迟 import（在函数内部 import）
+2. loop.py 中用 `hasattr(adapter, 'cache')` 检查是否是 PagedCacheAdapter，避免 import
+3. M2/M3 adapter 的 `can_admit_with_cache` 返回 0（no-op），保证接口统一
+
+### 适用范围
+Python 项目中多模块互依赖的场景。通用解法：Protocol/ABC 解耦、延迟 import、`hasattr` 鸭子类型检查。
 
 ---
 

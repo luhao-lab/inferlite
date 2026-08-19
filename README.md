@@ -13,7 +13,7 @@
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 
-[**🌐 在线文档站**](https://luhao-lab.github.io/inferlite/)  ·  [路线图](docs/plan/PLAN.md)  ·  [实时进度](docs/plan/PROGRESS.md)  ·  [当前作战 M4](docs/plan/M4.md)
+[**🌐 在线文档站**](https://luhao-lab.github.io/inferlite/)  ·  [路线图](docs/plan/PLAN.md)  ·  [实时进度](docs/plan/PROGRESS.md)  ·  [当前作战 M5](docs/plan/M5.md)
 
 </div>
 
@@ -51,7 +51,7 @@ flowchart LR
         M2[M2<br/>KV Cache<br/>O n²→O n ]
         M3[M3<br/>Continuous<br/>Batching]
         M4[M4<br/>Paged<br/>Attention]
-        M5[M5<br/>API + SSE +<br/>Prefix + CI]
+        M5[M5<br/>Prefix<br/>Caching]
         M1 --> M2 --> M3 --> M4 --> M5
     end
     subgraph EXT [扩充 · 每周一个能力主题]

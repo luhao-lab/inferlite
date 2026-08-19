@@ -19,7 +19,7 @@
 | **M2** KV Cache | ✅ | `m2/static-kv-cache` | 2026-06-29 | — | T1~T5 全部完成，+28 单测，端到端 bench 7.36×@T=512 |
 | **M3** Continuous Batching | ✅ | `m3/continuous-batching` | 2026-07-19 | — | T1~T7 完成，fixed-slot continuous batching + metrics/benchmark，MPS 实测 batch throughput 慢于 serial，根因在 cache 路径 |
 | **M4** PagedAttention (PyTorch) | ✅ | `m4/paged-attention` | 2026-08-11 | — | T1~T8 全部完成。PagedKVCache + PagedAttention + ForwardContext/CacheAdapter 统一架构 + M3 batched prefill。270 tests 全绿，engine 层 ~800L（context/engine/loop/metrics 4 文件） |
-| **M5** Prefix Caching | ⬜ | — | — | — | 依赖 M4；BlockPool + hash-based prefix caching + LRU 淘汰 + partial hit CoW |
+| **M5** Prefix Caching | ✅ | `m5/prefix-caching` | 2026-08-19 | — | T1~T5 全部完成。BlockPool chain hash + LRU + CoW + cache-aware allocate + hash_blocks 注册。314 tests 全绿，新增 44 tests |
 
 ## 扩充里程碑（M6+）
 
@@ -54,6 +54,36 @@
   - 验证：`uv run pytest tests/unit/test_mlp.py -q` 10/10 绿
 
 ## 日志
+
+### 2026-08-19 — M5 Prefix Caching 完成
+
+- **T1 BlockPool hash + LRU** (`2670c9c`)
+  - `block_pool.py` 升级：chain hash + LRU (OrderedDict) + touch + compute_hash
+  - `can_allocate()` 双路径（int→M4 bool / list→M5 num_cached）
+  - `tests/unit/test_block_pool_m5.py`：23 tests 全绿
+
+- **T2 Prefix cache allocate** (`c21a68f`, `5de2585`)
+  - `paged_kv_cache.py`：`allocate_request_with_cache()` 带 cache 的 block 分配
+  - `adapter.py`：`can_admit_with_cache()` + `allocate_with_cache()`，M2/M3 no-op 兼容
+  - `loop.py`：cache-aware admit 流程（can_admit → can_admit_with_cache → allocate_with_cache）
+  - `tests/unit/test_prefix_cache_m5.py`：8 tests 全绿
+
+- **T3 hash_blocks + CoW** (`387922f`)
+  - `paged_kv_cache.py`：`hash_blocks()` prefill/decode 后注册 chain hash
+  - `paged_kv_cache.py`：`cow_if_shared()` 共享 block CoW + hash 迁移
+  - `tests/unit/test_cow_hash_m5.py`：7 tests 全绿
+
+- **T4 E2E + Regression** (`0ccdfc7`)
+  - `loop.py`：decode 后 hash_blocks 注册（修复 all_token_ids 未定义 bug）
+  - `tests/e2e/test_prefix_cache_e2e_m5.py`：6 tests（full hit / partial hit / serial 等价 / M4 回归 / 多轮复用 / spy 机制验证）
+
+- **T5 Docs + Tag** (本 commit)
+  - `docs/knowledge/m5-prefix-caching.md` 知识文档
+  - 任务卡 + M5.md + PROGRESS.md 状态更新
+  - annotated tag `m5/prefix-caching`
+  - ADR-05：孤儿 block 不处理的设计决策（`2bace25`）
+
+- **统计**：314 tests 全绿（270 M4 + 23 T1 + 8 T2 + 7 T3 + 6 T4），新增 44 tests
 
 ### 2026-06-06
 - 仓库 `luhao-lab/inferlite` 创建（MIT，公开）

@@ -7,7 +7,7 @@
 | 字段 | 内容 |
 |---|---|
 | 任务 ID | M5-T2 |
-| 状态 | 🟡 in_progress |
+| 状态 | ✅ done |
 | 前置 | M5-T1 ✅ |
 | 后续 | M5-T3 partial hit CoW |
 | 估时 | 3～4h |

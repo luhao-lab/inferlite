@@ -7,7 +7,7 @@
 | 字段 | 内容 |
 |---|---|
 | 任务 ID | M5-T1 |
-| 状态 | 🟡 in_progress |
+| 状态 | ✅ done |
 | 前置 | M4 ✅ |
 | 后续 | M5-T2 prefix cache allocate |
 | 估时 | 3～4h |
