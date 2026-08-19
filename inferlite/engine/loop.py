@@ -174,6 +174,8 @@ def batch_generate_loop(
                 logits = model(input_ids, positions=positions)
             # 逐请求采样：取每个请求最后一个真实 token 的 logits
             for i, req in enumerate(admitted):
+                if hasattr(adapter, "cache") and hasattr(adapter.cache, "hash_blocks"):
+                    adapter.cache.hash_blocks(req.request_id, req.prompt_ids.squeeze(0).tolist())
                 plen = req.prompt_ids.shape[1]
                 req.last_token = sampler(logits[i, plen - 1, :].unsqueeze(0))  # [1, 1]
                 req.generated_tokens.append(req.last_token)
@@ -210,6 +212,11 @@ def batch_generate_loop(
             req.generated_tokens.append(tok.unsqueeze(0))
             req.num_generated += 1
             req.seq_len += 1
+            if hasattr(adapter, "cache") and hasattr(adapter.cache, "hash_blocks"):
+                all_ids = req.prompt_ids.squeeze(0).tolist() + [
+                    t.item() for t in req.generated_tokens
+                ]
+                adapter.cache.hash_blocks(req.request_id, all_ids)
             # 完成条件：max_new_tokens 到达 或 EOS
             is_done = req.num_generated >= req.max_new_tokens or (
                 eos_token_id is not None and tok.item() == eos_token_id
