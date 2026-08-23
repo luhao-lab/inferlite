@@ -136,6 +136,8 @@ M12+ 暂不排固定日期，进入长期能力池；只有 M11（2026-09-20）�
   - T1~T8 全部完成，PagedKVCache + PagedAttention + ForwardContext/CacheAdapter 统一架构，270 tests 全绿
 - ✅ **M5** Prefix Caching（tag: `m5/prefix-caching`，2026-08-19）
   - T1~T5 全部完成，chain hash + LRU + CoW + cache-aware allocate，314 tests 全绿
+- ✅ **M6** API + SSE（tag: `m6/api-sse`，2026-08-23）
+  - FastAPI + OpenAI Chat Completions + SSE streaming + SamplingParams，344 tests 全绿
 - ⬜ **M6** API + SSE
 - ⬜ **M7–M11** MoE / 推测解码 / 核心算子 / 长上下文 / 多模态
 

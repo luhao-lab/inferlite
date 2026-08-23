@@ -54,9 +54,9 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 | M1·P2 | 已完成 | 最小生成能力 | L1 + L3 | M1·P1 | CLI 能出字，最小 Engine/Sampler |
 | M2 | 已完成 | 单请求加速 | L2 Memory | M1 | 单序列 decode 不重算历史 |
 | M3 | 已完成 | 多请求并发 | L3 Scheduler | M2 | 多请求三队列调度，slot 复用 |
-| M4 | 进行中 | 显存分页管理 | L2 Memory | M3 | KV 按 block 管，支持 refcount（无 CoW） |
-| M5 | 未开始 | 前缀复用 | L2 Memory | M4 | hash-based prefix caching + LRU 淘汰 + partial hit CoW |
-| M6 | 未开始 | 服务化输出 | L4 Server | M3（建议 M5 后） | `inferlite serve` + curl 流式输出 |
+| M4 | 已完成 | 显存分页管理 | L2 Memory | M3 | KV 按 block 管，支持 refcount（无 CoW） |
+| M5 | 已完成 | 前缀复用 | L2 Memory | M4 | hash-based prefix caching + LRU 淘汰 + partial hit CoW |
+| M6 | 已完成 | 服务化输出 | L4 Server | M3（建议 M5 后） | `inferlite serve` + curl 流式输出 |
 | Release | 未开始 | 工程发布 | 工程发布 | M3-M6 | 对照表、CI、README badge、`v1.0` tag |
 | M7 | Backlog | MoE 模型支持 | L1 Model | M6 | 阶段 1 跑通 MoE；阶段 2 MoE 性能优化 |
 | M8 | Backlog | 推测解码加速 | L3 Engine | M6 | 阶段 1 n-gram；阶段 2 EAGLE |
@@ -76,9 +76,9 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 | M7+ 内部 | 主题内阶段依赖 | M7/M8/M10/M11 都遵循“先跑通 → 再优化/工程化”；同一 M 内只做一个能力主题。 |
 
 <!-- anchor:current-mainline -->
-## 3. 当前主线：M3–M6
+## 3. 当前主线：Release Checklist
 
-> 主线顺序建议：**M4 → M5 → M6 → Release**。M6 技术上可在 M3 后启动，但服务层最好暴露完整的调度 + 内存复用能力，所以建议放在 M5 后收口。
+> M1–M6 全部完成。下一步是 Release Checklist（Benchmark + CI + README badge + v1.0 tag），然后进入 M7+ 能力主题包。
 
 ### M3 — Continuous Batching：调度器的诞生
 
@@ -292,6 +292,6 @@ CI 在 Release Checklist 引入，只跑 CPU-only 的 fast tests；真实模型 
 <!-- anchor:next-action -->
 ## 7. 下一步
 
-当前优先级：**收尾 M3 → 启动 M4**。
+当前优先级：**Release Checklist → M7+ 能力主题包**。
 
 每开一个新 M，先补任务卡，再写代码；不要在 PLAN 里继续堆实现细节。
