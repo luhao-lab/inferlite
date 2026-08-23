@@ -71,7 +71,6 @@ make lint && make fmt && make typecheck
 | [knowledge/m3-continuous-batching.md](./knowledge/m3-continuous-batching.md) | M3 专项：调度状态机、fixed-slot cache、batched attention、benchmark、性能瓶颈定位 | 想深入 M3 continuous batching 的实现细节时 |
 | [knowledge/m4-paged-attention.md](./knowledge/m4-paged-attention.md) | M4 专项：block pool + block table + scatter/gather + NaN 安全 + ForwardContext/CacheAdapter 架构 | 想深入 M4 PagedAttention 的实现细节时 |
 | [knowledge/m5-prefix-caching.md](./knowledge/m5-prefix-caching.md) | M5 专项：chain hash + LRU + CoW + cache-aware allocate + hash_blocks 注册 | 想深入 M5 Prefix Caching 的实现细节时 |
-| [knowledge/m6-api-sse.md](./knowledge/m6-api-sse.md) | M6 专项：FastAPI + OpenAI Chat Completions + SSE streaming + SamplingParams | 想深入 M6 API 服务化的实现细节时 |
 
 ---
 
@@ -152,7 +151,7 @@ inferlite/
 
 ## 当前进度
 
-M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → **M7 MoE ⬜**
+M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ → M5 ✅ → **M6 API + SSE ⬜**
 
 详见 [plan/PROGRESS.md](./plan/PROGRESS.md)
 

@@ -25,16 +25,15 @@
 
 | M | 状态 | Tag | 文章 | 备注 |
 | --- | --- | --- | --- | --- |
-| **M6** API + SSE | ✅ | `m6/api-sse` | — | FastAPI + OpenAI Chat Completions + SSE streaming + SamplingParams。344 tests 全绿，新增 30 tests |
-| M7 MoE 教学版 (for-loop) | ⬜ | — | — | Registry 引入 |
-| M8 Spec Decoding (n-gram) | ⬜ | — | — | `Drafter` Plugin |
-| M9 Triton PagedAttention kernel | ⬜ | — | — | 需 NVIDIA GPU |
-| M10 MoE grouped GEMM | ⬜ | — | — | |
-| M11 EAGLE-1 spec | ⬜ | — | — | |
-| **M12 Chunked Prefill** | ⬜ | — | — | 长上下文先要"喂得进"，调度层前置 |
-| **M13 Long context (YaRN)** | ⬜ | — | — | RoPE 频率重映射，依赖 M12 |
-| M14 VLM 教学版 | ⬜ | — | — | `inputs_embeds` 走通 |
-| M15 VLM 工程化 | ⬜ | — | — | image hash prefix cache |
+| M6 MoE 教学版 (for-loop) | ⬜ | — | — | Registry 引入 |
+| M7 Spec Decoding (n-gram) | ⬜ | — | — | `Drafter` Plugin |
+| M8 Triton PagedAttention kernel | ⬜ | — | — | 需 NVIDIA GPU |
+| M9 MoE grouped GEMM | ⬜ | — | — | |
+| M10 EAGLE-1 spec | ⬜ | — | — | |
+| **M11 Chunked Prefill** | ⬜ | — | — | 长上下文先要"喂得进"，调度层前置 |
+| **M12 Long context (YaRN)** | ⬜ | — | — | RoPE 频率重映射，依赖 M11 |
+| M13 VLM 教学版 | ⬜ | — | — | `inputs_embeds` 走通 |
+| M14 VLM 工程化 | ⬜ | — | — | image hash prefix cache |
 
 ## M15+ 候选池
 
@@ -55,34 +54,6 @@
   - 验证：`uv run pytest tests/unit/test_mlp.py -q` 10/10 绿
 
 ## 日志
-
-### 2026-08-23 — M6 API + SSE 服务化
-
-- **SamplingParams + SamplingProcessor**
-  - `inferlite/sampler/sampling.py`：temperature / top_k / top_p / repetition_penalty
-  - CTRL 论文风格 repetition penalty（正 logit 除以 penalty，负 logit 乘以 penalty）
-  - `tests/unit/test_sampling.py`：20 tests 全绿
-
-- **OpenAI 兼容 API schemas**
-  - `inferlite/server/schemas.py`：ChatCompletionRequest / Response / Chunk（Pydantic）
-  - 对齐 OpenAI Chat Completions spec 核心字段
-
-- **FastAPI app + SSE streaming**
-  - `inferlite/server/app.py`：ModelManager + generate_stream + FastAPI endpoints
-  - POST `/v1/chat/completions`（非流式 + 流式 SSE）
-  - GET `/v1/models`
-  - M2 路径 + asyncio.Lock 序列化 + asyncio.to_thread 不阻塞 event loop
-  - `tests/unit/test_server.py`：10 tests（含 7 个 @local_model 真实模型测试）
-
-- **CLI entry point**
-  - `inferlite/server/cli.py`：`inferlite serve` 命令
-  - pyproject.toml 新增 `inferlite-serve` console script
-
-- **端到端 smoke test**
-  - curl 验证三个端点：/v1/models ✅ /v1/chat/completions ✅ SSE streaming ✅
-  - OpenAI Python 客户端兼容（`openai.OpenAI(base_url=...)`）
-
-- **统计**：344 tests 全绿（314 M5 + 20 sampling + 3 schema + 7 API），新增 30 tests
 
 ### 2026-08-19 — M5 Prefix Caching 完成
 
