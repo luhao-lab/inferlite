@@ -25,15 +25,16 @@
 
 | M | 状态 | Tag | 文章 | 备注 |
 | --- | --- | --- | --- | --- |
-| M6 MoE 教学版 (for-loop) | ⬜ | — | — | Registry 引入 |
-| M7 Spec Decoding (n-gram) | ⬜ | — | — | `Drafter` Plugin |
-| M8 Triton PagedAttention kernel | ⬜ | — | — | 需 NVIDIA GPU |
-| M9 MoE grouped GEMM | ⬜ | — | — | |
-| M10 EAGLE-1 spec | ⬜ | — | — | |
-| **M11 Chunked Prefill** | ⬜ | — | — | 长上下文先要"喂得进"，调度层前置 |
-| **M12 Long context (YaRN)** | ⬜ | — | — | RoPE 频率重映射，依赖 M11 |
-| M13 VLM 教学版 | ⬜ | — | — | `inputs_embeds` 走通 |
-| M14 VLM 工程化 | ⬜ | — | — | image hash prefix cache |
+| **M6 API + SSE** | ✅ | — | — | SamplingParams + AsyncEngine + FastAPI + SSE + 31 tests |
+| M7 MoE 教学版 (for-loop) | ⬜ | — | — | Registry 引入 |
+| M8 Spec Decoding (n-gram) | ⬜ | — | — | `Drafter` Plugin |
+| M9 Triton PagedAttention kernel | ⬜ | — | — | 需 NVIDIA GPU |
+| M10 MoE grouped GEMM | ⬜ | — | — | |
+| M11 EAGLE-1 spec | ⬜ | — | — | |
+| **M12 Chunked Prefill** | ⬜ | — | — | 长上下文先要"喂得进"，调度层前置 |
+| **M13 Long context (YaRN)** | ⬜ | — | — | RoPE 频率重映射，依赖 M12 |
+| M14 VLM 教学版 | ⬜ | — | — | `inputs_embeds` 走通 |
+| M15 VLM 工程化 | ⬜ | — | — | image hash prefix cache |
 
 ## M15+ 候选池
 
@@ -54,6 +55,68 @@
   - 验证：`uv run pytest tests/unit/test_mlp.py -q` 10/10 绿
 
 ## 日志
+
+### 2026-08-23 — M6 API + SSE 服务化 完成
+
+- **T1 SamplingParams + SamplingProcessor**
+  - `inferlite/sampler/sampling.py`：5 步采样流水线（repetition penalty → temperature → top-k → top-p → softmax+multinomial）
+  - 接口兼容 GreedySampler（`__call__(logits) -> [B, 1]`）
+  - `tests/unit/test_sampling.py`：15 tests 全绿
+
+- **T2 OpenAI Schemas**
+  - `inferlite/server/schemas.py`：Pydantic models（Request/Response/StreamChunk/DeltaMessage）
+  - 字段校验（temperature [0,2]、top_p [0,1]、max_tokens ≥ 1）
+  - `tests/unit/test_openai_api.py::TestChatCompletionRequest` + `TestChatCompletionResponse`：6 tests
+
+- **T3 AsyncEngine**
+  - `inferlite/engine/async_engine.py`：后台线程常驻 engine loop + per-request output queue
+  - submit() 线程安全，复用 M3/M4/M5 的 FCFSScheduler + PagedCacheAdapter
+  - per-request 独立 SamplingProcessor
+
+- **T4 FastAPI App + SSE**
+  - `inferlite/server/app.py`：`/health` + `/v1/chat/completions`（流式/非流式）
+  - SSE 流式推送（`data: {json}\n\n` + `data: [DONE]\n\n`）
+  - `_split_thinking()` 提取 Qwen3 <think> 标签 → reasoning_content
+  - `tests/unit/test_openai_api.py::TestStreamChunk` + `TestSplitThinking` + `TestFastAPIApp`：9 tests
+
+- **T5 CLI inferlite-serve**
+  - `inferlite/server/cli.py`：`inferlite serve --model-dir ... --port 8000`
+  - `pyproject.toml` 注册 `inferlite-serve = "inferlite.server.cli:main"`
+
+- **统计**：344 tests 全绿（313 已有 + 31 新增），新增 ~1420 行代码
+
+- **Bugfix：MPS OOM 崩溃（L8）**
+  - `async_engine.py`：加 `torch.no_grad()` 包裹引擎循环（根因：缺少 no_grad 导致计算图累积 22 GB）
+  - prefill/decode 后显式 `del` 临时 tensor + `torch.mps.empty_cache()`
+  - `try/except` 包裹循环，OOM 时通知客户端而非线程崩溃
+
+- **Bugfix：MPS Generator device 不匹配**
+  - `sampling.py`：`SamplingProcessor._ensure_generator()` 延迟迁移 Generator 到 logits device
+  - 修复 `RuntimeError: Expected a 'mps' device type for generator but found 'cpu'`
+
+- **Bugfix：prompt_tokens 始终为 0**
+  - `app.py`：handler 层计算 `prompt_len` 并传入 `_complete_response` / `_stream_response`
+
+- **Bugfix：422 Validation Error 无日志**
+  - `app.py`：注册 `RequestValidationError` handler，打印请求体和错误详情
+  - `schemas.py`：`ChatMessage.content` 类型放宽为 `str | list`（兼容 OpenAI 多模态格式）
+
+- **优化：decode 阶段 empty_cache 频率**
+  - `async_engine.py`：decode 步骤不再每步调 `empty_cache()`，改为只在请求完成时清理
+  - 效果：10.7 → 13.5 tokens/s（+26%），TTFT 1.58s → 0.89s（-44%）
+
+- **新增：/v1/models 端点**
+  - `app.py`：OpenAI-compatible 模型列表端点，Open WebUI 等客户端依赖此端点获取可用模型
+
+- **文档更新**
+  - `docs/knowledge/m6-api-sse.md`：新增 §2.5 M6 如何与 M5 引擎连接 + 5 个源码走读小节
+  - `docs/knowledge/lessons.md`：新增 L8 torch.no_grad() 缺失导致 OOM
+
+- **性能基线（MPS Qwen3-0.6B bf16）**
+  - 纯模型 forward (1 token)：68.9 ms/step → 14.5 tokens/s
+  - inferlite 端到端：13.5 tokens/s（Python 开销仅 ~1 token/s）
+  - 瓶颈在 PyTorch MPS 后端（eager 模式，无 kernel fusion、无量化）
+  - 后续优化方向：torch.compile、int4 量化、M9 Triton kernel（需 NVIDIA GPU）
 
 ### 2026-08-19 — M5 Prefix Caching 完成
 

@@ -10,8 +10,9 @@
     from inferlite.engine.context import LLMModel
 """
 
+from inferlite.engine.async_engine import AsyncEngine
 from inferlite.engine.context import LLMModel
 from inferlite.engine.engine import EngineCore, generate
 from inferlite.engine.metrics import MetricsCollector
 
-__all__ = ["EngineCore", "LLMModel", "generate", "MetricsCollector"]
+__all__ = ["EngineCore", "LLMModel", "generate", "MetricsCollector", "AsyncEngine"]

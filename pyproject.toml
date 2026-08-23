@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 inferlite-generate = "inferlite.cli:main"
+inferlite-serve = "inferlite.server.cli:main"
 
 [dependency-groups]
 dev = [

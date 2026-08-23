@@ -39,6 +39,7 @@ make lint && make fmt && make typecheck
 | [plan/M2.md](./plan/M2.md) | M2 作战地图：KV Cache 方案、代码架构、实测性能 | M2 完成后回顾 |
 | [plan/M3.md](./plan/M3.md) | M3 作战地图：Continuous Batching 方案、任务分解 | M3 完成后回顾 |
 | [plan/M4.md](./plan/M4.md) | M4 作战地图：PagedAttention 方案、任务分解、测试策略 | M4 推进中参考 |
+| [plan/M6.md](./plan/M6.md) | M6 作战地图：API + SSE 服务化方案、架构对齐、任务分解 | M6 完成后回顾 |
 
 ### tasks/ — 执行层（想看具体怎么做/做到哪了时读这里）
 
@@ -49,6 +50,7 @@ make lint && make fmt && make typecheck
 | [tasks/_TEMPLATE.md](./tasks/_TEMPLATE.md) | 任务卡模板 | 新建任务卡时参考格式 |
 | [tasks/M1-archive/](./tasks/M1-archive/) | M1 全部已完成任务卡 | 想回顾 M1 某个模块的实现思路时 |
 | [tasks/M2-archive/](./tasks/M2-archive/) | M2 全部已完成任务卡 | 想回顾 M2 某个模块的实现思路时 |
+| [tasks/M6/](./tasks/M6/) | M6 5 张任务卡（T1~T5）：SamplingParams / OpenAI Schemas / AsyncEngine / FastAPI+SSE / CLI | 想了解 M6 各模块的设计意图时 |
 
 ### knowledge/ — 知识沉淀（想查知识/设计/教训时读这里）
 
@@ -71,6 +73,7 @@ make lint && make fmt && make typecheck
 | [knowledge/m3-continuous-batching.md](./knowledge/m3-continuous-batching.md) | M3 专项：调度状态机、fixed-slot cache、batched attention、benchmark、性能瓶颈定位 | 想深入 M3 continuous batching 的实现细节时 |
 | [knowledge/m4-paged-attention.md](./knowledge/m4-paged-attention.md) | M4 专项：block pool + block table + scatter/gather + NaN 安全 + ForwardContext/CacheAdapter 架构 | 想深入 M4 PagedAttention 的实现细节时 |
 | [knowledge/m5-prefix-caching.md](./knowledge/m5-prefix-caching.md) | M5 专项：chain hash + LRU + CoW + cache-aware allocate + hash_blocks 注册 | 想深入 M5 Prefix Caching 的实现细节时 |
+| [knowledge/m6-api-sse.md](./knowledge/m6-api-sse.md) | M6 专项：AsyncEngine 线程模型 + SSE 流式协议 + 采样流水线 + OpenAI schema 对齐 | 想深入 M6 API + SSE 服务化的实现细节时 |
 
 ---
 
@@ -133,8 +136,9 @@ inferlite/
 ├── inferlite/             # 主 Python 包（作者手写，AI 不写这里）
 │   ├── model/             # RMSNorm / Attention / RoPE / DecoderLayer / Qwen3 + KV Cache
 │   ├── scheduler/         # M3: FCFSScheduler + RequestState
-│   ├── engine/            # EngineCore / generate loop
-│   ├── sampler/           # GreedySampler
+│   ├── engine/            # EngineCore / generate loop / AsyncEngine
+│   ├── sampler/           # GreedySampler / SamplingProcessor
+│   ├── server/            # M6: FastAPI app + SSE + CLI serve
 │   └── cli.py
 │
 ├── tests/
@@ -151,7 +155,7 @@ inferlite/
 
 ## 当前进度
 
-M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ → M5 ✅ → **M6 API + SSE ⬜**
+M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → **M7 MoE ⬜**
 
 详见 [plan/PROGRESS.md](./plan/PROGRESS.md)
 

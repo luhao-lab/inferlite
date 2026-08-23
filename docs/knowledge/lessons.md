@@ -16,6 +16,7 @@
 | **L5** | M3 Batched Attention | score mask 不能阻止 `0 × NaN` 从无效 V padding 传播 | 变长 dense batch / KV Cache / Attention |
 | **L6** | M5 Prefix Cache | `ceil()` vs `//` 导致容量检查和实际分配不一致 | block 分配 / 容量管理 |
 | **L7** | M5 Prefix Cache | `adapter.py ↔ engine.py` 循环导入要用 `hasattr` 或延迟 import 解决 | 模块依赖 / Python import |
+| **L8** | M6 AsyncEngine | `torch.no_grad()` 缺失导致计算图累积 22 GB，MPS OOM 崩机 | MPS/CUDA 推理服务 / 后台线程 |
 
 ---
 
@@ -302,6 +303,106 @@ E2E 测试中用更长的 prompt（12 tokens = 3 full blocks），让 `can_admit
 
 ### 适用范围
 Python 项目中多模块互依赖的场景。通用解法：Protocol/ABC 解耦、延迟 import、`hasattr` 鸭子类型检查。
+
+---
+
+## L8: torch.no_grad() 缺失导致计算图累积 OOM
+
+**来源**：M6 AsyncEngine（2026-08-23）
+
+### 现象
+
+`inferlite-serve` 启动后，第一个请求（`max_tokens: 1000`）在 decode 阶段 OOM 崩溃，报错：
+
+```
+RuntimeError: MPS backend out of memory (MPS allocated: 47.73 GiB, max allowed: 47.74 GiB)
+```
+
+Qwen3-0.6B 模型权重才 1.2 GB，KV cache（128 blocks）才 15 MB，显存怎么可能吃到 48 GB？
+
+反复排查了 3 轮，尝试过：
+1. 减少 `num_blocks`（以为是 KV cache 太大）→ 无效
+2. prefill 后 `del` 大 tensor → 无效
+3. 请求完成后 `empty_cache()` → 无效
+4. 加 `torch.no_grad()` → **解决**
+
+最终电脑直接崩溃重启。
+
+### 根因
+
+`cli.py` 的 `generate()` 路径在第 170 行就有 `with torch.no_grad():`，所以 CLI 推理从不 OOM。但 M6 新增的 `AsyncEngine._background_loop()` 是全新代码，**漏掉了 `no_grad`**。
+
+没有 `no_grad` 时，PyTorch 为**每一步** forward 保存完整的计算图（所有 28 层中间 tensor 的引用）：
+
+```
+                    有 torch.no_grad()       无 torch.no_grad()
+                    ──────────────────       ──────────────────
+模型权重              1.2 GB                  1.2 GB
+KV cache (128 blk)   15 MB                   15 MB
+单次 forward 临时     ~85 MB                  ~85 MB（当步用完即释放）
+计算图累积            ❌ 不存储                ✅ 每步存储 ~85 MB
+                     ──────────────────       ──────────────────
+267 步 decode 后      ~1.3 GB                1.2 + 85×267 ≈ 22.7 GB
+MPS allocator 2x     ~2.6 GB               ~45+ GB → OOM！
+```
+
+每步 decode 的 `logits [1, 151936]` 是计算图的根节点，引用了整个 forward 过程中所有 28 层的 `q, k, v, hidden_states` 等中间 tensor。267 步累积下来轻松吃掉 22 GB，再乘以 MPS allocator 的 2x 预留系数就超了 48 GB 上限。
+
+### 解法
+
+**根因修复**：`torch.no_grad()` 包裹整个引擎循环。
+
+```python
+def _background_loop(self):
+    # ... 初始化 cache/adapter/scheduler ...
+    try:
+        self._run_engine_loop(...)
+    except Exception as exc:
+        # 通知客户端错误，释放资源
+        for q in self._output_queues.values():
+            q.put(_Sentinel(finish_reason="error", error=str(exc)))
+
+def _run_engine_loop(self, ...):
+    with torch.no_grad():  # ← 关键：禁止存储计算图
+        while self._running:
+            self._engine_loop_step(...)
+```
+
+**辅助加固**：每步 prefill/decode 后显式释放临时 tensor：
+
+```python
+# prefill 后
+del input_ids, positions, logits, metadata
+if _is_mps:
+    torch.mps.empty_cache()
+
+# decode 后
+del logits, decode_logits, next_tokens, positions, metadata
+if _is_mps:
+    torch.mps.empty_cache()
+```
+
+### 排查过程中的误判
+
+| 尝试 | 思路 | 为什么没用 |
+|---|---|---|
+| 减少 `num_blocks` 128→64→32 | 以为 KV cache 太大 | KV cache 才 15 MB，不是瓶颈 |
+| prefill 后 `del` logits | 以为 prefill 大 tensor 没释放 | logits 本身很小，计算图引用才是大头 |
+| 请求完成后 `empty_cache()` | 以为跨请求累积 | 第一个请求内就 OOM 了 |
+
+**教训**：看到 "out of memory" 不要只看**谁分配了显存**，要看**谁阻止了显存释放**。`torch.no_grad()` 不分配显存，但它的缺失阻止了 GC 回收计算图。
+
+### 适用范围
+
+- 所有 PyTorch 推理服务（后台线程、常驻 loop、async generator）
+- 任何新写的 forward 调用路径，必须检查是否有 `torch.no_grad()`
+- 从 CLI 单次调用 → HTTP 常驻服务 的迁移场景（最容易漏掉）
+
+### 相关
+
+- `inferlite/engine/async_engine.py::_run_engine_loop`
+- `inferlite/cli.py` line 170（CLI 路径的 `no_grad`，M1 就有）
+- `inferlite/sampler/sampling.py::_ensure_generator`（同 session 修的 MPS Generator 问题）
 
 ---
 
