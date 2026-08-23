@@ -63,9 +63,8 @@ from transformers import AutoTokenizer
 
 from inferlite.cache.kv_cache import KVCache
 from inferlite.cli import resolve_device_dtype
-from inferlite.engine.core import EngineCore, generate
+from inferlite.engine.engine import EngineCore, batch_generate_paged, generate
 from inferlite.engine.metrics import MetricsCollector
-from inferlite.engine.paged_core import batch_generate_paged
 from inferlite.model.weights import load_causal_lm_from_hf
 from inferlite.sampler import GreedySampler
 
@@ -176,7 +175,7 @@ def bench_fixed_slot(
     dtype,
 ):
     """Fixed-slot baseline：M3 batch_generate 或 serial generate。"""
-    from inferlite.engine.batch_core import batch_generate
+    from inferlite.engine.engine import batch_generate
 
     sampler = GreedySampler()
     metrics = MetricsCollector()

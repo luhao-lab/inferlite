@@ -52,14 +52,25 @@ make lint && make fmt && make typecheck
 
 ### knowledge/ — 知识沉淀（想查知识/设计/教训时读这里）
 
+> **主线阅读**：如果你只想读一篇文档理解 inferlite 的核心技术演进，读统一演进文档。
+
+#### ⭐ 统一演进文档（主线入口）
+
+| 文件 | 内容 | 什么时候读 |
+|------|------|-----------|
+| [knowledge/kv-cache-evolution.md](./knowledge/kv-cache-evolution.md) | **从零手写 LLM 推理引擎（二）：KV Cache 的五次进化** — M2→M5 统一技术演进，从无缓存到 Prefix Caching，一篇讲透数据结构、接口、架构的五次结构跃迁 | **首选阅读**：想一条线理解 KV Cache 怎么一步步变复杂、为什么每一步都是必要的 |
+
+#### 里程碑专项文档（深入某一阶段时读）
+
 | 文件 | 内容 | 什么时候读 |
 |------|------|-----------|
 | [knowledge/knowledge.md](./knowledge/knowledge.md) | 知识卡片库：Papers / Libraries / Concepts / Tools / ADR / 参考资料 | 开始任务卡前查前置知识；调研新知识后追加 |
 | [knowledge/lessons.md](./knowledge/lessons.md) | 踩坑教训 L1~L4，叙事性：现象 → 根因 → 解法 → 适用范围 | 遇到奇怪 bug 先来这里查；完成任务卡后追加新教训 |
 | [knowledge/blueprints.md](./knowledge/blueprints.md) | 模块契约卡片：接口签名、设计意图、踩坑、跨 M 依赖 | 改某个模块前先看 blueprint；M 归档时更新 |
-| [knowledge/m2-kv-cache-design.md](./knowledge/m2-kv-cache-design.md) | M2 技术设计：KV Cache 方案调研、ADR 决策、数据流 | M2 完成后回顾；想理解 KV Cache 设计思路时 |
-| [knowledge/m3-continuous-batching.md](./knowledge/m3-continuous-batching.md) | M3 技术总结：设计决策、踩坑、框架对比、benchmark、局限性 | M3 完成后回顾；想理解 continuous batching 设计思路时 |
-| [knowledge/m4-paged-attention.md](./knowledge/m4-paged-attention.md) | M4 技术设计：PagedAttention 调研、ADR、数据流、踩坑预案 | M4 推进中参考；想理解 PagedAttention 设计思路时 |
+| [knowledge/m2-kv-cache-design.md](./knowledge/m2-kv-cache-design.md) | M2 专项：KV Cache 方案调研、ADR 决策、数据流、性能实测 | 想深入 M2 静态预分配的设计细节时 |
+| [knowledge/m3-continuous-batching.md](./knowledge/m3-continuous-batching.md) | M3 专项：调度状态机、fixed-slot cache、batched attention、benchmark、性能瓶颈定位 | 想深入 M3 continuous batching 的实现细节时 |
+| [knowledge/m4-paged-attention.md](./knowledge/m4-paged-attention.md) | M4 专项：block pool + block table + scatter/gather + NaN 安全 + ForwardContext/CacheAdapter 架构 | 想深入 M4 PagedAttention 的实现细节时 |
+| [knowledge/m5-prefix-caching.md](./knowledge/m5-prefix-caching.md) | M5 专项：chain hash + LRU + CoW + cache-aware allocate + hash_blocks 注册 | 想深入 M5 Prefix Caching 的实现细节时 |
 
 ---
 
@@ -140,7 +151,7 @@ inferlite/
 
 ## 当前进度
 
-M1 Qwen3 单序列推理 ✅ → M2 KV Cache ✅ → M3 Continuous Batching ✅ → **M4 PagedAttention 🟡**
+M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ → M5 ✅ → **M6 API + SSE ⬜**
 
 详见 [plan/PROGRESS.md](./plan/PROGRESS.md)
 

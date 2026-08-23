@@ -177,8 +177,14 @@ class Attention(nn.Module):
         k = repeat_kv(k, self.num_key_value_groups)
         v = repeat_kv(v, self.num_key_value_groups)
 
+        # 对齐 dtype（MPS bf16 下 cache gather 可能改变 dtype）
+        if k.dtype != q.dtype:
+            k = k.to(q.dtype)
+        if v.dtype != q.dtype:
+            v = v.to(q.dtype)
+
         # ── 3. Scaled dot-product attention ──
-        attn_weights = torch.matmul(q, k.transpose(2, 3)) * self.scaling
+        attn_weights = torch.matmul(q, k.transpose(2, 3)).mul_(self.scaling)
 
         # causal mask（仅 seq_len > 1 时构建，decode T=1 跳过）
         if seq_len > 1:
@@ -223,14 +229,13 @@ class Attention(nn.Module):
     def _single_cache_rw(self, k, v, metadata):
         """M2 路径：全局 cache_position 写入 + 切片读取。"""
         cache = self.kv_cache
-        # cache_position: prefill=0, decode=seq_lens[0]-1
-        # 简化：用 cache.cur_len 作为写入起始位置
         seq_len = k.shape[-2]
-        seq_lens = metadata.seq_lens  # 从 ForwardContext 获取
-        if seq_len == int(seq_lens[0]):
+        # 使用 metadata.cur_len（Python int）避免 GPU→CPU 同步
+        cur_len = metadata.cur_len if metadata.cur_len is not None else int(metadata.seq_lens[0])
+        if seq_len == cur_len:
             cache_position = 0  # prefill: 从头写
         else:
-            cache_position = int(seq_lens[0]) - 1  # decode: 写最后 1 个位置
+            cache_position = cur_len - 1  # decode: 写最后 1 个位置
         cache.k[:, :, cache_position : cache_position + seq_len, :] = k
         cache.v[:, :, cache_position : cache_position + seq_len, :] = v
         k = cache.k[:, :, : cache_position + seq_len, :]
@@ -241,10 +246,7 @@ class Attention(nn.Module):
     def _batched_cache_rw(self, k, v, metadata):
         """M3 路径：per-slot 写入 + gather 读取。"""
         cache = self.kv_cache
-        # 从 metadata 获取 slot 信息
-        # prefill: seq_lens 是 prompt 长度，写整段
-        # decode: seq_lens 是当前长度，写 1 个 token
-        seq_lens = metadata.seq_lens
+        seq_lens = metadata.seq_lens.to(k.device)
         is_decode = k.shape[-2] == 1  # T=1 → decode
 
         if is_decode:
@@ -262,7 +264,7 @@ class Attention(nn.Module):
             k = cache.k[slot_mapping, :, :max_len, :]
             v = cache.v[slot_mapping, :, :max_len, :]
             # 清零无效 K/V
-            valid_lens = seq_lens
+            valid_lens = seq_lens.to(k.device)
             positions = torch.arange(max_len, device=k.device)
             valid = positions[None, :] < valid_lens[:, None]
             invalid = ~valid[:, None, :, None]
@@ -287,8 +289,8 @@ class Attention(nn.Module):
         """M4 paged: 用 block_table tensor 做 scatter/gather。"""
         cache = self.kv_cache
         layer = cache.layers[self.layer_idx]
-        block_table = metadata.block_table  # [B, max_blocks]
-        seq_lens = metadata.seq_lens  # [B]
+        block_table = metadata.block_table.to(k.device)  # [B, max_blocks]
+        seq_lens = metadata.seq_lens.to(k.device)  # [B]
         B = k.shape[0]
         is_prefill = k.shape[2] > 1
 
@@ -346,12 +348,13 @@ class Attention(nn.Module):
     def _build_valid_positions(self, seq_len, valid_lens, device):
         """构建 [B, seq_len] 布尔 mask。"""
         positions = torch.arange(seq_len, device=device)
+        valid_lens = valid_lens.to(device)
         return positions[None, :] < valid_lens[:, None]
 
     def _build_batched_mask(self, scores, cache_positions):
         """M3 per-row mask。"""
         max_len = int(cache_positions.max().item()) + 1
-        valid_lens = cache_positions + 1
+        valid_lens = (cache_positions + 1).to(scores.device)
         positions = torch.arange(max_len, device=scores.device)
         visible = positions[None, :] < valid_lens[:, None]
         return scores.masked_fill(~visible[:, None, None, :], torch.finfo(scores.dtype).min)

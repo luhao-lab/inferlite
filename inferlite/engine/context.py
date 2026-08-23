@@ -27,6 +27,7 @@ class AttentionMetadata:
     seq_lens: torch.Tensor  # [num_seqs] 每个请求的序列长度
     slot_mapping: torch.Tensor | None = None  # [num_tokens] M3 batched
     block_table: torch.Tensor | None = None  # [num_seqs, max_blocks] M4 paged
+    cur_len: int | None = None  # M2 single cache: 当前序列长度（Python int，避免 .item() 同步）
 
 
 @dataclass

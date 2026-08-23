@@ -98,6 +98,7 @@ class SingleCacheAdapter:
         return AttentionMetadata(
             num_seqs=1,
             seq_lens=torch.tensor([T]),
+            cur_len=T,  # Python int，避免 .item() 同步
         )
 
     def make_decode_metadata(self, next_tokens, positions):
@@ -105,7 +106,11 @@ class SingleCacheAdapter:
         # 同步到 cache.cur_len，让 Attention 层知道 cache 里有多少历史 KV
         self.cur_len += 1
         self.cache.cur_len = self.cur_len
-        return AttentionMetadata(num_seqs=1, seq_lens=torch.tensor([self.cur_len]))
+        return AttentionMetadata(
+            num_seqs=1,
+            seq_lens=torch.tensor([self.cur_len]),
+            cur_len=self.cur_len,  # Python int，避免 .item() 同步
+        )
 
     def allocate(self, request_id, prompt_len):
         # 新请求到来时：重置 cache（清空旧 KV），重置计数器

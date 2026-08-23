@@ -1,3 +1,5 @@
+> 📖 **主线入口**：本文是 M5 的专项设计文档。如果想一条线理解 M1→M5 的 KV Cache 完整演进，请先读 [KV Cache 演进](./kv-cache-evolution.md)。
+
 # inferlite M5：Prefix Caching 完整设计
 
 | 字段 | 内容 |

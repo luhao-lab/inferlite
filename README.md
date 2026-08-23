@@ -134,7 +134,8 @@ M12+ 暂不排固定日期，进入长期能力池；只有 M11（2026-09-20）�
   - T1~T7 全部完成，fixed-slot continuous batching + metrics/benchmark，E2E 与 serial generate 等价
 - ✅ **M4** PagedAttention（tag: `m4/paged-attention`，2026-08-11）
   - T1~T8 全部完成，PagedKVCache + PagedAttention + ForwardContext/CacheAdapter 统一架构，270 tests 全绿
-- ⬜ **M5** Prefix Caching
+- ✅ **M5** Prefix Caching（tag: `m5/prefix-caching`，2026-08-19）
+  - T1~T5 全部完成，chain hash + LRU + CoW + cache-aware allocate，314 tests 全绿
 - ⬜ **M6** API + SSE
 - ⬜ **M7–M11** MoE / 推测解码 / 核心算子 / 长上下文 / 多模态
 
@@ -145,6 +146,7 @@ M12+ 暂不排固定日期，进入长期能力池；只有 M11（2026-09-20）�
 | 入口 | 内容 |
 | --- | --- |
 | 🌐 [**在线文档站**](https://luhao-lab.github.io/inferlite/) | 极客风深色主题 · 全文搜索 · mermaid 渲染 |
+| 📖 [**从零手写 LLM 推理引擎（二）：KV Cache 的五次进化**](docs/knowledge/kv-cache-evolution.md) | M2→M5 统一技术演进：从无缓存到 Prefix Caching，一篇讲透 KV Cache 的五次结构跃迁 |
 | 🗺️ [`docs/plan/`](docs/plan/) | 里程碑路线、技术设计、任务拆解与实时进度 |
 | 📋 [`docs/tasks/`](docs/tasks/) | 可执行任务卡：接口合同、测试清单、DoD 与完成总结 |
 | 📚 [`docs/knowledge/`](docs/knowledge/) | 跨任务知识：原理、架构对比、里程碑复盘与可复用教训 |
