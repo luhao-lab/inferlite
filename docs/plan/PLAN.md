@@ -58,12 +58,13 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 | M5 | 未开始 | 前缀复用 | L2 Memory | M4 | hash-based prefix caching + LRU 淘汰 + partial hit CoW |
 | M6 | 未开始 | 服务化输出 | L4 Server | M3（建议 M5 后） | `inferlite serve` + curl 流式输出 |
 | Release | 未开始 | 工程发布 | 工程发布 | M3-M6 | 对照表、CI、README badge、`v1.0` tag |
-| M7 | Backlog | MoE 模型支持 | L1 Model | M6 | 阶段 1 跑通 MoE；阶段 2 MoE 性能优化 |
-| M8 | Backlog | 推测解码加速 | L3 Engine | M6 | 阶段 1 n-gram；阶段 2 EAGLE |
-| M9 | Backlog | 核心算子加速 | L1/L2 Kernel | M4-T7 backend 边界 | 阶段 1 cache write kernel；阶段 2 paged attention kernel |
-| M10 | Backlog | 长上下文能力 | L1 + L2 + L3 | M4 | 阶段 1 Chunked Prefill；阶段 2 YaRN |
-| M11 | Backlog | 多模态能力 | L1 + L2 + L4 | M6 | 阶段 1 VLM 教学版；阶段 2 VLM 工程化 |
-| M12+ | Backlog | 工程能力扩展 | 不定 | 不定 | Serving / Quant / Distributed / Audio 等按需新开 |
+| M7 | Backlog | 推测解码加速 | L3 Engine | M6 | 阶段 1：n-gram + 小模型 draft；阶段 2：EAGLE/MTP head |
+| M8 | Backlog | MoE 模型支持 | L1 Model | M6 | OLMoE-1B-7B + GGUF + Registry + top_k_override |
+| M9 | Backlog | 量化推理 | L1 Model | M8 | GGUF Q4_K_M 量化态 matmul + GPTQ/AWQ 原理 |
+| M10 | Backlog | MoE 自推测 | L1 + L3 | M7+M8+M9 | OLMoE top-2 draft + top-8 verify + 量化态 |
+| M11 | Backlog | 长上下文能力 | L1 + L2 + L3 | M4 | 阶段 1 Chunked Prefill；阶段 2 YaRN |
+| M12 | Backlog | 多模态能力 | L1 + L2 + L4 | M6 | 阶段 1 VLM 教学版；阶段 2 VLM 工程化 |
+| M13+ | Backlog | 工程能力扩展 | 不定 | 不定 | Triton kernel / DFlash / LoRA / Distributed 等按需新开 |
 
 ### 关键依赖说明
 
@@ -72,8 +73,10 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 | M3 → M6 | 硬依赖 | API/SSE 要包 `batch_generate` 或后续 EngineCore；单请求 API 不是目标服务形态。 |
 | M4 → M5 | 硬依赖 | Prefix Cache 依赖 block table / refcount；没有 M4 只能做字符串级缓存。 |
 | M5 ↔ M6 | 无算法依赖 | Prefix Cache 是 L2 Memory；API/SSE 是 L4 Server；二者只是共同服务于 v1.0 demo。 |
-| M4 → M9 | 硬依赖 | Triton/kernel backend 替换 M4 的 PyTorch PagedAttention 伪版，并复用 M4-T7 形成的 attention/backend 边界。 |
-| M7+ 内部 | 主题内阶段依赖 | M7/M8/M10/M11 都遵循“先跑通 → 再优化/工程化”；同一 M 内只做一个能力主题。 |
+| M7 → M10 | 硬依赖 | MoE 自推测（M10）复用 M7 建立的 Drafter 接口、RejectionSampler、KV cache rollback。 |
+| M8 → M10 | 硬依赖 | MoE 自推测（M10）依赖 M8 的 MoE Layer + top_k_override 参数。 |
+| M9 → M10 | 软依赖 | M10 的量化态 draft/verify 依赖 M9 的量化态 matmul；不做 M9 也能跑 M10（只是慢）。 |
+| M7+ 内部 | 主题递进 | M7（推测解码）→ M8（MoE）→ M9（量化）→ M10（组合）→ M11/M12（独立能力）；每个 M 都在为后面的 M 打地基。 |
 
 <!-- anchor:current-mainline -->
 ## 3. 当前主线：M3–M6
@@ -195,25 +198,44 @@ M7+ 能力主题包（MoE 模型支持 / 推测解码加速 / 核心算子加速
 <!-- anchor:backlog -->
 ## 5. M7+ Backlog
 
-> M7+ 不再按技术点排成一条线，而是按能力主题包组织。原则：同一个 M 内集中攻克同一主题，先跑通，再优化；不要把 MoE、Spec、Kernel、VLM 等不同主题交错推进。
+> M7–M10 形成一条**递进主线**：推测解码（改引擎）→ MoE（改模型）→ 量化（改计算）→ MoE 自推测（组合前三者）。每个 M 都在为后面的 M 打地基，M10 是前三个 M 的集大成。M11/M12 是独立能力主题，不依赖 M7–M10。
 
 | M | 能力主题 | 要解决的问题 | 阶段安排 | 典型技术 | Mac 可做 |
 | --- | --- | --- | --- | --- | --- |
-| M7 | MoE 模型支持 | 支持非 dense 大模型结构 | 阶段 1：跑通 MoE；阶段 2：MoE 性能优化 | for-loop dispatch；grouped GEMM / token permutation | 勉强，推荐 GPU |
-| M8 | 推测解码加速 | 同样算力下生成更多 token | 阶段 1：n-gram spec；阶段 2：EAGLE | verify/accept/rollback；draft head | 可以开发，训练建议 GPU |
-| M9 | 核心算子加速 | 每次 forward 更快 | 阶段 0：kernel backend 边界与 metadata tensor 化；阶段 1：cache write kernel；阶段 2：paged attention kernel；阶段 3：Mac-friendly 分支 | Triton；FlashAttention；torch.compile / flex_attention；slot_mapping / block_tables / seq_lens | 主线需 NVIDIA GPU；Mac 只做 fallback/分支探索 |
-| M10 | 长上下文能力 | 支持超长 prompt 和更长上下文窗口 | 阶段 1：Chunked Prefill；阶段 2：YaRN / NTK RoPE scaling | prefill slicing；RoPE scaling | 可以，小心内存 |
-| M11 | 多模态能力 | 支持图片输入并逐步工程化 | 阶段 1：VLM 教学版；阶段 2：VLM 工程化 | vision encoder；image prefix cache；encoder/LLM 异步 | 可以，小模型优先 |
-| M12+ | 长期工程能力池 | 按需补齐生产特性 | 每个方向单独开 M | LoRA；量化；TP/PP；metrics；Audio | 不定 |
+| M7 | 推测解码加速 | 同样算力下生成更多 token | T1 n-gram · T2 小模型 draft · T3 EAGLE/MTP head | Drafter 接口；rejection sampling；KV cache rollback | ✅ 完全可以 |
+| M8 | MoE 模型支持 | 支持 MoE 架构 + 量化格式加载 | T0 GGUF 解析 · T1 Registry · T2 MoE Layer · T3 OLMoE 组装 · T4 对齐 | for-loop dispatch；Router + Top-K；Model Registry；GGUF header | ✅ 可以 |
+| M9 | 量化推理 | 模型压缩 + 量化态高效计算 | T1 对称/非对称 INT8 · T2 Q4_K_M matmul · T3 GPTQ/AWQ 原理 · T4 集成 | K-Quant super-block；Hessian 优化；activation-aware | ✅ 基础量化可，高效计算需 GPU |
+| M10 | MoE 自推测 | MoE + 推测解码 + 量化的组合加速 | T1 MoEDrafter · T2 量化态 draft/verify · T3 benchmark | OLMoE top-2 draft + top-8 verify；复用 M7 Drafter/M8 MoE/M9 量化 | ✅ 勉强（量化态 matmul 可 CPU） |
+| M11 | 长上下文能力 | 支持超长 prompt 和更长上下文窗口 | 阶段 1：Chunked Prefill；阶段 2：YaRN / NTK RoPE scaling | prefill slicing；RoPE scaling | 可以，小心内存 |
+| M12 | 多模态能力 | 支持图片输入并逐步工程化 | 阶段 1：VLM 教学版；阶段 2：VLM 工程化 | vision encoder；image prefix cache；encoder/LLM 异步 | 可以，小模型优先 |
+| M13+ | 长期工程能力池 | 按需补齐生产特性 | 每个方向单独开 M | Triton kernel；DFlash；LoRA；TP/PP；Audio | 不定 |
+
+### M7–M10 递进主线
+
+```
+M7 推测解码（dense Qwen3 + n-gram/小模型/EAGLE）
+  │ 建立：Drafter 接口、RejectionSampler、KV cache rollback、engine loop 集成
+  ↓
+M8 MoE（OLMoE-1B-7B）
+  │ 建立：MoE Layer、top_k_override 参数、GGUF 解析、Model Registry
+  ↓
+M9 量化（GGUF Q4_K_M + GPTQ/AWQ 原理）
+  │ 建立：量化态 matmul、对称/非对称量化、GPTQ Hessian、AWQ activation-aware
+  ↓
+M10 MoE 自推测（OLMoE top-2 draft + top-8 verify）
+  │ 组合 M7+M8+M9：MoEDrafter + 量化态 draft/verify
+  │ 几乎不需要新基础设施，只需一个 MoEProposer 类
+```
 
 ### 暂不规划
 
-- Omni 全双工：工业框架也未稳定，成本高。
-- Beam Search：当前教学价值低。
-- Encoder-Decoder：不是当前 decoder-only 主线。
-- Embedding / Reranker 服务：不属于 LLM 推理引擎核心。
-- Diffusion LLM：实现路径差异太大。
-- Data Parallel：外层多实例 + LB 即可，不作为核心引擎里程碑。
+- **Triton kernel**（原 M9）：需要 NVIDIA GPU，Mac 测不了性能；等有条件再做或作为 M13+ 候选。
+- **DFlash**（Block Diffusion Drafter）：扩散模型是另一个大话题，偏离推理引擎主线；M7 Drafter 接口已抽象好，未来要加只需一个 `DFlashProposer` 类。
+- **Omni 全双工**：工业框架也未稳定，成本高。
+- **Beam Search**：当前教学价值低。
+- **Encoder-Decoder**：不是当前 decoder-only 主线。
+- **Embedding / Reranker 服务**：不属于 LLM 推理引擎核心。
+- **Data Parallel**：外层多实例 + LB 即可，不作为核心引擎里程碑。
 
 <!-- anchor:appendix -->
 ## 6. 附录：工程约定

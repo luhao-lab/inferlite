@@ -54,20 +54,16 @@ flowchart LR
         M5[M5<br/>Prefix<br/>Caching]
         M1 --> M2 --> M3 --> M4 --> M5
     end
-    subgraph EXT [扩充 · 每周一个能力主题]
+    subgraph EXT [扩充 · M7-M10 递进主线 + 独立能力]
         direction TB
-        M7[M7<br/>MoE 模型支持]
-        M8[M8<br/>推测解码]
-        M9[M9<br/>核心算子]
-        M10[M10<br/>长上下文]
-        M11[M11<br/>多模态]
+        M7[M7<br/>推测解码]
+        M8[M8<br/>MoE 模型]
+        M9[M9<br/>量化推理]
+        M10[M10<br/>MoE 自推测<br/>组合 M7+M8+M9]
+        M11[M11<br/>长上下文]
     end
     M5 --> M6
-    M6 --> M7
-    M7 --> M8
-    M8 --> M9
-    M9 --> M10
-    M10 --> M11
+    M6 --> M7 --> M8 --> M9 --> M10 --> M11
 ```
 
 完整路线与各里程碑范围见 [`docs/plan/PLAN.md`](docs/plan/PLAN.md)。
@@ -82,13 +78,14 @@ flowchart LR
 | W2 | 2026-07-27 ～ 2026-08-02 | **M4 PagedAttention**（收口） | T2–T7：BlockTable、PagedKVCache、PyTorch gather attention、batch engine 对齐 | 代码/测试全绿，benchmark，knowledge 收口，tag `m4/paged-attention` |
 | W3 | 2026-08-03 ～ 2026-08-09 | **M5 Prefix Caching** | 链式 hash、完整 block 复用、LRU、partial-hit CoW | 重复前缀 E2E、命中率 benchmark、文档与 tag |
 | W4 | 2026-08-10 ～ 2026-08-16 | **M6 API + SSE** | `inferlite serve`、请求协议、流式输出、基础 sampling 参数 | curl 可用、服务 E2E、v1.0 demo/Release 收口 |
-| W5 | 2026-08-17 ～ 2026-08-23 | **M7 MoE 模型支持** | 先跑通 MoE forward/dispatch，再做本周范围内可验证的优化 | 小模型 E2E、dense 回归、设计总结与 tag |
-| W6 | 2026-08-24 ～ 2026-08-30 | **M8 推测解码** | n-gram draft + verify/accept/rollback；EAGLE 只在前置具备时纳入 | token 等价、接受率与加速 benchmark、文档与 tag |
-| W7 | 2026-08-31 ～ 2026-09-06 | **M9 核心算子加速** | cache write / paged attention kernel；Mac 保留可验证 fallback | GPU 正确性与性能对比、fallback 回归、文档与 tag |
-| W8 | 2026-09-07 ～ 2026-09-13 | **M10 长上下文** | Chunked Prefill + YaRN/NTK RoPE scaling 最小闭环 | 长 prompt E2E、内存/延迟结果、文档与 tag |
-| W9 | 2026-09-14 ～ 2026-09-20 | **M11 多模态** | VLM 教学链路：图片编码、`inputs_embeds`、LLM decode | 小 VLM E2E、接口说明、文档与 tag |
+| W5 | 2026-08-17 ～ 2026-08-23 | **M7 推测解码** | n-gram + 小模型 draft + EAGLE/MTP head 三种 Drafter；KV cache rollback；lossless 验证 | token 等价、接受率与加速 benchmark、文档与 tag |
+| W6 | 2026-08-24 ～ 2026-08-30 | **M8 MoE 模型支持** | OLMoE-1B-7B + GGUF 解析 + Registry + MoE Layer (for-loop) + top_k_override | 小 MoE E2E、dense 回归、设计总结与 tag |
+| W7 | 2026-08-31 ～ 2026-09-06 | **M9 量化推理** | 对称/非对称 INT8 + Q4_K_M matmul + GPTQ/AWQ 原理 + 集成 | 量化前后精度/速度对比、文档与 tag |
+| W8 | 2026-09-07 ～ 2026-09-13 | **M10 MoE 自推测** | OLMoE top-2 draft + top-8 verify + 量化态 draft/verify | 双重加速 benchmark、文档与 tag |
+| W9 | 2026-09-14 ～ 2026-09-20 | **M11 长上下文** | Chunked Prefill + YaRN/NTK RoPE scaling 最小闭环 | 长 prompt E2E、内存/延迟结果、文档与 tag |
+| W10 | 2026-09-21 ～ 2026-09-27 | **M12 多模态** | VLM 教学链路：图片编码、`inputs_embeds`、LLM decode | 小 VLM E2E、接口说明、文档与 tag |
 
-M12+ 暂不排固定日期，进入长期能力池；只有 M11（2026-09-20）收口后，才从 LoRA、量化、TP/PP、Audio 等方向中选择一个单独立项。
+M13+ 暂不排固定日期，进入长期能力池（Triton kernel / DFlash / LoRA / TP/PP / Audio 等按需新开）。
 
 ### 排期调整记录
 

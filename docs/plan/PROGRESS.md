@@ -25,20 +25,17 @@
 
 | M | 状态 | Tag | 文章 | 备注 |
 | --- | --- | --- | --- | --- |
-| **M6 API + SSE** | ✅ | — | — | SamplingParams + AsyncEngine + FastAPI + SSE + 31 tests |
-| M7 MoE 教学版 (for-loop) | ⬜ | — | — | Registry 引入 |
-| M8 Spec Decoding (n-gram) | ⬜ | — | — | `Drafter` Plugin |
-| M9 Triton PagedAttention kernel | ⬜ | — | — | 需 NVIDIA GPU |
-| M10 MoE grouped GEMM | ⬜ | — | — | |
-| M11 EAGLE-1 spec | ⬜ | — | — | |
-| **M12 Chunked Prefill** | ⬜ | — | — | 长上下文先要"喂得进"，调度层前置 |
-| **M13 Long context (YaRN)** | ⬜ | — | — | RoPE 频率重映射，依赖 M12 |
-| M14 VLM 教学版 | ⬜ | — | — | `inputs_embeds` 走通 |
-| M15 VLM 工程化 | ⬜ | — | — | image hash prefix cache |
+| **M6 API + SSE** | ✅ | `m6/api-sse` | — | SamplingParams + AsyncEngine + FastAPI + SSE + 31 tests |
+| M7 推测解码（n-gram + 小模型 draft + EAGLE/MTP） | ⬜ | — | — | Drafter 接口 + RejectionSampler + KV cache rollback |
+| M8 MoE（OLMoE-1B-7B + GGUF + Registry） | ⬜ | — | — | MoE Layer + top_k_override + Model Registry |
+| M9 量化推理（GGUF Q4_K_M + GPTQ/AWQ） | ⬜ | — | — | 量化态 matmul + Hessian 优化 + activation-aware |
+| M10 MoE 自推测（OLMoE top-2 + top-8） | ⬜ | — | — | 组合 M7+M8+M9，只需 MoEProposer 类 |
+| M11 长上下文（Chunked Prefill + YaRN） | ⬜ | — | — | prefill slicing + RoPE 频率重映射 |
+| M12 VLM（教学版 + 工程化） | ⬜ | — | — | vision encoder + `inputs_embeds` + image prefix cache |
 
-## M15+ 候选池
+## M13+ 候选池
 
-详见 [PLAN.md §4 M15+](PLAN.md#milestones-extension)，按兴趣挑选开新 M。
+按需新开独立 M：Triton kernel（需 NVIDIA GPU）、DFlash（扩散 drafter）、LoRA、TP/PP、Audio 等。详见 [PLAN.md §5 M7+ Backlog](PLAN.md#backlog)。
 
 ### 2026-06-09
 - **T0 ModelConfig 完成**
@@ -55,6 +52,47 @@
   - 验证：`uv run pytest tests/unit/test_mlp.py -q` 10/10 绿
 
 ## 日志
+
+### 2026-08-24 — M7-T1 NgramProposer 完成
+
+- **T1 NgramProposer 完成**
+  - `inferlite/spec/__init__.py`：推测解码模块初始化
+  - `inferlite/spec/ngram_proposer.py::NgramProposer`：暴力滑动窗口实现
+    - 算法：从长到短尝试 n-gram 匹配（max_n → min_n），找到后提取 draft tokens
+    - 避免自匹配：搜索范围 `range(len(context) - n)` 而非 `range(len(context))`
+    - 复杂度：O(N × max_n)，后续可升级 KMP O(N)
+  - `tests/unit/test_ngram_proposer.py`：10 个测试用例（完美匹配 / 无匹配 / 部分匹配 / 边界情况 / 避免自匹配 / draft 数量限制 / 优先长 n-gram / token 无关性 / 参数验证 / 多匹配取第一个）
+  - 验证：`uv run pytest tests/unit/test_ngram_proposer.py -v` 10/10 绿；全量 332 tests 全绿
+
+- **关键设计决策**
+  - 暴力版优先（教学可读性 > 性能），预留 KMP 优化接口
+  - 多匹配时取第一个匹配（而非最长），简单实现
+  - 参数验证：`min_n >= 1`、`max_n >= min_n`、`num_draft_tokens >= 1`
+
+### 2026-08-24 — M7+ 规划重新梳理
+
+- **M7+ 从"平行主题包"改为"递进主线 + 独立能力"**
+  - M7（推测解码）→ M8（MoE）→ M9（量化）→ M10（MoE 自推测，组合 M7+M8+M9）
+  - M11 长上下文、M12 VLM 作为独立能力，不依赖 M7–M10
+  - 原 M9 Triton kernel 降级到 M13+（需要 NVIDIA GPU，Mac 测不了性能）
+  - 原 M10 长上下文后移到 M11；原 M11 VLM 后移到 M12
+
+- **M7 内容确定：推测解码（Speculative Decoding）**
+  - 三种 Drafter：n-gram（零成本）+ 小模型 draft（第二个 LLM）+ EAGLE/MTP head（加 draft head + 训练）
+  - 复用现有 Qwen3-0.6B，不需要新模型
+  - 建立 Drafter 抽象接口、RejectionSampler、KV cache rollback、engine loop 集成
+  - 明确不做：DFlash（扩散 drafter，偏离主线）、MoE 自推测（等 M8/M9 完成）
+
+- **关键洞察**：每个 M 都在为后面的 M 打地基
+  - M7 的 Drafter 接口 / RejectionSampler / KV cache rollback → M10 复用
+  - M8 的 MoE Layer + top_k_override → M10 的 MoE 自推测
+  - M9 的量化态 matmul → M10 的量化态 draft/verify
+  - M10 本身只需一个 MoEProposer 类（~100 行新代码）
+
+- **文档更新**
+  - `docs/plan/M7.md`：从旧的 MoE 计划重写为推测解码
+  - `docs/plan/PLAN.md`：§2 里程碑总表 + §5 Backlog + 依赖关系更新
+  - `README.md`：周计划表 + mermaid 路线图更新
 
 ### 2026-08-23 — M6 API + SSE 服务化 完成
 
