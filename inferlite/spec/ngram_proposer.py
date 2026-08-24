@@ -20,8 +20,10 @@
 - SGLang NGRAM 模式
 """
 
+from inferlite.spec.protocol import Proposer
 
-class NgramProposer:
+
+class NgramProposer(Proposer):
     """基于 n-gram 匹配的推测解码 drafter。
 
     Args:

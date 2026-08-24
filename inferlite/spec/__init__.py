@@ -14,7 +14,8 @@
 关键保证：lossless——输出分布与无推测时完全一致。
 """
 
+from inferlite.spec.draft_model_proposer import DraftModelProposer
 from inferlite.spec.ngram_proposer import NgramProposer
 from inferlite.spec.protocol import Proposer
 
-__all__ = ["Proposer", "NgramProposer"]
+__all__ = ["Proposer", "NgramProposer", "DraftModelProposer"]
