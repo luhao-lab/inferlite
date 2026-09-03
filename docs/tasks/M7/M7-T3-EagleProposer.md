@@ -9,7 +9,7 @@
 ## 目标
 
 **要解决什么问题**：
-DraftModelProposer（T2）每次 draft 需要 K 次完整 model forward，成本和 target model 一样。EagleProposer 用一个小 MLP head 预测下一个 hidden state，比完整 forward 快 100 倍以上。
+DraftModelProposer（T2）每次 draft 需要 K 次完整 model forward，即使小模型也有完整 decoder layers（28 层 × K 次）。EagleProposer 用一个小 MLP head（2 层 Linear）预测下一个 hidden state，比任何完整 model forward 都快 100 倍以上。
 
 **做完是什么效果**：
 ```python
