@@ -21,6 +21,11 @@ dependencies = [
 inferlite-generate = "inferlite.cli:main"
 inferlite-serve = "inferlite.server.cli:main"
 
+[project.optional-dependencies]
+training = [
+    "datasets>=3.0,<4",  # WikiText-2 等训练数据集
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8,<9",
