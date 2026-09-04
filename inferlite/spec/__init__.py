@@ -20,6 +20,7 @@ from inferlite.spec.eagle_proposer import EagleProposer
 from inferlite.spec.mtp_proposer import MTPProposer
 from inferlite.spec.ngram_proposer import NgramProposer
 from inferlite.spec.protocol import Proposer
+from inferlite.spec.rejection_sampler import RejectionSampler, SampleResult
 
 __all__ = [
     "Proposer",
@@ -28,4 +29,6 @@ __all__ = [
     "EagleHead",
     "EagleProposer",
     "MTPProposer",
+    "RejectionSampler",
+    "SampleResult",
 ]
