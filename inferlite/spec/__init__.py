@@ -17,7 +17,15 @@
 from inferlite.spec.draft_model_proposer import DraftModelProposer
 from inferlite.spec.eagle_head import EagleHead
 from inferlite.spec.eagle_proposer import EagleProposer
+from inferlite.spec.mtp_proposer import MTPProposer
 from inferlite.spec.ngram_proposer import NgramProposer
 from inferlite.spec.protocol import Proposer
 
-__all__ = ["Proposer", "NgramProposer", "DraftModelProposer", "EagleHead", "EagleProposer"]
+__all__ = [
+    "Proposer",
+    "NgramProposer",
+    "DraftModelProposer",
+    "EagleHead",
+    "EagleProposer",
+    "MTPProposer",
+]

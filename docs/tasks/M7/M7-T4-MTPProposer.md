@@ -2,7 +2,7 @@
 
 > **任务 ID**: T4
 > **里程碑**: M7 推测解码
-> **状态**: ⬜ pending
+> **状态**: ✅ done
 > **前置**: T3（EagleProposer）
 > **估时**: 1d
 
@@ -193,11 +193,40 @@ class MTPProposer:
 
 ## DoD
 
-- [ ] `MTPProposer` 实现完成
-- [ ] `scripts/train_mtp_heads.py` 训练脚本完成
-- [ ] 6 个单测全绿
-- [ ] 代码有详细注释（多 head vs 单 head 递归的区别）
+- [x] `MTPProposer` 实现完成
+- [x] `scripts/train_mtp_heads.py` 训练脚本完成
+- [x] 9 个单测全绿（8 个 MTPProposer + 1 个 Head 独立性测试）
+- [x] 代码有详细注释（多 head vs 单 head 递归的区别）
 - [ ] commit `feat(spec): add MTPProposer for multi-head speculative decoding (T4 done)`
+
+## 完成总结
+
+**实际实现**：
+- `inferlite/spec/mtp_proposer.py::MTPProposer`：K 个独立 head 并行预测，无递归误差累积
+- `scripts/train_mtp_heads.py`：收集 (h_t, h_{t+N}) pairs + MSE+KL 混合 loss 训练 K 个 head
+- `tests/unit/test_mtp_proposer.py`：9 个测试用例（8 个 MTPProposer + 1 个 Head 独立性）
+- 复用 `EagleHead` 结构（和 T3 完全相同），不新建 `MTPHead`
+
+**关键设计决策**：
+1. **复用 EagleHead**：MTP head 和 Eagle head 结构完全一致（`Linear → SiLU → Linear`），只是训练数据不同（offset=1 vs offset=N），不需要重复定义
+2. **MSE + KL 混合 loss**：和 T3 一致，`1.0 * MSE + 0.1 * KL`（EAGLE 论文推荐）
+3. **num_draft_tokens 截断**：`min(num_draft_tokens, len(heads))`，防止请求的 draft 数量超过 head 数量
+4. **device 自动推断**：`next(model.parameters()).device`，和 EagleProposer 保持一致
+5. **num_heads 可配置**：训练脚本的 head 数量通过变量控制，方便调整
+
+**验证结果**：
+- T4 单测：9/9 全绿
+- 全量回归：390/390 全绿
+
+**教学要点**：
+- **独立 vs 递归**：MTP 的每个 head 都从同一个 h_t 出发，不像 EAGLE 递归依赖前一步输出
+- **伪 MTP vs 原生 MTP**：我们是外挂 MLP head（post-trained），DeepSeek-V3 是预训练阶段内置 MTP module（含 decoder layer + shared lm_head）
+- **K 的代价**：每增加一个 head 就多 ~2M 参数 + 一次训练，但换来的是无误差累积的 draft 质量
+
+**与任务卡的差异**：
+- 测试用例从 6 个扩展到 9 个（增加 Head 独立性测试、K=0 边界、截断测试）
+- 训练脚本改用 MSE + KL 混合 loss（原任务卡只有 MSE）
+- 不新建 MTPHead 类，直接复用 EagleHead
 
 ## 坑（按概率排序）
 
