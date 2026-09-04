@@ -1,0 +1,2781 @@
+
+<!doctype html>
+<html lang="zh" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="从零手撕的 LLM 推理引擎学习项目 · L0-aligned with transformers">
+      
+      
+      
+        <link rel="canonical" href="https://luhao-lab.github.io/inferlite/tasks/M4-archive/M4-T2-BlockTable/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>M4-T2 — BlockTable - inferlite</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+  
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+    
+      
+      
+    
+  
+  
+  <style>:root{--md-admonition-icon--note:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M0%208a8%208%200%201%201%2016%200A8%208%200%200%201%200%208m8-6.5a6.5%206.5%200%201%200%200%2013%206.5%206.5%200%200%200%200-13M6.5%207.75A.75.75%200%200%201%207.25%207h1a.75.75%200%200%201%20.75.75v2.75h.25a.75.75%200%200%201%200%201.5h-2a.75.75%200%200%201%200-1.5h.25v-2h-.25a.75.75%200%200%201-.75-.75M8%206a1%201%200%201%201%200-2%201%201%200%200%201%200%202%22/%3E%3C/svg%3E');--md-admonition-icon--abstract:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2.5%201.75v11.5c0%20.138.112.25.25.25h3.17a.75.75%200%200%201%200%201.5H2.75A1.75%201.75%200%200%201%201%2013.25V1.75C1%20.784%201.784%200%202.75%200h8.5C12.216%200%2013%20.784%2013%201.75v7.736a.75.75%200%200%201-1.5%200V1.75a.25.25%200%200%200-.25-.25h-8.5a.25.25%200%200%200-.25.25m13.274%209.537zl-4.557%204.45a.75.75%200%200%201-1.055-.008l-1.943-1.95a.75.75%200%200%201%201.062-1.058l1.419%201.425%204.026-3.932a.75.75%200%201%201%201.048%201.074M4.75%204h4.5a.75.75%200%200%201%200%201.5h-4.5a.75.75%200%200%201%200-1.5M4%207.75A.75.75%200%200%201%204.75%207h2a.75.75%200%200%201%200%201.5h-2A.75.75%200%200%201%204%207.75%22/%3E%3C/svg%3E');--md-admonition-icon--info:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M0%208a8%208%200%201%201%2016%200A8%208%200%200%201%200%208m8-6.5a6.5%206.5%200%201%200%200%2013%206.5%206.5%200%200%200%200-13M6.5%207.75A.75.75%200%200%201%207.25%207h1a.75.75%200%200%201%20.75.75v2.75h.25a.75.75%200%200%201%200%201.5h-2a.75.75%200%200%201%200-1.5h.25v-2h-.25a.75.75%200%200%201-.75-.75M8%206a1%201%200%201%201%200-2%201%201%200%200%201%200%202%22/%3E%3C/svg%3E');--md-admonition-icon--tip:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M8%201.5c-2.363%200-4%201.69-4%203.75%200%20.984.424%201.625.984%202.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621%201.49a.75.75%200%200%201-1.484.211c-.04-.282-.163-.547-.37-.847a9%209%200%200%200-.542-.68q-.126-.149-.268-.32C3.201%207.75%202.5%206.766%202.5%205.25%202.5%202.31%204.863%200%208%200s5.5%202.31%205.5%205.25c0%201.516-.701%202.5-1.328%203.259q-.142.172-.268.319c-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751%200%200%201-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848q.113-.133.213-.253c.561-.679.985-1.32.985-2.304%200-2.06-1.637-3.75-4-3.75M5.75%2012h4.5a.75.75%200%200%201%200%201.5h-4.5a.75.75%200%200%201%200-1.5M6%2015.25a.75.75%200%200%201%20.75-.75h2.5a.75.75%200%200%201%200%201.5h-2.5a.75.75%200%200%201-.75-.75%22/%3E%3C/svg%3E');--md-admonition-icon--success:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M0%208a8%208%200%201%201%2016%200A8%208%200%200%201%200%208m1.5%200a6.5%206.5%200%201%200%2013%200%206.5%206.5%200%200%200-13%200m10.28-1.72-4.5%204.5a.75.75%200%200%201-1.06%200l-2-2a.75.75%200%200%201%20.018-1.042.75.75%200%200%201%201.042-.018l1.47%201.47%203.97-3.97a.75.75%200%200%201%201.042.018.75.75%200%200%201%20.018%201.042%22/%3E%3C/svg%3E');--md-admonition-icon--question:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M0%208a8%208%200%201%201%2016%200A8%208%200%200%201%200%208m8-6.5a6.5%206.5%200%201%200%200%2013%206.5%206.5%200%200%200%200-13M6.92%206.085h.001a.749.749%200%201%201-1.342-.67c.169-.339.436-.701.849-.977C6.845%204.16%207.369%204%208%204a2.76%202.76%200%200%201%201.637.525c.503.377.863.965.863%201.725%200%20.448-.115.83-.329%201.15-.205.307-.47.513-.692.662-.109.072-.22.138-.313.195l-.006.004a6%206%200%200%200-.26.16%201%201%200%200%200-.276.245.75.75%200%200%201-1.248-.832c.184-.264.42-.489.692-.661q.154-.1.313-.195l.007-.004c.1-.061.182-.11.258-.161a1%201%200%200%200%20.277-.245C8.96%206.514%209%206.427%209%206.25a.61.61%200%200%200-.262-.525A1.27%201.27%200%200%200%208%205.5c-.369%200-.595.09-.74.187a1%201%200%200%200-.34.398M9%2011a1%201%200%201%201-2%200%201%201%200%200%201%202%200%22/%3E%3C/svg%3E');--md-admonition-icon--warning:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M6.457%201.047c.659-1.234%202.427-1.234%203.086%200l6.082%2011.378A1.75%201.75%200%200%201%2014.082%2015H1.918a1.75%201.75%200%200%201-1.543-2.575Zm1.763.707a.25.25%200%200%200-.44%200L1.698%2013.132a.25.25%200%200%200%20.22.368h12.164a.25.25%200%200%200%20.22-.368Zm.53%203.996v2.5a.75.75%200%200%201-1.5%200v-2.5a.75.75%200%200%201%201.5%200M9%2011a1%201%200%201%201-2%200%201%201%200%200%201%202%200%22/%3E%3C/svg%3E');--md-admonition-icon--failure:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2.344%202.343za8%208%200%200%201%2011.314%2011.314A8.002%208.002%200%200%201%20.234%2010.089a8%208%200%200%201%202.11-7.746m1.06%2010.253a6.5%206.5%200%201%200%209.108-9.275%206.5%206.5%200%200%200-9.108%209.275M6.03%204.97%208%206.94l1.97-1.97a.749.749%200%200%201%201.275.326.75.75%200%200%201-.215.734L9.06%208l1.97%201.97a.749.749%200%200%201-.326%201.275.75.75%200%200%201-.734-.215L8%209.06l-1.97%201.97a.749.749%200%200%201-1.275-.326.75.75%200%200%201%20.215-.734L6.94%208%204.97%206.03a.75.75%200%200%201%20.018-1.042.75.75%200%200%201%201.042-.018%22/%3E%3C/svg%3E');--md-admonition-icon--danger:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.504.43a1.516%201.516%200%200%201%202.437%201.713L10.415%205.5h2.123c1.57%200%202.346%201.909%201.22%203.004l-7.34%207.142a1.25%201.25%200%200%201-.871.354h-.302a1.25%201.25%200%200%201-1.157-1.723L5.633%2010.5H3.462c-1.57%200-2.346-1.909-1.22-3.004zm1.047%201.074L3.286%208.571A.25.25%200%200%200%203.462%209H6.75a.75.75%200%200%201%20.694%201.034l-1.713%204.188%206.982-6.793A.25.25%200%200%200%2012.538%207H9.25a.75.75%200%200%201-.683-1.06l2.008-4.418.003-.006-.004-.009-.006-.006-.008-.001q-.005%200-.009.004%22/%3E%3C/svg%3E');--md-admonition-icon--bug:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M4.72.22a.75.75%200%200%201%201.06%200l1%20.999a3.5%203.5%200%200%201%202.441%200l.999-1a.748.748%200%200%201%201.265.332.75.75%200%200%201-.205.729l-.775.776c.616.63.995%201.493.995%202.444v.327q0%20.15-.025.292c.408.14.764.392%201.029.722l1.968-.787a.75.75%200%200%201%20.556%201.392L13%207.258V9h2.25a.75.75%200%200%201%200%201.5H13v.5q-.002.615-.141%201.186l2.17.868a.75.75%200%200%201-.557%201.392l-2.184-.873A5%205%200%200%201%208%2016a5%205%200%200%201-4.288-2.427l-2.183.873a.75.75%200%200%201-.558-1.392l2.17-.868A5%205%200%200%201%203%2011v-.5H.75a.75.75%200%200%201%200-1.5H3V7.258L.971%206.446a.75.75%200%200%201%20.558-1.392l1.967.787c.265-.33.62-.583%201.03-.722a1.7%201.7%200%200%201-.026-.292V4.5c0-.951.38-1.814.995-2.444L4.72%201.28a.75.75%200%200%201%200-1.06m.53%206.28a.75.75%200%200%200-.75.75V11a3.5%203.5%200%201%200%207%200V7.25a.75.75%200%200%200-.75-.75ZM6.173%205h3.654A.17.17%200%200%200%2010%204.827V4.5a2%202%200%201%200-4%200v.327c0%20.096.077.173.173.173%22/%3E%3C/svg%3E');--md-admonition-icon--example:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M5%205.782V2.5h-.25a.75.75%200%200%201%200-1.5h6.5a.75.75%200%200%201%200%201.5H11v3.282l3.666%205.76C15.619%2013.04%2014.543%2015%2012.767%2015H3.233c-1.776%200-2.852-1.96-1.899-3.458Zm-2.4%206.565a.75.75%200%200%200%20.633%201.153h9.534a.75.75%200%200%200%20.633-1.153L12.225%2010.5h-8.45ZM9.5%202.5h-3V6c0%20.143-.04.283-.117.403L4.73%209h6.54L9.617%206.403A.75.75%200%200%201%209.5%206Z%22/%3E%3C/svg%3E');--md-admonition-icon--quote:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M1.75%202.5h10.5a.75.75%200%200%201%200%201.5H1.75a.75.75%200%200%201%200-1.5m4%205h8.5a.75.75%200%200%201%200%201.5h-8.5a.75.75%200%200%201%200-1.5m0%205h8.5a.75.75%200%200%201%200%201.5h-8.5a.75.75%200%200%201%200-1.5M2.5%207.75v6a.75.75%200%200%201-1.5%200v-6a.75.75%200%200%201%201.5%200%22/%3E%3C/svg%3E');}</style>
+
+
+  
+  
+  
+  
+  <style>:root{--md-annotation-icon:url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M17%2013h-4v4h-2v-4H7v-2h4V7h2v4h4m-5-9A10%2010%200%200%200%202%2012a10%2010%200%200%200%2010%2010%2010%2010%200%200%200%2010-10A10%2010%200%200%200%2012%202%22/%3E%3C/svg%3E');}</style>
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../_assets/stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#m4-t2-blocktable" class="md-skip">
+          跳转至
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="页眉">
+    <a href="../../.." title="inferlite" class="md-header__button md-logo" aria-label="inferlite" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M6.5.75V2h3V.75a.75.75 0 0 1 1.5 0V2h1.25c.966 0 1.75.784 1.75 1.75V5h1.25a.75.75 0 0 1 0 1.5H14v3h1.25a.75.75 0 0 1 0 1.5H14v1.25A1.75 1.75 0 0 1 12.25 14H11v1.25a.75.75 0 0 1-1.5 0V14h-3v1.25a.75.75 0 0 1-1.5 0V14H3.75A1.75 1.75 0 0 1 2 12.25V11H.75a.75.75 0 0 1 0-1.5H2v-3H.75a.75.75 0 0 1 0-1.5H2V3.75C2 2.784 2.784 2 3.75 2H5V.75a.75.75 0 0 1 1.5 0m5.75 11.75a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25ZM5.75 5h4.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-4.5a.75.75 0 0 1-.75-.75v-4.5A.75.75 0 0 1 5.75 5m.75 4.5h3v-3h-3Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            inferlite
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              M4-T2 — BlockTable
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="cyan"  aria-label="Switch to light"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="black" data-md-color-accent="teal"  aria-label="Switch to dark"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="查找">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="分享" aria-label="分享" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜索引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/luhao-lab/inferlite" title="前往仓库" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    luhao-lab/inferlite
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="标签" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  首页
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../plan/PLAN/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  规划
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../M2-T1-KVCache-DataStructure.md" class="md-tabs__link">
+          
+  
+  
+    
+  
+  任务卡 (M2 活跃)
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../M1-archive/M1-T0-ModelConfig/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  任务卡 (M1 归档)
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../kb/knowledge.md" class="md-tabs__link">
+          
+  
+  
+    
+  
+  知识库
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  首页
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="导航栏" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="inferlite" class="md-nav__button md-logo" aria-label="inferlite" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M6.5.75V2h3V.75a.75.75 0 0 1 1.5 0V2h1.25c.966 0 1.75.784 1.75 1.75V5h1.25a.75.75 0 0 1 0 1.5H14v3h1.25a.75.75 0 0 1 0 1.5H14v1.25A1.75 1.75 0 0 1 12.25 14H11v1.25a.75.75 0 0 1-1.5 0V14h-3v1.25a.75.75 0 0 1-1.5 0V14H3.75A1.75 1.75 0 0 1 2 12.25V11H.75a.75.75 0 0 1 0-1.5H2v-3H.75a.75.75 0 0 1 0-1.5H2V3.75C2 2.784 2.784 2 3.75 2H5V.75a.75.75 0 0 1 1.5 0m5.75 11.75a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25ZM5.75 5h4.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-4.5a.75.75 0 0 1-.75-.75v-4.5A.75.75 0 0 1 5.75 5m.75 4.5h3v-3h-3Z"/></svg>
+
+    </a>
+    inferlite
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/luhao-lab/inferlite" title="前往仓库" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    luhao-lab/inferlite
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    规划
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    规划
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../plan/PLAN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    路线图 PLAN
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../plan/PROGRESS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    进度 PROGRESS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../plan/M1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M1 作战地图
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../plan/m2-kv-cache-design.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2 KV Cache 设计
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    任务卡 (M2 活跃)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    任务卡 (M2 活跃)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M2-T1-KVCache-DataStructure.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T1 KVCache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M2-T2-Attention-KVCache.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T2 Attention KV
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M2-T3-Model-Passthrough.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T3 Model 透传
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M2-T4-Generate-Loop.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T4 Generate Loop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M2-T5-CLI-Device-Dtype.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    M2-T5 CLI 设备
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    任务卡 (M1 归档)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    任务卡 (M1 归档)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T0-ModelConfig/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T0 ModelConfig
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T1-RMSNorm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T1 RMSNorm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T2-SwiGLU/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T2 SwiGLU
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T3-RoPE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T3 RoPE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T4-GQA-Attention/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T4 GQA Attention
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T5-DecoderLayer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T5 DecoderLayer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T6-Qwen3Model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T6 Qwen3Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T7-WeightMap-load-from-hf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T7 WeightLoader
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T8-L1-logits-alignment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T8 Logits 对齐
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T9-LLMModel-GreedySampler/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T9 LLMModel+Sampler
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T10-EngineCore-step/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T10 EngineCore
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T11-CLI-L2-e2e/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T11 CLI e2e
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../M1-archive/M1-T12-smoke-test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    T12 smoke test
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    知识库
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    知识库
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../kb/knowledge.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    knowledge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../kb/lessons.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    lessons
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../kb/blueprints.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    blueprints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        元信息
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        目标
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="目标">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        要解决什么问题
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        做完是什么效果
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        不做什么
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        在推理链路中的位置
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#block_id" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        block_id 是编号，不是地址
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        设计原则
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        产出文件
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        接口骨架
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#blockpool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        与 BlockPool 的关系
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="与 BlockPool 的关系">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        职责切分
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        代码层面没有依赖
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#blocktable-blockpool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        为什么刻意不让 BlockTable 依赖 BlockPool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        走查示例：物理块复用
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        接口合同
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="接口合同">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#__post_init__-none" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __post_init__() -&gt; None
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#num_blocks-intproperty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        num_blocks -&gt; int（property）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#capacity-intproperty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        capacity -&gt; int（property）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#num_full_blocks-intproperty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        num_full_blocks -&gt; int（property）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#last_block_offset-intproperty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        last_block_offset -&gt; int（property）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#needs_new_block-bool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        needs_new_block() -&gt; bool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#position_to_blockpos-int-tupleint-int" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        position_to_block(pos: int) -&gt; tuple[int, int]
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#append_blockphysical_block_id-int-none" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        append_block(physical_block_id: int) -&gt; None
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#extendnum_tokens-int-none" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extend(num_tokens: int) -&gt; None
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_14" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        算法核心与不变量
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="算法核心与不变量">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        位置映射
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        状态不变量
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_17" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实现步骤
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_18" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        复杂度
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vllm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        与 vLLM 系实现的关系
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#l0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        L0 测试清单
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="L0 测试清单">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_19" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        测试命令
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dod" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DoD
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_20" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        坑（按概率排序）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        完成总结
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="完成总结">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        实现期间修正的设计问题
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        关于字段可写性的取舍
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2026-07-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        验证结果（2026-07-28）
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="m4-t2-blocktable">M4-T2 — BlockTable<a class="headerlink" href="#m4-t2-blocktable" title="锚点">#</a></h1>
+<blockquote>
+<p>实现单个请求的逻辑 token 位置到物理 block 的映射：请求看到连续地址，底层落在非连续物理 block 上。</p>
+</blockquote>
+<h2 id="_1">元信息<a class="headerlink" href="#_1" title="锚点">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>任务 ID</td>
+<td>M4-T2</td>
+</tr>
+<tr>
+<td>里程碑</td>
+<td>M4 — PagedAttention</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>✅ done</td>
+</tr>
+<tr>
+<td>前置</td>
+<td>M4-T1 — BlockPool ✅</td>
+</tr>
+<tr>
+<td>后续</td>
+<td>M4-T3 — PagedKVCache</td>
+</tr>
+<tr>
+<td>估时</td>
+<td>1h</td>
+</tr>
+<tr>
+<td>核心文件</td>
+<td><code>inferlite/cache/paged_kv_cache.py</code>（与 T3 同文件）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="_2">目标<a class="headerlink" href="#_2" title="锚点">#</a></h2>
+<h3 id="_3">要解决什么问题<a class="headerlink" href="#_3" title="锚点">#</a></h3>
+<p>T1 的 <code>BlockPool</code> 只回答"哪些物理 block 空闲"，它不知道任何请求的存在：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>BlockPool: physical_block_id -&gt; ref_count
+</span></code></pre></div>
+<p>但 attention 需要按 token 位置读写 KV。请求视角是连续的逻辑地址 <code>pos = 0, 1, 2, ...</code>，而物理 block 由 pool 按空闲顺序分配，很可能是乱序、不连续的。T2 负责补上中间这一层翻译：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>BlockTable: pos -&gt; (physical_block_id, block_offset)
+</span></code></pre></div>
+<p>这正是 PagedAttention 的核心间接层 —— 有了它，KV 才不需要为每个请求预留一整段连续 <code>max_seq_len</code> 空间（M3 <code>SlotManager</code> 的做法），碎片化的物理 block 也能拼出逻辑连续的序列。</p>
+<h3 id="_4">做完是什么效果<a class="headerlink" href="#_4" title="锚点">#</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># block_size=16，pool 分配到的物理块恰好乱序</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">table</span> <span class="o">=</span> <span class="n">BlockTable</span><span class="p">(</span><span class="n">request_id</span><span class="o">=</span><span class="s2">&quot;req-0&quot;</span><span class="p">,</span> <span class="n">block_size</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">table</span><span class="o">.</span><span class="n">append_block</span><span class="p">(</span><span class="mi">7</span><span class="p">)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">table</span><span class="o">.</span><span class="n">append_block</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">capacity</span> <span class="o">==</span> <span class="mi">32</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">table</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span>              <span class="c1"># 写入 20 个 token</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">seq_len</span> <span class="o">==</span> <span class="mi">20</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">num_full_blocks</span> <span class="o">==</span> <span class="mi">1</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">last_block_offset</span> <span class="o">==</span> <span class="mi">4</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">position_to_block</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>     <span class="c1"># 第 1 个逻辑 block -&gt; 物理块 7</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">position_to_block</span><span class="p">(</span><span class="mi">15</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">15</span><span class="p">)</span>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">position_to_block</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>    <span class="c1"># 跨 block 边界 -&gt; 物理块 2</span>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">position_to_block</span><span class="p">(</span><span class="mi">19</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="_5">不做什么<a class="headerlink" href="#_5" title="锚点">#</a></h3>
+<ul>
+<li>不持有或读写 K/V tensor；tensor 属于 T3 <code>PagedKVCache</code>。</li>
+<li>不调用 <code>BlockPool</code>，也不持有它的引用。BlockTable 只记录"我被分到了哪些块"，块从哪来、何时归还由 T3 协调。</li>
+<li>不做 prefix hash、<code>token_ids</code> 记录、LRU 或 CoW；这些属于 M5。</li>
+<li>不耦合 <code>RequestState</code> / Sequence；<code>request_id</code> 只作为标识字符串。</li>
+<li>不感知 <code>num_blocks</code> 总量，因此无法校验物理块 id 的上界（见接口合同）。</li>
+</ul>
+<h3 id="_6">在推理链路中的位置<a class="headerlink" href="#_6" title="锚点">#</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>M3 RequestState / Scheduler
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>          |
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>          v
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>M4-T3 PagedKVCache          &lt;- 持有 tensor，协调下面两者
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>     |             |
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>     v             v
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>M4-T2 BlockTable   M4-T1 BlockPool ✅
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>逻辑位置映射       物理 block 分配
+</span></code></pre></div>
+<p>BlockTable 与 BlockPool 是<strong>平级</strong>的，互不依赖，都由 T3 组合使用。</p>
+<h3 id="block_id">block_id 是编号，不是地址<a class="headerlink" href="#block_id" title="锚点">#</a></h3>
+<p>一个容易误解的点：<code>block_id</code> 不是内存地址，也不是任何形式的指针。</p>
+<p>T1 <code>BlockPool</code> 里没有任何 tensor、指针或地址，全部数据只有 <code>Block(block_id=i)</code> 和 <code>deque(range(num_blocks))</code> —— 它就是一个"0 到 <code>num_blocks-1</code> 的编号池，附带每个编号的引用计数"。</p>
+<p>这里的 physical / logical 是<strong>两层索引之间的相对关系</strong>，不是"虚拟内存 vs 物理内存"那种硬件含义。<code>block_id</code> 之所以叫 physical，只因为它全局唯一、跨请求共享 —— 相对于每个请求各自从 0 开始编号的 logical block index 而言。</p>
+<p>完整的三层索引模型：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>逻辑层：请求视角的 token 位置     pos = 0 .. seq_len-1
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>              |  BlockTable 翻译（T2）
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>              v
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>物理层：全局共享的 block 编号     block_id = 0 .. num_blocks-1
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>              |  PagedKVCache 索引（T3）
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>              v
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>真实内存：tensor 第 0 维下标      k[block_id, offset, head, dim]
+</span></code></pre></div>
+<p>编号变成真实地址发生在 T3：<code>block_id</code> 用作 <code>k: [num_blocks, block_size, n_kv_heads, head_dim]</code> 的第 0 维下标，真正的地址由 PyTorch 按 stride 算出。BlockPool 和 BlockTable 都只管到第一步之前。</p>
+<p>这样分层有三个收益：</p>
+<ol>
+<li><strong>同一个 pool 服务所有层</strong>。Qwen3-0.6B 有 28 层，若 pool 管地址就要管 28×2 个 tensor。而 <code>block_id=5</code> 对 28 层都成立 —— 每层的 <code>k[5]</code> 是不同内存，但共用同一个编号，分配逻辑只需写一份。</li>
+<li><strong>与 device / dtype 解耦</strong>。CPU / MPS / CUDA、fp16 / bf16，映射代码完全不变，地址与对齐全归 PyTorch。</li>
+<li><strong>让 M5 的引用计数有意义</strong>。prefix caching 让两请求共享同一 <code>block_id</code>（<code>ref_count=2</code>），共享的是廉价整数，底层内存自然被共享，无需任何拷贝或地址运算。</li>
+</ol>
+<p>vLLM 是同构设计：其 <code>BlockPool</code> 同样只管 <code>block_id</code> 和 <code>ref_cnt</code>，真实 <code>kv_cache</code> tensor 由 worker 持有，<code>block_id</code> 最终展平成 <code>slot_mapping</code> 交给 kernel 做地址计算。</p>
+<p>对 T2 的直接影响：既然只处理编号，<code>BlockTable</code> 就不需要 import torch。如果实现时发现自己想 import，说明有逻辑串到 T3 去了。</p>
+<h3 id="_7">设计原则<a class="headerlink" href="#_7" title="锚点">#</a></h3>
+<ul>
+<li><strong>纯 Python，零依赖</strong>：不 import torch，不 import BlockPool。这让它可以被单独测试，也让"位置映射算错"和"tensor 写错"两类 bug 互不掩盖。</li>
+<li><strong>写入口收在类内部</strong>：<code>seq_len</code> 和 <code>block_ids</code> 的增长必须通过 <code>append_block()</code> / <code>extend()</code>，由类自己守住 <code>seq_len &lt;= capacity</code>。</li>
+<li><strong>区分 logical 与 physical</strong>：命名上严格区分逻辑 block 下标（<code>block_ids</code> 的索引）和物理 block id（<code>block_ids</code> 的值）。</li>
+</ul>
+<h2 id="_8">产出文件<a class="headerlink" href="#_8" title="锚点">#</a></h2>
+<ul>
+<li><code>inferlite/cache/paged_kv_cache.py::BlockTable</code></li>
+<li><code>tests/unit/test_block_table.py</code></li>
+</ul>
+<h2 id="_9">接口骨架<a class="headerlink" href="#_9" title="锚点">#</a></h2>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="nd">@dataclass</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">BlockTable</span><span class="p">:</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;单个请求的逻辑 block 到物理 block 的映射。&quot;&quot;&quot;</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">request_id</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="n">block_size</span><span class="p">:</span> <span class="nb">int</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="n">block_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>    <span class="n">seq_len</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>    <span class="c1"># ── 只读视图 ──</span>
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>    <span class="nd">@property</span>
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">num_blocks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>    <span class="nd">@property</span>
+</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">capacity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>    <span class="nd">@property</span>
+</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">num_full_blocks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-5-22"><a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>    <span class="nd">@property</span>
+</span><span id="__span-5-23"><a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">last_block_offset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-5-24"><a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>
+</span><span id="__span-5-25"><a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a>    <span class="c1"># ── 查询 ──</span>
+</span><span id="__span-5-26"><a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">needs_new_block</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-5-27"><a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">position_to_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span> <span class="o">...</span>
+</span><span id="__span-5-28"><a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a>
+</span><span id="__span-5-29"><a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a>    <span class="c1"># ── 受控写入口 ──</span>
+</span><span id="__span-5-30"><a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">append_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">physical_block_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-5-31"><a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_tokens</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span></code></pre></div>
+<p>相对早期草稿的三处实质变更：</p>
+<table>
+<thead>
+<tr>
+<th>变更</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>block_size</code> 去掉默认值 <code>16</code></td>
+<td>T1 <code>BlockPool</code> 已持有 <code>block_size</code>。两处各带默认值，早晚会出现一边 16、一边 32 的不一致，且这种不一致表现为静默的位置错乱。强制由构造方传入</td>
+</tr>
+<tr>
+<td>新增 <code>capacity</code></td>
+<td>把 <code>len(block_ids) * block_size</code> 命名化，作为 <code>seq_len</code> 上界的单一事实来源，避免这个表达式散落在 <code>needs_new_block</code> / <code>extend</code> / T3 各处</td>
+</tr>
+<tr>
+<td>新增 <code>append_block()</code> / <code>extend()</code></td>
+<td>草稿里没有任何写方法，意味着 T3 的 <code>may_append_block()</code> 只能裸改 <code>block_ids.append(...)</code> 和 <code>seq_len += 1</code>，<code>seq_len &lt;= capacity</code> 无人保证。一旦越界，<code>position_to_block</code> 会返回<strong>别的请求</strong>的物理块，KV 被静默覆盖 —— 这类 bug 比抛异常难查一个数量级</td>
+</tr>
+</tbody>
+</table>
+<p><code>block_ids</code> 必须用 <code>field(default_factory=list)</code>。写成 <code>block_ids: list[int] = []</code> 会让所有 BlockTable 实例共享同一个列表对象，多请求隔离直接失效。</p>
+<p>M4 的 <code>BlockTable</code> 不预埋 <code>block_hashes</code> / <code>token_ids</code> 字段。M5 做 prefix caching 时再新增。</p>
+<h2 id="blockpool">与 BlockPool 的关系<a class="headerlink" href="#blockpool" title="锚点">#</a></h2>
+<p>这一节回答两个容易混淆的问题：两个类各自负责什么，以及为什么它们在代码层面没有依赖。</p>
+<h3 id="_10">职责切分<a class="headerlink" href="#_10" title="锚点">#</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>BlockPool（T1）</th>
+<th>BlockTable（T2）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数量</td>
+<td>全局 <strong>1 个</strong></td>
+<td>每个请求 <strong>1 个</strong></td>
+</tr>
+<tr>
+<td>回答的问题</td>
+<td>哪些块空闲？这块被几个人用着？</td>
+<td>我这个请求的第 pos 个 token 在哪块的哪个位置？</td>
+</tr>
+<tr>
+<td>核心数据</td>
+<td><code>free_block_ids</code>、<code>ref_count</code></td>
+<td><code>block_ids</code>（有序）、<code>seq_len</code></td>
+</tr>
+<tr>
+<td>视角</td>
+<td>全局资源账本（集合语义）</td>
+<td>单请求顺序记录（<strong>序列语义</strong>）</td>
+</tr>
+</tbody>
+</table>
+<p>一句话概括：<strong>BlockPool 决定块归谁，BlockTable 决定块的顺序。</strong></p>
+<p><code>block_ids</code> 是 list 而不是 set，这是本质区别 —— 顺序本身就是信息。<code>block_ids=[7, 2]</code> 和 <code>[2, 7]</code> 对 BlockPool 完全等价（都是"7 和 2 被占用"），但对 BlockTable 是两个不同的序列：token 0 分别落在物理块 7 和物理块 2。</p>
+<h3 id="_11">代码层面没有依赖<a class="headerlink" href="#_11" title="锚点">#</a></h3>
+<p>T2 不 import <code>BlockPool</code>、不持有它的引用、不调用它的任何方法。两者平级，由 T3 组合：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>        M4-T3 PagedKVCache        &lt;- 唯一同时认识两者的人
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>        +--------+--------+
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>        v                 v
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>  BlockTable          BlockPool
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>（每请求一个）        （全局一个）
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>        +---  互不认识  ---+
+</span></code></pre></div>
+<p>协作不通过直接调用，而是通过 <code>block_id</code> 这个整数，T3 做中间人。以下是 T3 的伪代码示意（<strong>下周 T3 的内容，T2 不实现</strong>）：</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># prefill：向 pool 要块，把编号交给 table</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">allocate_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request_id</span><span class="p">,</span> <span class="n">prompt_len</span><span class="p">):</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">num_needed</span> <span class="o">=</span> <span class="n">ceil</span><span class="p">(</span><span class="n">prompt_len</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span><span class="p">)</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_pool</span><span class="o">.</span><span class="n">can_allocate</span><span class="p">(</span><span class="n">num_needed</span><span class="p">):</span>    <span class="c1"># 问 pool 够不够</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>        <span class="k">raise</span> <span class="o">...</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">table</span> <span class="o">=</span> <span class="n">BlockTable</span><span class="p">(</span><span class="n">request_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span><span class="p">)</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_needed</span><span class="p">):</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>        <span class="n">table</span><span class="o">.</span><span class="n">append_block</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">block_pool</span><span class="o">.</span><span class="n">allocate</span><span class="p">())</span>  <span class="c1"># pool 发号，table 记顺序</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="n">table</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">prompt_len</span><span class="p">)</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="c1"># decode：需要时补一块</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="k">def</span><span class="w"> </span><span class="nf">may_append_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request_id</span><span class="p">):</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>    <span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_tables</span><span class="p">[</span><span class="n">request_id</span><span class="p">]</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>    <span class="k">if</span> <span class="n">table</span><span class="o">.</span><span class="n">needs_new_block</span><span class="p">():</span>                         <span class="c1"># table 说不够了</span>
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>        <span class="n">table</span><span class="o">.</span><span class="n">append_block</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">block_pool</span><span class="o">.</span><span class="n">allocate</span><span class="p">())</span>  <span class="c1"># 再去 pool 要</span>
+</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>    <span class="n">table</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>
+</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a><span class="c1"># 释放：table 把编号还给 pool</span>
+</span><span id="__span-7-19"><a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a><span class="k">def</span><span class="w"> </span><span class="nf">free_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request_id</span><span class="p">):</span>
+</span><span id="__span-7-20"><a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>    <span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_tables</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">request_id</span><span class="p">)</span>
+</span><span id="__span-7-21"><a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>    <span class="k">for</span> <span class="n">block_id</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">block_ids</span><span class="p">:</span>
+</span><span id="__span-7-22"><a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">block_pool</span><span class="o">.</span><span class="n">free</span><span class="p">(</span><span class="n">block_id</span><span class="p">)</span>
+</span><span id="__span-7-23"><a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a>
+</span><span id="__span-7-24"><a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a><span class="c1"># 读写：table 翻译位置，编号当 tensor 下标</span>
+</span><span id="__span-7-25"><a id="__codelineno-7-25" name="__codelineno-7-25" href="#__codelineno-7-25"></a><span class="k">def</span><span class="w"> </span><span class="nf">write_decode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">layer_idx</span><span class="p">,</span> <span class="n">request_id</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span>
+</span><span id="__span-7-26"><a id="__codelineno-7-26" name="__codelineno-7-26" href="#__codelineno-7-26"></a>    <span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_tables</span><span class="p">[</span><span class="n">request_id</span><span class="p">]</span>
+</span><span id="__span-7-27"><a id="__codelineno-7-27" name="__codelineno-7-27" href="#__codelineno-7-27"></a>    <span class="n">block_id</span><span class="p">,</span> <span class="n">offset</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">position_to_block</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">seq_len</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-7-28"><a id="__codelineno-7-28" name="__codelineno-7-28" href="#__codelineno-7-28"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">layers</span><span class="p">[</span><span class="n">layer_idx</span><span class="p">]</span><span class="o">.</span><span class="n">k</span><span class="p">[</span><span class="n">block_id</span><span class="p">,</span> <span class="n">offset</span><span class="p">]</span> <span class="o">=</span> <span class="n">k</span>
+</span></code></pre></div>
+<p>信息始终单向流动：<code>pool.allocate()</code> 产出编号 → <code>table.append_block()</code> 消费编号；释放时 <code>table.block_ids</code> 提供编号 → <code>pool.free()</code> 消费编号。两边都只碰整数。</p>
+<h3 id="blocktable-blockpool">为什么刻意不让 BlockTable 依赖 BlockPool<a class="headerlink" href="#blocktable-blockpool" title="锚点">#</a></h3>
+<p>这是设计决定，不是简化：</p>
+<ol>
+<li><strong>两个关注点可独立演进</strong>。M5 要给 pool 加 prefix hash 查找和 LRU 淘汰队列，pool 会复杂很多，而 BlockTable 的映射逻辑一行都不用改。</li>
+<li><strong>分配失败的处理归上层</strong>。若 table 自己去 pool 要块，"块不够了"就会在 table 内部抛出。但此时该抢占别的请求还是把当前请求踢回等待队列，是<strong>调度决策</strong>，BlockTable 无从判断。所以要块必须由能做决策的 T3/T5 发起。</li>
+<li><strong>可独立测试</strong>。T2 的单测直接构造 <code>block_ids=[7, 2, 5]</code> 即可，不需要真实分配、不需要 pool、不需要 torch。"映射算错"和"分配算错"两类 bug 互不掩盖。</li>
+<li><strong>避免双向引用</strong>。若 table 持有 pool，很容易演化成 table 析构时自动 <code>free</code>；而 M5 又需要 pool 知道哪些 table 引用了某块 —— 双向依赖一旦成型就很难拆。</li>
+</ol>
+<h3 id="_12">走查示例：物理块复用<a class="headerlink" href="#_12" title="锚点">#</a></h3>
+<p><code>block_size=4</code>、pool 共 3 块、两个请求 A / B：</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>初始       pool: free=[0,1,2]  ref=[0,0,0]
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>A 到达，prompt_len=6，需 2 块
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>           pool.allocate() -&gt; 0      free=[1,2]  ref=[1,0,0]
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>           pool.allocate() -&gt; 1      free=[2]    ref=[1,1,0]
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>           A.block_ids=[0,1]  A.seq_len=6
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>B 到达，prompt_len=3，需 1 块
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>           pool.allocate() -&gt; 2      free=[]     ref=[1,1,1]
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>           B.block_ids=[2]    B.seq_len=3
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>此时映射互不干扰：
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>  A.position_to_block(5) == (1, 1)   A 的第 6 个 token 在物理块 1 的 offset 1
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>  B.position_to_block(2) == (2, 2)   B 的第 3 个 token 在物理块 2 的 offset 2
+</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>
+</span><span id="__span-8-16"><a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>A 结束释放
+</span><span id="__span-8-17"><a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>           pool.free(0); pool.free(1)   free=[0,1]  ref=[0,0,1]
+</span><span id="__span-8-18"><a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a>
+</span><span id="__span-8-19"><a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a>B decode，seq_len 3 -&gt; 4，恰好写满
+</span><span id="__span-8-20"><a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a>           B.needs_new_block() -&gt; True  （seq_len 4 &gt;= capacity 4）
+</span><span id="__span-8-21"><a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a>           pool.allocate() -&gt; 0         &lt;- 复用了 A 用过的块
+</span><span id="__span-8-22"><a id="__codelineno-8-22" name="__codelineno-8-22" href="#__codelineno-8-22"></a>           B.block_ids=[2,0]
+</span><span id="__span-8-23"><a id="__codelineno-8-23" name="__codelineno-8-23" href="#__codelineno-8-23"></a>  B.position_to_block(4) == (0, 0)
+</span></code></pre></div>
+<p>关键观察：B 最终的 <code>block_ids=[2, 0]</code> 逻辑上连续，物理编号却是倒序的。这正是 PagedAttention 消除内存碎片的机制，而实现它只需要"pool 管账本 + table 管顺序"这两个各自都很简单的部件。</p>
+<p>对比 M3 <code>SlotManager</code>：它给每个请求预留一整段 <code>max_seq_len</code>，A 释放的空间只能整段复用。B 写到第 5 个 token 时若自己那段已满，没有任何办法借用 A 腾出的空间。</p>
+<h2 id="_13">接口合同<a class="headerlink" href="#_13" title="锚点">#</a></h2>
+<h3 id="__post_init__-none"><code>__post_init__() -&gt; None</code><a class="headerlink" href="#__post_init__-none" title="锚点">#</a></h3>
+<p>dataclass 的校验入口，负责拒绝构造出的非法初始状态：</p>
+<ul>
+<li><code>block_size &lt;= 0</code> 时 <code>raise ValueError</code>。</li>
+<li><code>seq_len &lt; 0</code> 时 <code>raise ValueError</code>。</li>
+<li><code>seq_len &gt; capacity</code> 时 <code>raise ValueError</code>（声称已有的 token 数超过已分配容量）。</li>
+<li><code>block_ids</code> 中存在负数时 <code>raise ValueError</code>（理由见 <code>append_block</code>）。</li>
+</ul>
+<h3 id="num_blocks-intproperty"><code>num_blocks -&gt; int</code>（property）<a class="headerlink" href="#num_blocks-intproperty" title="锚点">#</a></h3>
+<ul>
+<li>返回 <code>len(block_ids)</code>，即当前持有的物理 block 数。</li>
+<li>注意这是"已分配的块数"，不是"已写满的块数"，后者是 <code>num_full_blocks</code>。</li>
+</ul>
+<h3 id="capacity-intproperty"><code>capacity -&gt; int</code>（property）<a class="headerlink" href="#capacity-intproperty" title="锚点">#</a></h3>
+<ul>
+<li>返回 <code>len(block_ids) * block_size</code>，即当前已分配空间能容纳的 token 上限。</li>
+<li><code>seq_len</code> 的合法上界，也是 <code>needs_new_block()</code> 的判据。</li>
+</ul>
+<h3 id="num_full_blocks-intproperty"><code>num_full_blocks -&gt; int</code>（property）<a class="headerlink" href="#num_full_blocks-intproperty" title="锚点">#</a></h3>
+<ul>
+<li>返回 <code>seq_len // block_size</code>，已被写满的 block 数。</li>
+<li><code>seq_len == 0</code> 时为 0；<code>seq_len == block_size</code> 时为 1。</li>
+</ul>
+<h3 id="last_block_offset-intproperty"><code>last_block_offset -&gt; int</code>（property）<a class="headerlink" href="#last_block_offset-intproperty" title="锚点">#</a></h3>
+<ul>
+<li>返回 <code>seq_len % block_size</code>，最后一个 block 中已用的 token 数。</li>
+<li>恰好写满时返回 0，而不是 <code>block_size</code>。这一点容易在 T3 写入时误用，需要配合 <code>needs_new_block()</code> 判断。</li>
+</ul>
+<h3 id="needs_new_block-bool"><code>needs_new_block() -&gt; bool</code><a class="headerlink" href="#needs_new_block-bool" title="锚点">#</a></h3>
+<ul>
+<li>语义：<strong>再追加 1 个 token 之前，是否需要先分配新 block</strong>。</li>
+<li>实现：<code>return self.seq_len &gt;= self.capacity</code>。</li>
+<li><code>block_ids</code> 为空（<code>capacity == 0</code>）时返回 <code>True</code>，覆盖"请求刚创建、还没拿到任何块"的初始状态。</li>
+</ul>
+<p>早期草稿写的是 <code>seq_len % block_size == 0 and seq_len &gt; 0</code>，改掉的原因：那个式子只在"seq_len 恰好等于 capacity"时才与真实需求一致。当 prefill 一次性分配了 2 个块但只写了 20 个 token 时（<code>seq_len=20</code>、<code>capacity=32</code>），<code>20 % 16 != 0</code> 碰巧返回 False，看起来对；但若 <code>seq_len=32</code>、<code>capacity=48</code>（预分配了富余块），旧式子返回 True，会让 T3 多分配一个完全不需要的块。直接比较 <code>seq_len</code> 与 <code>capacity</code> 对所有中间状态都成立。</p>
+<h3 id="position_to_blockpos-int-tupleint-int"><code>position_to_block(pos: int) -&gt; tuple[int, int]</code><a class="headerlink" href="#position_to_blockpos-int-tupleint-int" title="锚点">#</a></h3>
+<ul>
+<li>逻辑位置 → <code>(physical_block_id, block_offset)</code>。</li>
+<li>定义域为 <code>[0, seq_len)</code>：</li>
+<li><code>pos &lt; 0</code> 时 <code>raise ValueError</code>。<strong>必须显式拒绝</strong>，否则 <code>block_ids[-1]</code> 会静默返回最后一个物理块，和 T1 的 <code>block_id=-1</code> 是同一类坑。</li>
+<li><code>pos &gt;= seq_len</code> 时 <code>raise ValueError</code>。读未写入的位置在 T3 里会取到 <code>torch.empty</code> 的未初始化内存，可能含 NaN（参见 <code>lessons.md</code> L5）。</li>
+<li>计算：</li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">logical_block</span> <span class="o">=</span> <span class="n">pos</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">block_offset</span> <span class="o">=</span> <span class="n">pos</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_size</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="k">assert</span> <span class="n">logical_block</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">block_ids</span><span class="p">)</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">block_ids</span><span class="p">[</span><span class="n">logical_block</span><span class="p">],</span> <span class="n">block_offset</span>
+</span></code></pre></div>
+<ul>
+<li><code>logical_block &gt;= len(block_ids)</code> 用 <code>assert</code>：因为 <code>pos &lt; seq_len &lt;= capacity</code> 已经保证它不成立，触发就说明不变量被破坏了，属于代码 bug 而非调用方错误。这与 T1 的分层一致 —— 调用方可能触发的用显式异常，仅 bug 才触发的用 assert。</li>
+</ul>
+<h3 id="append_blockphysical_block_id-int-none"><code>append_block(physical_block_id: int) -&gt; None</code><a class="headerlink" href="#append_blockphysical_block_id-int-none" title="锚点">#</a></h3>
+<ul>
+<li>把一个物理 block 追加到 <code>block_ids</code> 末尾，<code>capacity</code> 相应增加 <code>block_size</code>。</li>
+<li><strong>不改动 <code>seq_len</code></strong>。分配空间和写入 token 是两件事，分开才能表达"已分配但未写满"。</li>
+<li><code>physical_block_id &lt; 0</code> 时 <code>raise ValueError</code>。</li>
+<li>不校验上界：BlockTable 不知道 <code>num_blocks</code>，<code>physical_block_id &lt; num_blocks</code> 由 <code>BlockPool</code> 在分配时保证。这个职责边界要在注释里写清，否则后面容易误加一个拿不到正确总量的假校验。</li>
+</ul>
+<h3 id="extendnum_tokens-int-none"><code>extend(num_tokens: int) -&gt; None</code><a class="headerlink" href="#extendnum_tokens-int-none" title="锚点">#</a></h3>
+<ul>
+<li>声明已写入 <code>num_tokens</code> 个 token，<code>seq_len += num_tokens</code>。</li>
+<li><code>num_tokens &lt; 0</code> 时 <code>raise ValueError</code>。</li>
+<li><code>num_tokens == 0</code> 是合法 no-op（prefill 空 prompt 等边界）。</li>
+<li><code>seq_len + num_tokens &gt; capacity</code> 时 <code>raise RuntimeError</code>：容量不足说明调用方没有先 <code>append_block()</code>，是可预期的调用顺序错误，与 T1 <code>allocate()</code> 耗尽时抛 <code>RuntimeError</code> 的风格一致。</li>
+<li>prefill 用 <code>extend(prompt_len)</code>，decode 用 <code>extend(1)</code>。</li>
+</ul>
+<h2 id="_14">算法核心与不变量<a class="headerlink" href="#_14" title="锚点">#</a></h2>
+<h3 id="_15">位置映射<a class="headerlink" href="#_15" title="锚点">#</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>logical_block  = pos // block_size          # 第几个逻辑块
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>block_offset   = pos % block_size           # 块内第几个 token
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>physical_block = block_ids[logical_block]   # 查表得到物理块
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>结果           = (physical_block, block_offset)
+</span></code></pre></div>
+<p><code>block_size</code> 通常取 2 的幂（16 / 32），除法和取模都很便宜。这里不做位运算优化 —— 可读性优先，且这不是热点。</p>
+<h3 id="_16">状态不变量<a class="headerlink" href="#_16" title="锚点">#</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>0 &lt;= seq_len &lt;= capacity == len(block_ids) * block_size
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>position_to_block 的合法定义域为 [0, seq_len)
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>num_full_blocks * block_size + last_block_offset == seq_len
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>所有 block_ids 元素 &gt;= 0
+</span></code></pre></div>
+<ul>
+<li><code>append_block()</code> 只增 <code>capacity</code>，不动 <code>seq_len</code>。</li>
+<li><code>extend()</code> 只增 <code>seq_len</code>，且不得越过 <code>capacity</code>。</li>
+<li>两个写入口共同维持 <code>seq_len &lt;= capacity</code>，这是整个类存在的意义。</li>
+</ul>
+<h2 id="_17">实现步骤<a class="headerlink" href="#_17" title="锚点">#</a></h2>
+<ol>
+<li>在 <code>inferlite/cache/paged_kv_cache.py</code> 新建文件，写文件级 docstring 说明本文件承载 T2 BlockTable 与 T3 PagedKVCache。</li>
+<li>定义 <code>BlockTable</code> dataclass 及四个字段，注意 <code>field(default_factory=list)</code>。</li>
+<li>实现 <code>__post_init__</code> 的构造校验。</li>
+<li>实现 <code>num_blocks</code> / <code>capacity</code> / <code>num_full_blocks</code> / <code>last_block_offset</code> 四个 property。</li>
+<li>实现 <code>needs_new_block()</code>，用 <code>seq_len &gt;= capacity</code>。</li>
+<li>实现 <code>position_to_block()</code>，先校验定义域再做除法取模。</li>
+<li>实现 <code>append_block()</code> / <code>extend()</code>，守住容量不变量。</li>
+<li>在 <code>inferlite/cache/__init__.py</code> 导出 <code>BlockTable</code>。</li>
+<li>运行 T2 单测，再跑全量回归。</li>
+</ol>
+<h2 id="_18">复杂度<a class="headerlink" href="#_18" title="锚点">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th style="text-align: right;">时间复杂度</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>position_to_block()</code></td>
+<td style="text-align: right;">O(1)</td>
+<td>一次整除 + 一次取模 + 一次 list 索引</td>
+</tr>
+<tr>
+<td><code>append_block()</code></td>
+<td style="text-align: right;">O(1) 均摊</td>
+<td><code>list.append</code></td>
+</tr>
+<tr>
+<td><code>extend()</code></td>
+<td style="text-align: right;">O(1)</td>
+<td>整数加法</td>
+</tr>
+<tr>
+<td>四个 property</td>
+<td style="text-align: right;">O(1)</td>
+<td><code>len()</code> 与算术</td>
+</tr>
+</tbody>
+</table>
+<p>BlockTable 的所有操作都是 O(1)，这是 PagedAttention 能做到低开销间接寻址的前提。</p>
+<h2 id="vllm">与 vLLM 系实现的关系<a class="headerlink" href="#vllm" title="锚点">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>实现</th>
+<th>对应能力</th>
+<th>inferlite M4-T2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>vLLM V1 <code>req_to_blocks</code> / <code>KVCacheBlocks</code></td>
+<td>请求到物理块列表的映射</td>
+<td><code>BlockTable.block_ids</code></td>
+</tr>
+<tr>
+<td>vLLM <code>BlockTable.append_row()</code></td>
+<td>追加物理块到请求的表</td>
+<td><code>append_block()</code>（单块教学版）</td>
+</tr>
+<tr>
+<td>vLLM slot mapping 计算</td>
+<td>逻辑位置 → 物理槽位，喂给 kernel</td>
+<td><code>position_to_block()</code>（返回二元组而非扁平 slot）</td>
+</tr>
+<tr>
+<td>vLLM <code>num_computed_tokens</code></td>
+<td>已计算 token 数</td>
+<td><code>seq_len</code></td>
+</tr>
+<tr>
+<td>nano-vLLM <code>Sequence.block_table</code></td>
+<td>请求持有的块列表</td>
+<td>同能力，但独立成类而非挂在 Sequence 上</td>
+</tr>
+<tr>
+<td>vLLM <code>block_hashes</code> / prefix 复用</td>
+<td>前缀缓存</td>
+<td>M5，T2 不预埋字段</td>
+</tr>
+</tbody>
+</table>
+<p>一个差异值得注意：生产实现通常把 block table 组织成 <code>[max_num_reqs, max_num_blocks]</code> 的 GPU tensor，一次性喂给 kernel；inferlite 用 per-request 的 Python 对象，牺牲性能换可读性。T4 做 PyTorch gather 伪版时会体现这个取舍。</p>
+<h2 id="l0">L0 测试清单<a class="headerlink" href="#l0" title="锚点">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>测什么</th>
+<th>预期</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>构造与初始状态</td>
+<td><code>seq_len=0</code>、<code>capacity=0</code>、<code>num_blocks=0</code>，<code>needs_new_block()</code> 为 True</td>
+</tr>
+<tr>
+<td>2</td>
+<td>边界映射</td>
+<td><code>block_ids=[5,9]</code> 时 pos 0/15/16/31 映射到 <code>(5,0)/(5,15)/(9,0)/(9,15)</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>非连续物理块</td>
+<td>物理块乱序（如 <code>[7,2,5]</code>）时仍按逻辑顺序翻译</td>
+</tr>
+<tr>
+<td>4</td>
+<td>full_blocks / last_offset</td>
+<td><code>seq_len=0/1/16/17</code> 取值正确，且满足恒等式</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>needs_new_block</code></td>
+<td>写满后为 True，<code>append_block</code> 后变 False</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>extend</code> 容量守卫</td>
+<td>超出 <code>capacity</code> 抛 <code>RuntimeError</code>；<code>extend(0)</code> 为 no-op；负数抛 <code>ValueError</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>position_to_block</code> 定义域</td>
+<td><code>pos=-1</code> 与 <code>pos=seq_len</code> 抛 <code>ValueError</code></td>
+</tr>
+<tr>
+<td>8</td>
+<td>构造参数</td>
+<td><code>block_size&lt;=0</code>、<code>seq_len&lt;0</code>、<code>seq_len&gt;capacity</code>、负 <code>block_ids</code> 抛 <code>ValueError</code></td>
+</tr>
+<tr>
+<td>9</td>
+<td>多请求隔离</td>
+<td>两个 BlockTable 各自 <code>append_block</code>/<code>extend</code> 互不影响</td>
+</tr>
+</tbody>
+</table>
+<p>实现时 L0-5 拆成了两个用例：「写满需要新块」与「预分配富余块不得误判」方向相反，混在同一函数里失败时无法区分是哪个方向错。因此最终为 10 个测试函数。</p>
+<h3 id="_19">测试命令<a class="headerlink" href="#_19" title="锚点">#</a></h3>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/test_block_table.py<span class="w"> </span>-q
+</span></code></pre></div>
+<details>
+<summary>展开查看测试场景细节</summary>
+
+### L0-1 构造与初始状态
+
+- `BlockTable(request_id="req-0", block_size=16)`。
+- `block_ids == []`、`seq_len == 0`、`num_blocks == 0`、`capacity == 0`。
+- `num_full_blocks == 0`、`last_block_offset == 0`。
+- `needs_new_block() is True` —— 覆盖"还没拿到任何块"的初始状态，这是旧 `seq_len % block_size == 0 and seq_len > 0` 式子会答错的场景。
+
+### L0-2 跨 block 边界映射
+
+- `block_size=16`、`block_ids=[5, 9]`、`extend(32)`。
+- `position_to_block(0) == (5, 0)`。
+- `position_to_block(15) == (5, 15)` —— 第一个块的最后一个位置。
+- `position_to_block(16) == (9, 0)` —— 跨越边界，切到第二个物理块。
+- `position_to_block(31) == (9, 15)`。
+
+### L0-3 非连续物理块
+
+- `block_ids=[7, 2, 5]`（模拟 pool 乱序分配），`extend(48)`。
+- `position_to_block(0) == (7, 0)`、`position_to_block(16) == (2, 0)`、`position_to_block(32) == (5, 0)`。
+- 锁定的合同：逻辑顺序由 `block_ids` 的**下标**决定，与物理 id 的大小无关。这是 PagedAttention 允许物理碎片的关键。
+
+### L0-4 num_full_blocks 与 last_block_offset
+
+- `block_size=16`、`block_ids=[0, 1]`。
+- `seq_len=0` → `(0, 0)`。
+- `seq_len=1` → `(0, 1)`。
+- `seq_len=16` → `(1, 0)` —— 恰好写满时 offset 回 0，不是 16。
+- `seq_len=17` → `(1, 1)`。
+- 每种情况都断言 `num_full_blocks * block_size + last_block_offset == seq_len`。
+
+### L0-5 needs_new_block 状态转换
+
+- `block_size=4`、`append_block(0)`，`capacity=4`。
+- `extend(3)` 后 `needs_new_block() is False`（还差 1 个位置）。
+- `extend(1)` 后 `seq_len == capacity == 4`，`needs_new_block() is True`。
+- `append_block(1)` 后 `capacity=8`，`needs_new_block()` 回到 False。
+
+### L0-6 extend 容量守卫
+
+- `block_size=4`、单个块，`capacity=4`。
+- `extend(5)` raise RuntimeError，且**失败后 `seq_len` 不变**（不能留下半改状态）。
+- `extend(4)` 成功，`seq_len == 4`。
+- `extend(0)` 后 `seq_len` 仍为 4。
+- `extend(-1)` raise ValueError。
+
+### L0-7 position_to_block 定义域
+
+- `block_size=16`、`block_ids=[0, 1]`、`extend(20)`。
+- `position_to_block(-1)` raise ValueError —— 若不校验，`block_ids[-1]` 会静默返回物理块 1。
+- `position_to_block(20)` raise ValueError（等于 `seq_len`，尚未写入）。
+- `position_to_block(19)` 正常返回。
+
+### L0-8 构造参数校验
+
+- `block_size=0` / `block_size=-1` raise ValueError。
+- `seq_len=-1` raise ValueError。
+- `block_ids=[0]`、`block_size=16`、`seq_len=17` raise ValueError（超出 capacity）。
+- `block_ids=[-1]` raise ValueError。
+
+### L0-9 多请求隔离
+
+- 两个 BlockTable `req-0` / `req-1`，同一 `block_size`。
+- 各自 `append_block` 不同物理块并 `extend`。
+- 断言两者 `block_ids`、`seq_len` 与映射结果互不影响 —— 这条同时防住 dataclass 可变默认值共享列表的经典错误。
+
+</details>
+
+<h2 id="dod">DoD<a class="headerlink" href="#dod" title="锚点">#</a></h2>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> <code>BlockTable</code> 实现与任务卡接口合同一致。</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> <code>uv run pytest tests/unit/test_block_table.py -q</code> 全绿（10 passed）。</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> <code>uv run pytest tests/ -q</code> 全量回归通过（227 passed）。</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> 满足不变量 <code>0 &lt;= seq_len &lt;= capacity</code>，且写入口是唯一修改途径（约定，已写入类 docstring）。</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> 调用方可能触发的错误用显式 <code>ValueError</code> / <code>RuntimeError</code>；仅内部不变量用 <code>assert</code>。</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> 不 import torch，不依赖 <code>BlockPool</code> / attention / model。</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> 不修改 M3 <code>BatchedKVCache</code>。</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> 不含 prefix hash / <code>token_ids</code> / LRU / CoW 字段（留 M5）。</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> 实现与测试文件均补齐详细注释（README 提交门禁）。</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> 末尾追加 <code>## 完成总结</code> 与 commit 号。</li>
+</ul>
+<h2 id="_20">坑（按概率排序）<a class="headerlink" href="#_20" title="锚点">#</a></h2>
+<ol>
+<li><strong>负数 <code>pos</code> 被当作反向索引</strong>：<code>block_ids[-1]</code> 静默返回最后一个物理块，读到完全无关的 KV。所有位置入口先做显式定义域校验。</li>
+<li><strong><code>seq_len</code> 越过 <code>capacity</code></strong>：<code>position_to_block</code> 会索引到超出 <code>block_ids</code> 范围，或在预分配富余时写进相邻请求的物理块。后者是静默数据损坏，不会报错，只会让输出慢慢变得莫名其妙。必须由 <code>extend()</code> 守住。</li>
+<li><strong>dataclass 可变默认值</strong>：<code>block_ids: list[int] = []</code> 让所有实例共享同一列表，多请求彼此串数据。必须用 <code>field(default_factory=list)</code>。</li>
+<li><strong>混淆 logical index 与 physical id</strong>：<code>block_ids[2]</code> 是"第 3 个逻辑块的物理 id"，不是"物理块 2"。命名和注释都要显式区分。</li>
+<li><strong><code>last_block_offset</code> 在写满时返回 0</strong>：误当成"最后一块还剩 0 个位置可用"就会漏分配。判断是否需要新块只用 <code>needs_new_block()</code>。</li>
+<li><strong>给 <code>append_block</code> 加假的上界校验</strong>：BlockTable 拿不到 <code>num_blocks</code>，任何自造上界都是错的。这不是遗漏，而是"不依赖 BlockPool"这一设计的直接后果 —— 上界由 <code>BlockPool.allocate()</code> 在发号时保证，它才是知道总量的那一方。</li>
+<li><strong>提前实现 M5</strong>：不加 hash、<code>token_ids</code>、LRU 或 CoW。</li>
+</ol>
+<h2 id="_21">完成总结<a class="headerlink" href="#_21" title="锚点">#</a></h2>
+<p>M4-T2 已完成逻辑位置到物理 block 的映射层：</p>
+<ul>
+<li><code>BlockTable</code> 保存 <code>request_id</code> / <code>block_size</code> / <code>block_ids</code> / <code>seq_len</code> 四个字段，纯 Python 实现，不 import torch、不依赖 <code>BlockPool</code>。</li>
+<li>四个只读 property（<code>num_blocks</code> / <code>capacity</code> / <code>num_full_blocks</code> / <code>last_block_offset</code>）全部实时派生，避免与 <code>block_ids</code>、<code>seq_len</code> 出现「两份事实」。</li>
+<li><code>position_to_block()</code> 先校验定义域 <code>[0, seq_len)</code> 再做除法取模，显式拒绝负数以避免 Python 反向索引静默返回错误物理块。</li>
+<li><code>append_block()</code> 只增 <code>capacity</code>，<code>extend()</code> 只增 <code>seq_len</code>，两者共同守住 <code>seq_len &lt;= capacity</code>。</li>
+<li>异常分层与 T1 一致：全部对外契约用显式 <code>ValueError</code> / <code>RuntimeError</code>，仅 <code>position_to_block()</code> 中 <code>logical_block &lt; num_blocks</code> 这一条内部不变量使用 <code>assert</code>。</li>
+</ul>
+<h3 id="_22">实现期间修正的设计问题<a class="headerlink" href="#_22" title="锚点">#</a></h3>
+<ol>
+<li><strong><code>needs_new_block()</code> 语义</strong>：草稿的 <code>seq_len % block_size == 0 and seq_len &gt; 0</code> 有两个错误场景 —— <code>capacity == 0</code>（刚创建）时漏判为 False，导致上层不分配首块；预分配富余块（<code>seq_len=32</code>、<code>capacity=48</code>）时误判为 True，导致上层白白多要一块。改为直接比较 <code>seq_len &gt;= capacity</code> 后对所有中间状态都成立。</li>
+<li><strong><code>__post_init__</code> 的比较符</strong>：<code>seq_len &lt; capacity</code> 会让「正好写满」无法构造，且默认构造（<code>seq_len=0</code>、<code>capacity=0</code>）直接失败。修正为 <code>seq_len &gt; capacity</code> 才报错。</li>
+<li><strong>assert 与 raise 混用</strong>：初版把四条构造校验全写成 <code>assert</code>，<code>python -O</code> 下会整条移除，使校验在生产环境静默失效，且抛出的 <code>AssertionError</code> 与合同约定的 <code>ValueError</code> 不符。已全部改为显式异常。</li>
+<li><strong><code>extend()</code> 的异常类型</strong>：初版用 <code>NotImplementedError</code>（语义是「功能未实现」，会被误读为 TODO），改为 <code>RuntimeError</code>，与 T1 <code>BlockPool.allocate()</code> 耗尽时保持一致。</li>
+<li><strong><code>last_block_capacity</code> 更名</strong>：<code>seq_len % block_size</code> 是「最后一块已用多少」，命名含 capacity 容易被理解成「还能放多少」，T3 写入时用反会很难查。已改为 <code>last_block_offset</code>。</li>
+</ol>
+<h3 id="_23">关于字段可写性的取舍<a class="headerlink" href="#_23" title="锚点">#</a></h3>
+<p><code>seq_len</code> 和 <code>block_ids</code> 保持为普通 dataclass 字段，未做私有化（<code>_seq_len</code> + 只读 property）。这意味着外部仍可绕过写入口直接赋值破坏不变量。选择保持现状的理由：</p>
+<ul>
+<li>T3 是唯一调用方，教学项目中可读性优先于强封装。</li>
+<li>测试需要直接构造 <code>block_ids=[7, 2, 5]</code> 来验证乱序映射（L0-3），加下划线前缀会让测试变得别扭。</li>
+<li>vLLM 同样直接暴露 <code>req_to_blocks</code> 等结构。</li>
+</ul>
+<p>该约定已写入类 docstring，明确「应只通过 <code>extend()</code> / <code>append_block()</code> 修改」。</p>
+<h3 id="2026-07-28">验证结果（2026-07-28）<a class="headerlink" href="#2026-07-28" title="锚点">#</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>ruff format + ruff check inferlite/cache/ tests/unit/test_block_table.py
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>All checks passed!
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>pytest tests/unit/test_block_table.py -q
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>10 passed
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>pytest tests/ -q
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>227 passed
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>python -O -m pytest tests/unit/test_block_table.py -q
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>10 passed
+</span></code></pre></div>
+<p>最后一条是专门验证异常分层的：若某条对外契约仍用 <code>assert</code>，<code>-O</code> 模式下该测试会因异常类型不符而失败。</p>
+<p>测试文件包含 10 个函数（任务卡 L0 清单 9 项，其中 L0-5 拆为「写满需要新块」与「预分配富余块不得误判」两个独立用例，因为它们是相反方向的判断，合并后失败时无法定位方向）。</p>
+<p>核心实现由作者本人手写；Agent 负责任务卡、Review、详细注释补充、单元测试与验证。</p>
+<p>最终代码提交：<code>a863a8f feat(kv-cache): add block table position mapping (M4-T2 done)</code>。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  回到页面顶部
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 luhao &mdash; MIT &mdash; Built with <a href="https://squidfunk.github.io/mkdocs-material/">Material for MkDocs</a>
+
+    </div>
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/luhao-lab/inferlite" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.path", "navigation.indexes", "navigation.top", "navigation.footer", "navigation.tracking", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.code.select", "content.tabs.link", "content.tooltips", "toc.follow", "announce.dismiss"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../../_assets/javascripts/extra.js"></script>
+      
+    
+  </body>
+</html>
